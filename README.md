@@ -18,12 +18,20 @@ Whisper Summarizerは、音声ファイルを自動で文字起こしし、AI(GL
 | コンポーネント | 技術 |
 |---|---|
 | フロントエンド | React 19 + TypeScript + Vite + Mantine |
-| バックエンド | FastAPI + Python 3.12 |
-| 音声処理 | Whisper.cpp (CPU専用) |
+| バックエンド | FastAPI + Python 3.12 + uv |
+| 音声処理 | Whisper.cpp v3-turbo (CPU専用) + 静的FFmpeg |
 | AI要約 | GLM4.7 API |
 | 認証 | Supabase Auth |
-| データベース | PostgreSQL 16 |
+| データベース | Supabase PostgreSQL (マネージド) |
 | コンテナ | Docker + Docker Compose |
+
+### Dockerイメージサイズ
+
+| イメージ | サイズ | 説明 |
+|---|---|---|
+| whisper-summarizer-whispercpp | 3.46GB | Whisper.cpp + 静的FFmpeg + v3-turboモデル |
+| whisper_summarizer-backend | 3.68GB | FastAPI + Python + Whisper.cpp統合 |
+| whisper_summarizer-frontend | 380MB | React + Vite (開発) / Nginx (本番) |
 
 ## セットアップ
 
@@ -52,23 +60,28 @@ GLM_API_KEY=your_glm_api_key
 GLM_API_ENDPOINT=https://api.glm.ai/v1
 GLM_MODEL=glm-4.0-turbo
 
-# データベース (デフォルト値で可)
-POSTGRES_DB=whisper_summarizer
-POSTGRES_USER=postgres
-POSTGRES_PASSWORD=postgres
+# Supabase PostgreSQL接続文字列
+# SupabaseダッシュボードのSettings > Database > Connection Stringから取得
+DATABASE_URL=postgresql://postgres:[YOUR-PASSWORD]@db.[PROJECT-REF].supabase.co:5432/postgres
 ```
 
-### Whisper.cppベースイメージのビルド (オプション)
+### Whisper.cppベースイメージのビルド
 
-初回起動時や、Whisper.cppのDockerfileを変更した場合:
+Whisper.cppベースイメージは初回起動時に自動ビルドされますが、手動でビルドすることも可能です:
 
 ```bash
-# Whisper.cppベースイメージをビルド
+# Whisper.cppベースイメージをビルド (キャッシュ使用)
 ./build_whisper.sh
 
 # キャッシュなしでビルド
 ./build_whisper.sh --no-cache
 ```
+
+**イメージの特徴:**
+- サイズ: 3.46GB (静的FFmpeg使用により28%削減)
+- v3-turbo ct2モデル事前ダウンロード
+- CPU専用ビルド
+- 静的FFmpeg (77MB) + FFprobe統合
 
 ### 開発環境の起動
 
@@ -112,8 +125,6 @@ docker-compose -f docker-compose.dev.yml up -d --build
 | フロントエンド | http://localhost:3000 |
 | バックエンドAPI | http://localhost:8000 |
 | API ドキュメント | http://localhost:8000/docs |
-| Whisper.cppサービス | http://localhost:8001 |
-| PostgreSQL | localhost:5432 |
 
 ### 本番環境の起動
 
@@ -148,13 +159,11 @@ whisper_summarizer/
 │   ├── Dockerfile
 │   └── requirements.txt
 │
-├── whispercpp/            # Whisper.cpp音声処理
-│   ├── process_audio.py  # FastAPIサーバー
-│   ├── entrypoint.sh     # 起動スクリプト
-│   ├── Dockerfile        # マルチステージビルド
+├── whispercpp/            # Whisper.cppベースイメージ
+│   ├── Dockerfile        # マルチステージビルド (静的FFmpeg統合)
 │   ├── data/             # 入力音声ファイル
 │   ├── output/           # 文字起こし結果
-│   └── models/           # Whisperモデル (ビルド時)
+│   └── models/           # Whisperモデル (ビルド時ダウンロード)
 │
 ├── docker-compose.yml     # 本番環境
 ├── docker-compose.dev.yml # 開発環境
