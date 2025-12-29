@@ -8,11 +8,11 @@ FROM node:20-alpine AS deps
 
 WORKDIR /app
 
-# package.jsonとpackage-lock.jsonをコピー
-COPY package*.json ./
+# package.jsonをコピー
+COPY package.json ./
 
-# 依存関係をインストール
-RUN npm ci
+# 依存関係をインストール (package-lock.jsonがない場合は生成)
+RUN npm install
 
 # ========================================
 # Stage 2: Builder (本番用)

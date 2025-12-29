@@ -45,6 +45,10 @@ if [ -z "$GLM_API_KEY" ]; then
     missing_vars+=("GLM_API_KEY")
 fi
 
+if [ -z "$DATABASE_URL" ]; then
+    missing_vars+=("DATABASE_URL")
+fi
+
 if [ ${#missing_vars[@]} -gt 0 ]; then
     echo ""
     echo "❌ 以下の環境変数が設定されていません:"
@@ -77,17 +81,16 @@ case $MODE in
         echo "  - フロントエンド: http://localhost:3000"
         echo "  - バックエンドAPI: http://localhost:8000"
         echo "  - API Docs: http://localhost:8000/docs"
-        echo "  - Whisper.cpp: http://localhost:8001"
         echo ""
         echo "停止するには Ctrl+C を押してください"
         echo ""
         sleep 2
-        docker-compose -f docker-compose.dev.yml up --build
+        docker compose -f docker-compose.dev.yml up --build
         ;;
     
     "up-d")
         echo "開発環境を起動します (バックグラウンド)..."
-        docker-compose -f docker-compose.dev.yml up -d --build
+        docker compose -f docker-compose.dev.yml up -d --build
         
         if [ $? -eq 0 ]; then
             echo ""
@@ -97,40 +100,39 @@ case $MODE in
             echo "  - フロントエンド: http://localhost:3000"
             echo "  - バックエンドAPI: http://localhost:8000"
             echo "  - API Docs: http://localhost:8000/docs"
-            echo "  - Whisper.cpp: http://localhost:8001"
             echo ""
-            echo "ログを確認: docker-compose -f docker-compose.dev.yml logs -f"
-            echo "停止: docker-compose -f docker-compose.dev.yml down"
+            echo "ログを確認: docker compose -f docker-compose.dev.yml logs -f"
+            echo "停止: docker compose -f docker-compose.dev.yml down"
         fi
         ;;
     
     "down")
         echo "開発環境を停止します..."
-        docker-compose -f docker-compose.dev.yml down
+        docker compose -f docker-compose.dev.yml down
         echo "✅ 停止完了"
         ;;
     
     "restart")
         echo "開発環境を再起動します..."
-        docker-compose -f docker-compose.dev.yml restart
+        docker compose -f docker-compose.dev.yml restart
         echo "✅ 再起動完了"
         ;;
     
     "logs")
         echo "ログを表示します (Ctrl+C で終了)..."
-        docker-compose -f docker-compose.dev.yml logs -f
+        docker compose -f docker-compose.dev.yml logs -f
         ;;
     
     "ps")
         echo "コンテナの状態:"
-        docker-compose -f docker-compose.dev.yml ps
+        docker compose -f docker-compose.dev.yml ps
         ;;
     
     "clean")
         echo "全てのコンテナとボリュームを削除します..."
         read -p "本当に削除しますか? (y/N): " confirm
         if [ "$confirm" == "y" ] || [ "$confirm" == "Y" ]; then
-            docker-compose -f docker-compose.dev.yml down -v
+            docker compose -f docker-compose.dev.yml down -v
             echo "✅ クリーンアップ完了"
         else
             echo "キャンセルしました"
@@ -139,8 +141,8 @@ case $MODE in
     
     "rebuild")
         echo "キャッシュなしで再ビルドします..."
-        docker-compose -f docker-compose.dev.yml build --no-cache
-        docker-compose -f docker-compose.dev.yml up -d
+        docker compose -f docker-compose.dev.yml build --no-cache
+        docker compose -f docker-compose.dev.yml up -d
         echo "✅ 再ビルド完了"
         ;;
     

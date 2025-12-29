@@ -1,33 +1,13 @@
 services:
-  # PostgreSQLデータベース
-  postgres:
-    image: postgres:16-alpine
-    container_name: whisper_postgres
-    environment:
-      POSTGRES_DB: ${POSTGRES_DB:-whisper_summarizer}
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - whisper_network
-
-  # FastAPIバックエンド (Whisper.cpp統合)
+  # FastAPIバックエンド (Whisper.cpp統合 + Supabase PostgreSQL)
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
     container_name: whisper_backend
     environment:
-      # Database
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-whisper_summarizer}
+      # Database (Supabase PostgreSQL)
+      DATABASE_URL: ${DATABASE_URL}
       
       # Supabase
       SUPABASE_URL: ${SUPABASE_URL}
@@ -48,9 +28,6 @@ services:
       WHISPER_THREADS: ${WHISPER_THREADS:-4}
     ports:
       - "${BACKEND_PORT:-8000}:8000"
-    depends_on:
-      postgres:
-        condition: service_healthy
     networks:
       - whisper_network
     restart: unless-stopped
@@ -73,10 +50,6 @@ services:
     networks:
       - whisper_network
     restart: unless-stopped
-
-volumes:
-  postgres_data:
-    driver: local
 
 networks:
   whisper_network:
