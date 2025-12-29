@@ -1,0 +1,122 @@
+services:
+  # PostgreSQLデータベース
+  postgres:
+    image: postgres:16-alpine
+    container_name: whisper_postgres_dev
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-whisper_summarizer}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data_dev:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - whisper_network_dev
+
+  # FastAPIバックエンド (開発モード - ホットリロード)
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: whisper_backend_dev
+    environment:
+      # Database
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-whisper_summarizer}
+      
+      # Supabase
+      SUPABASE_URL: ${SUPABASE_URL}
+      SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
+      
+      # GLM4.7
+      GLM_API_KEY: ${GLM_API_KEY}
+      GLM_API_ENDPOINT: ${GLM_API_ENDPOINT:-https://api.glm.ai/v1}
+      GLM_MODEL: ${GLM_MODEL:-glm-4.0-turbo}
+      
+      # Backend Config
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+      SECRET_KEY: ${SECRET_KEY:-dev-secret-key}
+      LOG_LEVEL: ${LOG_LEVEL:-DEBUG}
+      
+      # Whisper.cpp Service
+      WHISPER_SERVICE_URL: http://whispercpp:8001
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+      - "5678:5678"  # デバッグポート
+    volumes:
+      # ソースコードをマウント (ホットリロード用)
+      - ./backend:/app
+      # Pythonキャッシュを除外
+      - /app/__pycache__
+      - /app/.pytest_cache
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --log-level debug
+    depends_on:
+      postgres:
+        condition: service_healthy
+      whispercpp:
+        condition: service_started
+    networks:
+      - whisper_network_dev
+
+  # Whisper.cpp音声処理サービス (開発モード)
+  whispercpp:
+    build:
+      context: ./whispercpp
+      dockerfile: Dockerfile
+    container_name: whisper_cpp_dev
+    environment:
+      WHISPER_MODEL: ${WHISPER_MODEL:-ggml-large-v3-turbo.bin}
+      WHISPER_LANGUAGE: ${WHISPER_LANGUAGE:-ja}
+      WHISPER_THREADS: ${WHISPER_THREADS:-4}
+    ports:
+      - "8001:8001"
+    volumes:
+      # ソースコードをマウント (ホットリロード用)
+      - ./whispercpp:/app
+      # データディレクトリ
+      - ./whispercpp/data:/app/data
+      - ./whispercpp/output:/app/output
+      # モデルディレクトリは除外 (ビルド時に含まれる)
+      - /app/models
+    command: uvicorn process_audio:app --host 0.0.0.0 --port 8001 --reload --log-level debug
+    networks:
+      - whisper_network_dev
+
+  # Reactフロントエンド (開発モード - Vite Dev Server)
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: development
+    container_name: whisper_frontend_dev
+    environment:
+      VITE_SUPABASE_URL: ${SUPABASE_URL}
+      VITE_SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
+      VITE_BACKEND_URL: ${VITE_BACKEND_URL:-http://localhost:8000}
+    ports:
+      - "3000:3000"
+    volumes:
+      # ソースコードをマウント (ホットリロード用)
+      - ./frontend:/app
+      # node_modulesを除外
+      - /app/node_modules
+      # Viteキャッシュを除外
+      - /app/.vite
+    depends_on:
+      - backend
+    networks:
+      - whisper_network_dev
+
+volumes:
+  postgres_data_dev:
+    driver: local
+
+networks:
+  whisper_network_dev:
+    driver: bridge

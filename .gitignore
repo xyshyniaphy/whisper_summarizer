@@ -1,0 +1,69 @@
+# 環境変数ファイル
+.env
+.env.local
+.env.*.local
+
+# Pythonキャッシュ
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# テスト
+.pytest_cache/
+.coverage
+htmlcov/
+
+# IDEディレクトリ
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ログファイル
+*.log
+
+# OS生成ファイル
+.DS_Store
+Thumbs.db
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Vite
+.vite/
+dist/
+dist-ssr/
+
+# データディレクトリ
+whispercpp/data/*
+!whispercpp/data/.gitkeep
+whispercpp/output/*
+!whispercpp/output/.gitkeep
+whispercpp/models/*
+!whispercpp/models/.gitkeep
+
+# Dockerボリューム
+postgres_data/
+postgres_data_dev/

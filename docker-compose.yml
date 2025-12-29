@@ -1,0 +1,103 @@
+services:
+  # PostgreSQLデータベース
+  postgres:
+    image: postgres:16-alpine
+    container_name: whisper_postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-whisper_summarizer}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - whisper_network
+
+  # FastAPIバックエンド
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: whisper_backend
+    environment:
+      # Database
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-whisper_summarizer}
+      
+      # Supabase
+      SUPABASE_URL: ${SUPABASE_URL}
+      SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
+      
+      # GLM4.7
+      GLM_API_KEY: ${GLM_API_KEY}
+      GLM_API_ENDPOINT: ${GLM_API_ENDPOINT:-https://api.glm.ai/v1}
+      GLM_MODEL: ${GLM_MODEL:-glm-4.0-turbo}
+      
+      # Backend Config
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+      SECRET_KEY: ${SECRET_KEY:-your-secret-key-change-in-production}
+      
+      # Whisper.cpp Service
+      WHISPER_SERVICE_URL: http://whispercpp:8001
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      whispercpp:
+        condition: service_started
+    networks:
+      - whisper_network
+    restart: unless-stopped
+
+  # Whisper.cpp音声処理サービス
+  whispercpp:
+    build:
+      context: ./whispercpp
+      dockerfile: Dockerfile
+    container_name: whisper_cpp
+    environment:
+      WHISPER_MODEL: ${WHISPER_MODEL:-ggml-large-v3-turbo.bin}
+      WHISPER_LANGUAGE: ${WHISPER_LANGUAGE:-ja}
+      WHISPER_THREADS: ${WHISPER_THREADS:-4}
+    ports:
+      - "8001:8001"
+    volumes:
+      - ./whispercpp/data:/app/data
+      - ./whispercpp/output:/app/output
+    networks:
+      - whisper_network
+    restart: unless-stopped
+
+  # Reactフロントエンド (本番モード - Nginx)
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: production
+    container_name: whisper_frontend
+    environment:
+      VITE_SUPABASE_URL: ${SUPABASE_URL}
+      VITE_SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
+      VITE_BACKEND_URL: ${VITE_BACKEND_URL:-http://localhost:8000}
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    networks:
+      - whisper_network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  whisper_network:
+    driver: bridge
