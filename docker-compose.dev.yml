@@ -19,7 +19,7 @@ services:
     networks:
       - whisper_network_dev
 
-  # FastAPIバックエンド (開発モード - ホットリロード)
+  # FastAPIバックエンド (開発モード - ホットリロード + Whisper.cpp統合)
   backend:
     build:
       context: ./backend
@@ -44,8 +44,9 @@ services:
       SECRET_KEY: ${SECRET_KEY:-dev-secret-key}
       LOG_LEVEL: ${LOG_LEVEL:-DEBUG}
       
-      # Whisper.cpp Service
-      WHISPER_SERVICE_URL: http://whispercpp:8001
+      # Whisper.cpp Config
+      WHISPER_LANGUAGE: ${WHISPER_LANGUAGE:-ja}
+      WHISPER_THREADS: ${WHISPER_THREADS:-4}
     ports:
       - "${BACKEND_PORT:-8000}:8000"
       - "5678:5678"  # デバッグポート
@@ -55,36 +56,12 @@ services:
       # Pythonキャッシュを除外
       - /app/__pycache__
       - /app/.pytest_cache
+      # venvは除外 (ビルド時に作成されたものを使用)
+      - /opt/venv
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --log-level debug
     depends_on:
       postgres:
         condition: service_healthy
-      whispercpp:
-        condition: service_started
-    networks:
-      - whisper_network_dev
-
-  # Whisper.cpp音声処理サービス (開発モード)
-  whispercpp:
-    build:
-      context: ./whispercpp
-      dockerfile: Dockerfile
-    container_name: whisper_cpp_dev
-    environment:
-      WHISPER_MODEL: ${WHISPER_MODEL:-ggml-large-v3-turbo.bin}
-      WHISPER_LANGUAGE: ${WHISPER_LANGUAGE:-ja}
-      WHISPER_THREADS: ${WHISPER_THREADS:-4}
-    ports:
-      - "8001:8001"
-    volumes:
-      # ソースコードをマウント (ホットリロード用)
-      - ./whispercpp:/app
-      # データディレクトリ
-      - ./whispercpp/data:/app/data
-      - ./whispercpp/output:/app/output
-      # モデルディレクトリは除外 (ビルド時に含まれる)
-      - /app/models
-    command: uvicorn process_audio:app --host 0.0.0.0 --port 8001 --reload --log-level debug
     networks:
       - whisper_network_dev
 

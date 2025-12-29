@@ -205,6 +205,36 @@ cp .env.sample .env
 
 ## 開発
 
+### 便利なスクリプト
+
+`run_dev.sh`は開発環境の管理を簡単にします:
+
+```bash
+# フォアグラウンドで起動 (ログをリアルタイム表示)
+./run_dev.sh
+
+# バックグラウンドで起動
+./run_dev.sh up-d
+
+# ログを表示
+./run_dev.sh logs
+
+# コンテナの状態を確認
+./run_dev.sh ps
+
+# 再起動
+./run_dev.sh restart
+
+# 停止
+./run_dev.sh down
+
+# 全削除 (ボリューム含む)
+./run_dev.sh clean
+
+# キャッシュなしで再ビルド
+./run_dev.sh rebuild
+```
+
 ### ホットリロード
 
 開発環境では、ソースコードの変更が即座に反映されます:

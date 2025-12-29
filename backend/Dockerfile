@@ -1,58 +1,59 @@
-# Backend Dockerfile - FastAPI + Python 3.12 + Ubuntu 24.04
-# マルチステージビルドで依存関係をキャッシュ
+# Backend Dockerfile - FastAPI + Python 3.12 + uv + Whisper.cpp
+# マルチステージビルド: uvで高速化、Whisper.cppバイナリ統合
 
 # ========================================
-# Stage 1: Dependencies Builder
+# Stage 1: Whisper.cpp Base
 # ========================================
-FROM ubuntu:24.04 AS builder
-
-ENV DEBIAN_FRONTEND=noninteractive
-ENV PYTHONUNBUFFERED=1
-
-# Python 3.12とビルドツールのインストール
-RUN apt-get update && apt-get install -y \
-    python3.12 \
-    python3.12-venv \
-    python3-pip \
-    build-essential \
-    && rm -rf /var/lib/apt/lists/*
-
-# Python 3.12をデフォルトに設定
-RUN update-alternatives --install /usr/bin/python python /usr/bin/python3.12 1 && \
-    update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.12 1
-
-WORKDIR /build
-
-# requirements.txtをコピーして依存関係をインストール
-COPY requirements.txt .
-RUN pip3 install --no-cache-dir --user -r requirements.txt
+FROM whisper-summarizer-whispercpp:latest AS whispercpp
 
 # ========================================
-# Stage 2: Runtime
+# Stage 2: UV Builder
 # ========================================
-FROM ubuntu:24.04
+FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim AS builder
 
-ENV DEBIAN_FRONTEND=noninteractive
-ENV PYTHONUNBUFFERED=1
-ENV PATH=/root/.local/bin:$PATH
-
-# Python 3.12ランタイムのみインストール
-RUN apt-get update && apt-get install -y \
-    python3.12 \
-    python3.12-venv \
-    && rm -rf /var/lib/apt/lists/*
-
-# Python 3.12をデフォルトに設定
-RUN update-alternatives --install /usr/bin/python python /usr/bin/python3.12 1 && \
-    update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.12 1
+ENV UV_COMPILE_BYTECODE=1
+ENV UV_LINK_MODE=copy
 
 WORKDIR /app
 
-# ビルドステージから依存関係をコピー
-COPY --from=builder /root/.local /root/.local
+# requirements.txtをコピー
+COPY requirements.txt .
+
+# uvで依存関係をインストール (venv作成)
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv venv /opt/venv && \
+    . /opt/venv/bin/activate && \
+    uv pip install -r requirements.txt
+
+# ========================================
+# Stage 3: Runtime
+# ========================================
+FROM python:3.12-slim-bookworm
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PYTHONUNBUFFERED=1
+ENV PATH="/opt/venv/bin:$PATH"
+
+# FFmpegとランタイム依存関係をインストール
+RUN apt-get update && apt-get install -y \
+    ffmpeg \
+    libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# venvをコピー (uvでビルド済み)
+COPY --from=builder /opt/venv /opt/venv
+
+# Whisper.cppバイナリとモデルをコピー
+COPY --from=whispercpp /app/whisper-main /app/whisper-main
+COPY --from=whispercpp /app/models /app/models
 
 # アプリケーションコードをコピー
 COPY . .
+
+# データディレクトリを作成
+RUN mkdir -p /tmp/uploads /app/data /app/output
 
 # ポート公開
 EXPOSE 8000

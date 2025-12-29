@@ -60,25 +60,24 @@ async def upload_audio(
         
         logger.info(f"音声ファイルをアップロードしました: {file.filename} ({file_size} bytes)")
         
-        # Whisper.cppサービスに文字起こしをリクエスト (非同期)
+        # Whisper.cppで文字起こしを実行
         # TODO: バックグラウンドタスクで実行
         try:
-            async with httpx.AsyncClient(timeout=300.0) as client:
-                with open(file_path, "rb") as f:
-                    response = await client.post(
-                        f"{settings.WHISPER_SERVICE_URL}/transcribe",
-                        files={"file": (file.filename, f, "audio/*")}
-                    )
-                
-                if response.status_code == 200:
-                    transcription_data = response.json()
-                    logger.info(f"文字起こしが完了しました: {file.filename}")
-                    # TODO: データベースに保存
-                else:
-                    logger.error(f"文字起こしエラー: {response.status_code}")
+            from app.services.whisper_service import whisper_service
+            
+            transcription_data = await whisper_service.transcribe(
+                str(file_path),
+                output_dir="/app/output"
+            )
+            
+            logger.info(f"文字起こしが完了しました: {file.filename}")
+            logger.info(f"文字数: {len(transcription_data['text'])}")
+            
+            # TODO: データベースに保存
+            # TODO: GLM4.7で要約を生成
         
         except Exception as e:
-            logger.error(f"Whisper.cpp呼び出しエラー: {str(e)}")
+            logger.error(f"Whisper.cpp実行エラー: {str(e)}")
         
         # レスポンスを返す
         return AudioUploadResponse(
