@@ -35,6 +35,8 @@ services:
       - ./backend:/app
       # ログディレクトリをマウント
       - ./logs:/app/logs
+      # データディレクトリをマウント
+      - ./data:/app/data
       # Pythonキャッシュを除外
       - /app/__pycache__
       - /app/.pytest_cache
