@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { Transcription } from '../types';
+import { Transcription, Summary } from '../types';
 
 const API_URL = 'http://localhost:8000/api';
 
@@ -28,5 +28,14 @@ export const api = {
 
   deleteTranscription: async (id: string): Promise<void> => {
     await axios.delete(`${API_URL}/transcriptions/${id}`);
+  },
+
+  generateSummary: async (transcriptionId: string): Promise<Summary> => {
+    const response = await axios.post<Summary>(`${API_URL}/transcriptions/${transcriptionId}/summarize`);
+    return response.data;
+  },
+
+  getDownloadUrl: (transcriptionId: string, format: 'txt' | 'srt'): string => {
+    return `${API_URL}/transcriptions/${transcriptionId}/download?format=${format}`;
   }
 };

@@ -22,6 +22,12 @@ class Settings(BaseSettings):
     GLM_API_ENDPOINT: str = "https://api.glm.ai/v1"
     GLM_MODEL: str = "glm-4.0-turbo"
     
+    # Gemini
+    GEMINI_API_KEY: str
+    GEMINI_API_ENDPOINT: Optional[str] = None  # カスタムエンドポイント（オプション）
+    GEMINI_MODEL: str = "gemini-2.0-flash-exp"
+    REVIEW_LANGUAGE: str = "zh"  # zh (中国語), ja (日本語), en (英語)
+    
     # Backend
     SECRET_KEY: str = "your-secret-key-change-in-production"
     CORS_ORIGINS: str = "http://localhost:3000"

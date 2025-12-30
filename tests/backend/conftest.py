@@ -20,6 +20,10 @@ os.environ.setdefault("DATABASE_URL", "postgresql://test:test@localhost:5432/tes
 os.environ.setdefault("GLM_API_KEY", "test-glm-api-key")
 os.environ.setdefault("GLM_API_ENDPOINT", "http://test-glm-endpoint.com")
 os.environ.setdefault("GLM_MODEL", "test-model")
+os.environ.setdefault("GEMINI_API_KEY", "test-gemini-api-key")
+os.environ.setdefault("GEMINI_API_ENDPOINT", "")  # 空文字列で公式SDKを使用
+os.environ.setdefault("GEMINI_MODEL", "gemini-2.0-flash-exp")
+os.environ.setdefault("REVIEW_LANGUAGE", "zh")
 
 
 @pytest.fixture
