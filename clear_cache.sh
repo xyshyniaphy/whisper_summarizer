@@ -21,6 +21,9 @@ fi
 # クリア対象のディレクトリ
 UPLOAD_DIR="data/uploads"
 OUTPUT_DIR="data/output"
+SCREENSHOTS_DIR="data/screenshots"
+REPORT_DIR="data/playwright-report"
+TEST_RESULTS_DIR="data/test-results"
 
 # 削除対象ファイルの確認
 TOTAL_FILES=0
@@ -38,6 +41,27 @@ else
   OUTPUT_COUNT=0
 fi
 
+if [ -d "$SCREENSHOTS_DIR" ]; then
+  SCREENSHOTS_COUNT=$(find "$SCREENSHOTS_DIR" -type f 2>/dev/null | wc -l)
+  TOTAL_FILES=$((TOTAL_FILES + SCREENSHOTS_COUNT))
+else
+  SCREENSHOTS_COUNT=0
+fi
+
+if [ -d "$REPORT_DIR" ]; then
+  REPORT_COUNT=$(find "$REPORT_DIR" -type f 2>/dev/null | wc -l)
+  TOTAL_FILES=$((TOTAL_FILES + REPORT_COUNT))
+else
+  REPORT_COUNT=0
+fi
+
+if [ -d "$TEST_RESULTS_DIR" ]; then
+  RESULTS_COUNT=$(find "$TEST_RESULTS_DIR" -type f 2>/dev/null | wc -l)
+  TOTAL_FILES=$((TOTAL_FILES + RESULTS_COUNT))
+else
+  RESULTS_COUNT=0
+fi
+
 if [ "$TOTAL_FILES" -eq 0 ]; then
   echo -e "${GREEN}✓ 削除対象のファイルはありません${NC}"
   exit 0
@@ -47,6 +71,9 @@ fi
 echo "削除対象:"
 echo "  アップロードファイル: $UPLOAD_COUNT ファイル"
 echo "  出力ファイル: $OUTPUT_COUNT ファイル"
+echo "  スクリーンショット: $SCREENSHOTS_COUNT ファイル"
+echo "  Playwrightレポート: $REPORT_COUNT ファイル"
+echo "  テスト結果: $RESULTS_COUNT ファイル"
 echo "  合計: $TOTAL_FILES ファイル"
 echo ""
 read -p "これらのファイルを削除しますか? (y/N): " -n 1 -r
@@ -70,6 +97,27 @@ if [ -d "$OUTPUT_DIR" ] && [ "$OUTPUT_COUNT" -gt 0 ]; then
   echo -e "${GREEN}✓ 出力ファイルを削除しました${NC}"
 fi
 
+# スクリーンショットのクリア
+if [ -d "$SCREENSHOTS_DIR" ] && [ "$SCREENSHOTS_COUNT" -gt 0 ]; then
+  echo -e "${YELLOW}スクリーンショットを削除中... ($SCREENSHOTS_COUNT ファイル)${NC}"
+  sudo rm -rf "$SCREENSHOTS_DIR"/*
+  echo -e "${GREEN}✓ スクリーンショットを削除しました${NC}"
+fi
+
+# Playwrightレポートのクリア
+if [ -d "$REPORT_DIR" ] && [ "$REPORT_COUNT" -gt 0 ]; then
+  echo -e "${YELLOW}Playwrightレポートを削除中... ($REPORT_COUNT ファイル)${NC}"
+  sudo rm -rf "$REPORT_DIR"/*
+  echo -e "${GREEN}✓ Playwrightレポートを削除しました${NC}"
+fi
+
+# テスト結果のクリア
+if [ -d "$TEST_RESULTS_DIR" ] && [ "$RESULTS_COUNT" -gt 0 ]; then
+  echo -e "${YELLOW}テスト結果を削除中... ($RESULTS_COUNT ファイル)${NC}"
+  sudo rm -rf "$TEST_RESULTS_DIR"/*
+  echo -e "${GREEN}✓ テスト結果を削除しました${NC}"
+fi
+
 # ディレクトリサイズの表示
 echo ""
 echo -e "${GREEN}=== クリア完了 ===${NC}"
@@ -81,6 +129,15 @@ if [ -d "$UPLOAD_DIR" ]; then
 fi
 if [ -d "$OUTPUT_DIR" ]; then
   du -sh "$OUTPUT_DIR" 2>/dev/null || echo "  $OUTPUT_DIR: 0B"
+fi
+if [ -d "$SCREENSHOTS_DIR" ]; then
+  du -sh "$SCREENSHOTS_DIR" 2>/dev/null || echo "  $SCREENSHOTS_DIR: 0B"
+fi
+if [ -d "$REPORT_DIR" ]; then
+  du -sh "$REPORT_DIR" 2>/dev/null || echo "  $REPORT_DIR: 0B"
+fi
+if [ -d "$TEST_RESULTS_DIR" ]; then
+  du -sh "$TEST_RESULTS_DIR" 2>/dev/null || echo "  $TEST_RESULTS_DIR: 0B"
 fi
 
 echo ""
