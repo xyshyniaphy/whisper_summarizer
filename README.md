@@ -261,6 +261,14 @@ cp .env.sample .env
 ./run_dev.sh rebuild
 ```
 
+### キャッシュのクリア
+
+`data/` ディレクトリ配下のアップロードファイル、出力ファイル、およびテスト結果（スクリーンショット、レポート）を一括で削除するには、以下のスクリプトを使用します:
+
+```bash
+./clear_cache.sh
+```
+
 ### ホットリロード
 
 開発環境では、ソースコードの変更が即座に反映されます:
@@ -324,7 +332,8 @@ cd tests
 **テスト結果の確認:**
 - バックエンド: カバレッジレポートは `backend/htmlcov/index.html`
 - フロントエンド: Vitestの標準出力
-- E2E: Playwrightレポートは `tests/e2e/playwright-report/index.html`
+- E2E: Playwrightレポートは `tests/e2e/playwright-report/index.html` (ホスト側 `data/playwright-report/`)
+- E2Eスクリーンショット: ホスト側 `data/screenshots/` (失敗時は `data/screenshots/failures/`)
 
 **現在のカバレッジ状況:**
 - バックエンド: **73.37%** (目標: 70%以上) ✅

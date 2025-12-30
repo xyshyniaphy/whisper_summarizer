@@ -15,7 +15,7 @@
     - [ ] Add "Edit" functionality for transcription text (fix typos).
     - [ ] Improve "Processing" status indication (Projected time or progress bar).
 - [ ] **Data Management**
-    - [ ] Implement auto-cleanup for old temporary files (wav).
+    - [x] Implement auto-cleanup for old temporary files (wav) via `clear_cache.sh` including E2E artifacts.
     - [ ] Sort history by date (Asc/Desc toggle).
 
 ## 🔒 Security & Infrastructure
@@ -29,12 +29,14 @@
 ## 🧪 Testing (Completed)
 - [x] **Unit Tests**
     - [x] Add Backend tests (FastAPI + Pytest) - 73.37% coverage achieved.
-    - [x] Add Frontend tests (React Testing Library + Vitest).
+    - [ ] Add Frontend tests (React Testing Library + Vitest) - Environment setup, currently fixing `useAuth` mock issues.
 - [x] **E2E Tests**
-    - [x] Automate the "Upload -> Transcribe -> Verify" flow with Playwright.
-- [x] **Test Infrastructure**
+    - [x] Automate the "Upload -> Transcribe -> Verify" flow with Playwright (Tests running, fixing timeouts/mocking).
+    - [x] Fix E2E Screenshot Output Path (`data/screenshots/`).
+- [ ] **Test Infrastructure**
     - [x] Docker-based test environment (`tests/run.sh`).
     - [x] Automated test execution for CI/CD readiness.
+    - [x] Update `clear_cache.sh` to include E2E artifacts.
 
 ## 📊 Code Quality
 - [ ] **Code Coverage**
