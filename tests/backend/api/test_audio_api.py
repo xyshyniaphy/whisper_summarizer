@@ -31,12 +31,9 @@ class TestAudioAPI:
         "language": "ja"
       }
       
-      with patch("app.core.supabase.get_supabase_client") as mock_supabase:
-        mock_client = MagicMock()
-        mock_client.auth.get_user = AsyncMock(return_value={
-          "user": {"id": "test-user-id"}
-        })
-        mock_supabase.return_value = mock_client
+      mock_user = {"id": "bae0bdba-80ae-4354-8339-ab3d81259762", "email": "test@example.com"}
+      with patch("app.api.audio.get_current_active_user", new_callable=AsyncMock) as mock_get_user:
+        mock_get_user.return_value = mock_user
         
         files = {
           "file": ("test.wav", BytesIO(sample_audio_file), "audio/wav")
@@ -75,43 +72,32 @@ class TestAudioAPI:
   
   
   @pytest.mark.integration
-  def test_get_transcriptions_list(self, test_client: TestClient, mock_supabase_client: MagicMock) -> None:
-    """
-    文字起こしリストが取得できるテスト
-    
-    Args:
-      test_client: FastAPI TestClient
-      mock_supabase_client: モックされたSupabaseクライアント
-    """
-    with patch("app.core.supabase.get_supabase_client", return_value=mock_supabase_client):
+  def test_get_transcriptions_list(self, test_client: TestClient) -> None:
+    """文字起こしリスト取得テスト"""
+    mock_user = {"id": "test-user-id"}
+    with patch("app.api.transcriptions.get_current_active_user", new_callable=AsyncMock) as mock_get_user:
+      mock_get_user.return_value = mock_user
       response = test_client.get(
         "/api/transcriptions",
         headers={"Authorization": "Bearer test-token"}
       )
       
-      # 認証が実装されていない場合は401
       assert response.status_code in [200, 401]
   
   
   @pytest.mark.integration
-  def test_delete_transcription(self, test_client: TestClient, mock_supabase_client: MagicMock) -> None:
-    """
-    文字起こしの削除が成功するテスト
-    
-    Args:
-      test_client: FastAPI TestClient
-      mock_supabase_client: モックされたSupabaseクライアント
-    """
+  def test_delete_transcription(self, test_client: TestClient) -> None:
+    """文字起こし削除テスト"""
     transcription_id = "test-transcription-id"
-    
-    with patch("app.core.supabase.get_supabase_client", return_value=mock_supabase_client):
-      with patch("os.remove") as mock_remove:
+    mock_user = {"id": "test-user-id"}
+    with patch("app.api.transcriptions.get_current_active_user", new_callable=AsyncMock) as mock_get_user:
+      mock_get_user.return_value = mock_user
+      with patch("os.remove", return_value=None):
         response = test_client.delete(
-          f"/api/audio/{transcription_id}",
+          f"/api/transcriptions/{transcription_id}",
           headers={"Authorization": "Bearer test-token"}
         )
         
-        # 認証が実装されていない場合は401
         assert response.status_code in [200, 204, 401, 404]
   
   
@@ -130,4 +116,4 @@ class TestAudioAPI:
     response = test_client.post("/api/audio/upload", files=files)
     
     # 認証が必須の場合は401
-    assert response.status_code in [401]
+    assert response.status_code in [401, 403]

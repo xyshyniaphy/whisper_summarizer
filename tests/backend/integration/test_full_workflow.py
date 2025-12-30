@@ -7,8 +7,51 @@ import os
 import time
 import pytest
 from pathlib import Path
+import uuid
 from fastapi.testclient import TestClient
 from app.main import app
+from app.core.supabase import get_current_active_user
+
+from app.models.user import User
+
+# 認証をバイパスするためのダミーユーザー (UUID4形式)
+DUMMY_USER_ID = "bae0bdba-80ae-4354-8339-ab3d81259762"
+
+async def override_get_current_active_user():
+    return {
+        "id": DUMMY_USER_ID,
+        "email": "test@integration.com",
+        "email_confirmed_at": "2025-12-30T00:00:00Z"
+    }
+
+@pytest.fixture
+def test_client():
+    """統合テスト用に認証をバイパスし、且つDBにユーザーを用意するクライアント"""
+    global DUMMY_USER_ID
+    from app.db.session import SessionLocal
+    
+    # DBにダミーユーザーを作成 (外部キー制約のため)
+    db = SessionLocal()
+    try:
+        # 既存のテストユーザーを一旦削除（Nil UUID等の不整合を排除するため）
+        db.query(User).filter(User.email == "test@integration.com").delete()
+        db.commit()
+        
+        # 新しいUUID4でユーザー作成
+        user = User(
+            id=uuid.UUID(DUMMY_USER_ID),
+            email="test@integration.com"
+        )
+        db.add(user)
+        db.commit()
+    finally:
+        db.close()
+
+    app.dependency_overrides[get_current_active_user] = override_get_current_active_user
+    with TestClient(app) as client:
+        yield client
+    # テスト後にオーバーライドをクリア
+    app.dependency_overrides = {}
 
 # テストデータのパス
 TEST_AUDIO_FILE = Path(__file__).parent.parent.parent.parent / "testdata" / "audio1074124412.conved_2min.m4a"

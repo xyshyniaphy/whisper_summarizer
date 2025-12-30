@@ -5,6 +5,7 @@
 from fastapi import APIRouter, File, UploadFile, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.orm import Session
 from app.api.deps import get_db
+from app.core.supabase import get_current_active_user
 from app.models.transcription import Transcription
 from app.schemas.transcription import Transcription as TranscriptionSchema
 from app.services.whisper_service import whisper_service
@@ -84,7 +85,8 @@ def process_audio(file_path: Path, transcription_id: str, db: Session):
 def upload_audio(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_active_user)
 ):
     """
     音声ファイルをアップロードして文字起こしを開始
@@ -102,7 +104,8 @@ def upload_audio(
     # DBレコード作成
     new_transcription = Transcription(
         file_name=file.filename,
-        status="processing"
+        status="processing",
+        user_id=current_user.get("id")
     )
     db.add(new_transcription)
     db.commit()

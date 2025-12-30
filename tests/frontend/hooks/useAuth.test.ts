@@ -6,7 +6,22 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { renderHook, waitFor } from '@testing-library/react'
-import { useAuth } from '../../src/hooks/useAuth'
+import { useAuth } from '../../../src/hooks/useAuth'
+
+// Supabaseサービスのモック
+vi.mock('../../../src/services/supabase', () => ({
+  supabase: {
+    auth: {
+      signInWithPassword: vi.fn(),
+      signOut: vi.fn(),
+      signUp: vi.fn(),
+      onAuthStateChange: vi.fn(() => ({
+        data: { subscription: { unsubscribe: vi.fn() } },
+      })),
+      getSession: vi.fn().mockResolvedValue({ data: { session: null }, error: null }),
+    },
+  },
+}))
 
 describe('useAuth', () => {
   beforeEach(() => {
@@ -26,7 +41,7 @@ describe('useAuth', () => {
       email: 'test@example.com',
     }
 
-    const { supabase } = await import('../../src/services/supabase')
+    const { supabase } = await import('../../../src/services/supabase')
     vi.mocked(supabase.auth.signInWithPassword).mockResolvedValue({
       data: {
         user: mockUser,
@@ -47,7 +62,7 @@ describe('useAuth', () => {
     // ログイン実行
     const loginResult = await result.current.signIn('test@example.com', 'password123')
 
-    expect(loginResult.error).toBeNull()
+    expect(loginResult.error).toBeUndefined() // フックが成功時にdataを返すため
     expect(supabase.auth.signInWithPassword).toHaveBeenCalledWith({
       email: 'test@example.com',
       password: 'password123',
@@ -55,7 +70,7 @@ describe('useAuth', () => {
   })
 
   it('ログアウトが成功する', async () => {
-    const { supabase } = await import('../../src/services/supabase')
+    const { supabase } = await import('../../../src/services/supabase')
     vi.mocked(supabase.auth.signOut).mockResolvedValue({
       error: null,
     })
@@ -78,7 +93,7 @@ describe('useAuth', () => {
       email: 'newuser@example.com',
     }
 
-    const { supabase } = await import('../../src/services/supabase')
+    const { supabase } = await import('../../../src/services/supabase')
     vi.mocked(supabase.auth.signUp).mockResolvedValue({
       data: {
         user: mockUser,
@@ -97,12 +112,17 @@ describe('useAuth', () => {
     })
 
     // ユーザー登録実行
-    const signUpResult = await result.current.signUp('newuser@example.com', 'password123')
+    const signUpResult = await result.current.signUp('newuser@example.com', 'password123', 'New User')
 
-    expect(signUpResult.error).toBeNull()
+    expect(signUpResult.user).toEqual(mockUser)
     expect(supabase.auth.signUp).toHaveBeenCalledWith({
       email: 'newuser@example.com',
       password: 'password123',
+      options: {
+        data: {
+          full_name: 'New User',
+        },
+      },
     })
   })
 })

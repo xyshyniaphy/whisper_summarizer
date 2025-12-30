@@ -1,11 +1,8 @@
-"""
-文字起こしAPIエンドポイント
-"""
-
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from typing import List
 from app.api.deps import get_db
+from app.core.supabase import get_current_active_user
 from app.models.transcription import Transcription
 from app.schemas.transcription import Transcription as TranscriptionSchema
 
@@ -21,12 +18,13 @@ async def list_transcriptions(
     limit: int = Query(10, ge=1, le=100),
     offset: int = Query(0, ge=0),
     status: str = Query(None),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_active_user)
 ):
     """
-    文字起こしリストを取得
+    文字起こしリストを取得 (現在のユーザーのもののみ)
     """
-    query = db.query(Transcription)
+    query = db.query(Transcription).filter(Transcription.user_id == current_user.get("id"))
     
     if status:
         query = query.filter(Transcription.status == status)
@@ -38,12 +36,17 @@ async def list_transcriptions(
 @router.get("/{transcription_id}", response_model=TranscriptionSchema)
 async def get_transcription(
     transcription_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_active_user)
 ):
     """
     文字起こし詳細を取得
     """
-    transcription = db.query(Transcription).filter(Transcription.id == transcription_id).first()
+    transcription = db.query(Transcription).filter(
+        Transcription.id == transcription_id,
+        Transcription.user_id == current_user.get("id")
+    ).first()
+    
     if not transcription:
         raise HTTPException(status_code=404, detail="文字起こしが見つかりません")
     
@@ -53,12 +56,17 @@ async def get_transcription(
 @router.delete("/{transcription_id}", status_code=204)
 async def delete_transcription(
     transcription_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_active_user)
 ):
     """
     文字起こしを削除 (ファイルも含む)
     """
-    transcription = db.query(Transcription).filter(Transcription.id == transcription_id).first()
+    transcription = db.query(Transcription).filter(
+        Transcription.id == transcription_id,
+        Transcription.user_id == current_user.get("id")
+    ).first()
+    
     if not transcription:
         raise HTTPException(status_code=404, detail="文字起こしが見つかりません")
 
@@ -72,7 +80,6 @@ async def delete_transcription(
             os.remove(transcription.file_path)
             
         # 出力ファイル削除 (wav, txt, srt) - 簡易的な推定
-        # whisper_service.pyの実装に依存するが、output_dir/id.* を探して消す
         output_dir = Path("/app/data/output")
         for ext in [".wav", ".txt", ".srt", ".vtt", ".json"]:
             output_file = output_dir / f"{transcription.id}{ext}"

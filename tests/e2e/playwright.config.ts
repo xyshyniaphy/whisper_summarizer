@@ -27,8 +27,8 @@ export default defineConfig({
 
   // 共通設定
   use: {
-    // ベースURL
-    baseURL: 'http://localhost:3000',
+    // ベースURL (Docker Compose内のサービス名またはホストのアドレス)
+    baseURL: process.env.FRONTEND_URL || 'http://frontend-test:3000',
 
     // トレース記録 (失敗時のみ)
     trace: 'on-first-retry',
@@ -40,13 +40,7 @@ export default defineConfig({
     video: 'retain-on-failure',
   },
 
-  // テスト実行前にサーバーを起動
-  webServer: {
-    command: 'echo "開発環境は別途起動してください"',
-    url: 'http://localhost:3000',
-    timeout: 120 * 1000,
-    reuseExistingServer: !process.env.CI,
-  },
+  // テスト実行前にサーバーを起動しない (既存のコンテナを使用)
 
   // ブラウザ設定
   projects: [

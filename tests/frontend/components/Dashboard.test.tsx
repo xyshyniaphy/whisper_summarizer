@@ -10,7 +10,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { BrowserRouter } from 'react-router-dom'
 import { MantineProvider } from '@mantine/core'
-import Dashboard from '../../src/pages/Dashboard'
+import Dashboard from '../../../src/pages/Dashboard'
 
 // テスト用のラッパーコンポーネント
 const AllProviders = ({ children }: { children: React.ReactNode }) => {
@@ -59,7 +59,7 @@ describe('Dashboard', () => {
             },
         ]
 
-        const { supabase } = await import('../../src/services/supabase')
+        const { supabase } = await import('../../../src/services/supabase')
         const mockFrom = vi.fn(() => ({
             select: vi.fn().mockReturnThis(),
             order: vi.fn().mockResolvedValue({
@@ -98,7 +98,7 @@ describe('Dashboard', () => {
             },
         ]
 
-        const { supabase } = await import('../../src/services/supabase')
+        const { supabase } = await import('../../../src/services/supabase')
         const mockFrom = vi.fn(() => ({
             select: vi.fn().mockReturnThis(),
             order: vi.fn().mockResolvedValue({
