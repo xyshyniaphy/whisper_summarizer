@@ -90,9 +90,11 @@ COPY --from=ffmpeg-downloader /ffmpeg-bin/ffprobe /usr/local/bin/ffprobe
 # Whisper.cppバイナリをコピー
 COPY --from=builder /build/build/bin/whisper-cli /usr/local/bin/whisper-cli
 
-# 共有ライブラリをコピー (libwhisper.so, libggml.so など)
+# 共有ライブラリをコピー (明示的に指定)
 COPY --from=builder /build/build/src/libwhisper.so* /usr/lib/
-COPY --from=builder /build/build/ggml/src/libggml*.so* /usr/lib/
+COPY --from=builder /build/build/ggml/src/libggml.so* /usr/lib/
+COPY --from=builder /build/build/ggml/src/libggml-cpu.so* /usr/lib/
+COPY --from=builder /build/build/ggml/src/libggml-base.so* /usr/lib/
 
 # ライブラリキャッシュを更新
 RUN ldconfig
