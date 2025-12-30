@@ -89,18 +89,18 @@ COPY --from=ffmpeg-downloader /ffmpeg-bin/ffprobe /usr/local/bin/ffprobe
 
 # Whisper.cppバイナリをコピー
 # Whisper.cppバイナリをコピー
-COPY --from=builder /build/build/bin/whisper-cli /app/whisper-cli
+COPY --from=builder /build/build/bin/whisper-cli /usr/local/bin/whisper-cli
 
 
 # モデルをコピー
-COPY --from=model-downloader /models/ggml-large-v3-turbo.bin /app/models/
+COPY --from=model-downloader /models/ggml-large-v3-turbo.bin /usr/local/share/whisper-models/
 
 # データディレクトリを作成
 RUN mkdir -p /app/data /app/output
 
 # エントリーポイントはWhisper.cppバイナリ
 # エントリーポイントはWhisper.cppバイナリ
-ENTRYPOINT ["/app/whisper-cli"]
+ENTRYPOINT ["/usr/local/bin/whisper-cli"]
 
 
 # デフォルトコマンド (ヘルプ表示)

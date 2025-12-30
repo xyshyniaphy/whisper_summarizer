@@ -33,12 +33,14 @@ services:
     volumes:
       # ソースコードをマウント (ホットリロード用)
       - ./backend:/app
+      # ログディレクトリをマウント
+      - ./logs:/app/logs
       # Pythonキャッシュを除外
       - /app/__pycache__
       - /app/.pytest_cache
       # venvは除外 (ビルド時に作成されたものを使用)
       - /opt/venv
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --log-level debug
+    command: /bin/sh -c "uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --log-level debug 2>&1 | tee /app/logs/backend.log"
     networks:
       - whisper_network_dev
 
@@ -58,10 +60,13 @@ services:
     volumes:
       # ソースコードをマウント (ホットリロード用)
       - ./frontend:/app
+      # ログディレクトリをマウント
+      - ./logs:/app/logs
       # node_modulesを除外
       - /app/node_modules
       # Viteキャッシュを除外
       - /app/.vite
+    command: /bin/sh -c "npm run dev -- --host 0.0.0.0 2>&1 | tee /app/logs/frontend.log"
     depends_on:
       - backend
     networks:
