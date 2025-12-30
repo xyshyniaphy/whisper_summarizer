@@ -34,7 +34,7 @@ class WhisperService:
         if not os.path.exists(self.model):
             raise FileNotFoundError(f"Whisperモデルが見つかりません: {self.model}")
     
-    async def transcribe(
+    def transcribe(
         self,
         audio_file_path: str,
         output_dir: Optional[str] = None
@@ -69,7 +69,7 @@ class WhisperService:
         
         try:
             # Whisper.cppを実行
-            result = await self._run_whisper(wav_path, str(output_prefix))
+            result = self._run_whisper(wav_path, str(output_prefix))
             
             # 結果ファイルを解析
             transcription = self._parse_output(str(output_prefix))
@@ -120,7 +120,7 @@ class WhisperService:
             logger.error(f"FFmpeg変換エラー: {e.stderr}")
             raise Exception(f"音声変換エラー: {e.stderr}")
     
-    async def _run_whisper(self, wav_path: str, output_prefix: str) -> subprocess.CompletedProcess:
+    def _run_whisper(self, wav_path: str, output_prefix: str) -> subprocess.CompletedProcess:
         """
         Whisper.cppバイナリを実行
         

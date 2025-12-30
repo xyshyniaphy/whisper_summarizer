@@ -25,7 +25,7 @@ OUTPUT_DIR = Path("/app/data/output") # Whisper output
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 
-async def process_audio(file_path: Path, transcription_id: str, db: Session):
+def process_audio(file_path: Path, transcription_id: str, db: Session):
     """
     バックグラウンドで音声を処理し、DBを更新する
     """
@@ -57,7 +57,7 @@ async def process_audio(file_path: Path, transcription_id: str, db: Session):
             return
 
         # Whisper実行
-        result = await whisper_service.transcribe(
+        result = whisper_service.transcribe(
             str(file_path),
             output_dir=str(OUTPUT_DIR)
         )
@@ -81,7 +81,7 @@ async def process_audio(file_path: Path, transcription_id: str, db: Session):
 
 
 @router.post("/upload", response_model=TranscriptionSchema, status_code=201)
-async def upload_audio(
+def upload_audio(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     db: Session = Depends(get_db)

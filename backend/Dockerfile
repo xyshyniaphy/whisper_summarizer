@@ -11,11 +11,9 @@ ENV DEBIAN_FRONTEND=noninteractive
 ENV UV_COMPILE_BYTECODE=1
 ENV UV_LINK_MODE=copy
 
-# Python 3.12とuvのインストール
+# Python 3.12とuvのインストール (pip, venvはaptでインストールしない)
 RUN apt-get update && apt-get install -y \
     python3.12 \
-    python3.12-venv \
-    python3-pip \
     curl \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
@@ -49,17 +47,11 @@ ENV DEBIAN_FRONTEND=noninteractive
 ENV PYTHONUNBUFFERED=1
 ENV PATH="/opt/venv/bin:$PATH"
 
-# Python 3.12とランタイム依存関係をインストール
+# ランタイム依存関係のみインストール (Python本体はインストールしない)
 RUN apt-get update && apt-get install -y \
-    python3.12 \
-    python3.12-venv \
     libgomp1 \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
-
-# Python 3.12をデフォルトに設定
-RUN update-alternatives --install /usr/bin/python python /usr/bin/python3.12 1 && \
-    update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.12 1
 
 WORKDIR /app
 
