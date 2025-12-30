@@ -1,0 +1,24 @@
+from sqlalchemy import Column, String, Text, Float, DateTime, ForeignKey
+from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.sql import func
+from sqlalchemy.orm import relationship
+import uuid
+from app.db.base_class import Base
+
+class Transcription(Base):
+    __tablename__ = "transcriptions"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    file_name = Column(String, nullable=False)
+    file_path = Column(Text, nullable=True)
+    original_text = Column(Text, nullable=True)
+    status = Column(String, default="processing")
+    language = Column(String, nullable=True)
+    duration_seconds = Column(Float, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now(), server_default=func.now())
+
+    # Relationships
+    # user = relationship("User", back_populates="transcriptions") # User model reference if needed
+    summaries = relationship("Summary", back_populates="transcription", cascade="all, delete-orphan")

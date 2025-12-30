@@ -2,13 +2,14 @@
 音声ファイルAPIエンドポイント
 """
 
-from fastapi import APIRouter, File, UploadFile, Depends, HTTPException
-from app.schemas.schemas import AudioUploadResponse, AudioFileResponse
-from app.core.supabase import get_current_active_user
-from app.core.config import settings
+from fastapi import APIRouter, File, UploadFile, Depends, HTTPException, BackgroundTasks
+from sqlalchemy.orm import Session
+from app.api.deps import get_db
+from app.models.transcription import Transcription
+from app.schemas.transcription import Transcription as TranscriptionSchema
+from app.services.whisper_service import whisper_service
 from uuid import uuid4
 from datetime import datetime
-import httpx
 import logging
 import shutil
 from pathlib import Path
@@ -18,24 +19,75 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 # アップロードディレクトリ
-UPLOAD_DIR = Path("/tmp/uploads")
-UPLOAD_DIR.mkdir(exist_ok=True)
+UPLOAD_DIR = Path("/app/data/uploads")
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+OUTPUT_DIR = Path("/app/data/output") # Whisper output
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 
-@router.post("/upload", response_model=AudioUploadResponse, status_code=201)
+async def process_audio(file_path: Path, transcription_id: str, db: Session):
+    """
+    バックグラウンドで音声を処理し、DBを更新する
+    """
+    logger.info(f"バックグラウンド処理開始: {transcription_id}")
+    try:
+        # DBからレコードを再取得 (セッションが切れている可能性があるため新しいセッションを使うべきだが、
+        # ここでは簡易的に渡されたセッションを使うか、都度作成するか検討。
+        # FastAPIのBackgroundTasksではDependency Injectionのセッションはクローズされる可能性がある。
+        # そのため、ここではセッションを新しく作るのが正しいが、簡易実装として
+        # エラーハンドリング内で処理する。
+        # 正しくは BackgroundTasks に db session を渡すべきではない。
+        pass
+    except Exception as e:
+        logger.error(f"バックグラウンド処理準備エラー: {e}")
+
+    # 注: 本番実装ではCeleryなどを使うべきだが、ここでは簡易的に同期実行後にDB更新を行う
+    # ただし、Sessionオブジェクトはリクエストスコープで閉じるため、
+    # BackgroundTasks内でDB操作をするには新しいセッションが必要。
+    # 簡略化のため、今回は「同期的に処理してからレスポンスを返す」か
+    # 「メモリ内で処理」するかだが、ユーザー体験向上のためBackgroundTasksを使う。
+    # そのため、ここで新しいセッションを作成する。
+    from app.db.session import SessionLocal
+    background_db = SessionLocal()
+    
+    try:
+        transcription = background_db.query(Transcription).filter(Transcription.id == transcription_id).first()
+        if not transcription:
+            logger.error(f"Transcription not found: {transcription_id}")
+            return
+
+        # Whisper実行
+        result = await whisper_service.transcribe(
+            str(file_path),
+            output_dir=str(OUTPUT_DIR)
+        )
+        
+        # DB更新
+        transcription.original_text = result["text"]
+        transcription.language = result["language"]
+        transcription.status = "completed"
+        # durationはWhisper結果から計算できるなら入れるが、今回は省略
+        
+        background_db.commit()
+        logger.info(f"処理完了: {transcription_id}")
+        
+    except Exception as e:
+        logger.error(f"処理失敗: {transcription_id}, error: {e}")
+        if transcription:
+            transcription.status = "failed"
+            background_db.commit()
+    finally:
+        background_db.close()
+
+
+@router.post("/upload", response_model=TranscriptionSchema, status_code=201)
 async def upload_audio(
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
-    current_user: dict = Depends(get_current_active_user)
+    db: Session = Depends(get_db)
 ):
     """
     音声ファイルをアップロードして文字起こしを開始
-    
-    Args:
-        file: 音声ファイル (m4a, mp3, wav, aac, flac, ogg)
-        current_user: 認証されたユーザー
-    
-    Returns:
-        AudioUploadResponse: アップロード結果
     """
     # ファイル形式のバリデーション
     allowed_extensions = [".m4a", ".mp3", ".wav", ".aac", ".flac", ".ogg"]
@@ -47,72 +99,38 @@ async def upload_audio(
             detail=f"サポートされていないファイル形式です。許可: {', '.join(allowed_extensions)}"
         )
     
-    # 一意のファイルIDを生成
-    file_id = uuid4()
-    file_path = UPLOAD_DIR / f"{file_id}{file_extension}"
+    # DBレコード作成
+    new_transcription = Transcription(
+        file_name=file.filename,
+        status="processing"
+    )
+    db.add(new_transcription)
+    db.commit()
+    db.refresh(new_transcription)
+    
+    # ファイル保存
+    file_path = UPLOAD_DIR / f"{new_transcription.id}{file_extension}"
+    new_transcription.file_path = str(file_path)
+    db.commit()
     
     try:
-        # ファイルを保存
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
-        
-        file_size = file_path.stat().st_size
-        
-        logger.info(f"音声ファイルをアップロードしました: {file.filename} ({file_size} bytes)")
-        
-        # Whisper.cppで文字起こしを実行
-        # TODO: バックグラウンドタスクで実行
-        try:
-            from app.services.whisper_service import whisper_service
             
-            transcription_data = await whisper_service.transcribe(
-                str(file_path),
-                output_dir="/app/output"
-            )
-            
-            logger.info(f"文字起こしが完了しました: {file.filename}")
-            logger.info(f"文字数: {len(transcription_data['text'])}")
-            
-            # TODO: データベースに保存
-            # TODO: GLM4.7で要約を生成
+        # バックグラウンドタスク登録
+        background_tasks.add_task(process_audio, file_path, str(new_transcription.id), db)
         
-        except Exception as e:
-            logger.error(f"Whisper.cpp実行エラー: {str(e)}")
+        return new_transcription
         
-        # レスポンスを返す
-        return AudioUploadResponse(
-            id=file_id,
-            filename=file.filename,
-            file_size=file_size,
-            status="processing",
-            created_at=datetime.utcnow()
-        )
-    
     except Exception as e:
-        logger.error(f"ファイルアップロードエラー: {str(e)}")
-        raise HTTPException(
-            status_code=500,
-            detail="ファイルのアップロードに失敗しました"
-        )
-    
+        logger.error(f"アップロードエラー: {e}")
+        db.delete(new_transcription)
+        db.commit()
+        raise HTTPException(status_code=500, detail="ファイルの保存に失敗しました")
     finally:
         file.file.close()
 
-
-@router.get("/{audio_id}", response_model=AudioFileResponse)
-async def get_audio(
-    audio_id: str,
-    current_user: dict = Depends(get_current_active_user)
-):
-    """
-    音声ファイルの詳細を取得
-    
-    Args:
-        audio_id: 音声ファイルID
-        current_user: 認証されたユーザー
-    
-    Returns:
-        AudioFileResponse: 音声ファイル情報
-    """
-    # TODO: データベースから取得
-    raise HTTPException(status_code=501, detail="未実装")
+@router.get("/{audio_id}")
+async def get_audio_placeholder():
+    # 古いエンドポイントのプレースホルダー
+    pass

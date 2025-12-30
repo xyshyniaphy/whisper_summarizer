@@ -63,8 +63,11 @@ WORKDIR /build
 # Whisper.cppをクローン
 RUN git clone https://github.com/ggerganov/whisper.cpp.git .
 
-# CPU専用でビルド
-RUN make
+# CMakeでビルド
+RUN mkdir build && \
+    cd build && \
+    cmake .. && \
+    cmake --build . --config Release
 
 # ========================================
 # Stage 4: Runtime (最小構成)
@@ -85,7 +88,9 @@ COPY --from=ffmpeg-downloader /ffmpeg-bin/ffmpeg /usr/local/bin/ffmpeg
 COPY --from=ffmpeg-downloader /ffmpeg-bin/ffprobe /usr/local/bin/ffprobe
 
 # Whisper.cppバイナリをコピー
-COPY --from=builder /build/build/bin/main /app/whisper-main
+# Whisper.cppバイナリをコピー
+COPY --from=builder /build/build/bin/whisper-cli /app/whisper-cli
+
 
 # モデルをコピー
 COPY --from=model-downloader /models/ggml-large-v3-turbo.bin /app/models/
@@ -94,7 +99,9 @@ COPY --from=model-downloader /models/ggml-large-v3-turbo.bin /app/models/
 RUN mkdir -p /app/data /app/output
 
 # エントリーポイントはWhisper.cppバイナリ
-ENTRYPOINT ["/app/whisper-main"]
+# エントリーポイントはWhisper.cppバイナリ
+ENTRYPOINT ["/app/whisper-cli"]
+
 
 # デフォルトコマンド (ヘルプ表示)
 CMD ["--help"]

@@ -3,8 +3,12 @@
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from app.schemas.schemas import TranscriptionResponse, TranscriptionListResponse
-from app.core.supabase import get_current_active_user
+from sqlalchemy.orm import Session
+from typing import List
+from app.api.deps import get_db
+from app.models.transcription import Transcription
+from app.schemas.transcription import Transcription as TranscriptionSchema
+
 import logging
 
 logger = logging.getLogger(__name__)
@@ -12,48 +16,35 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-@router.get("", response_model=TranscriptionListResponse)
+@router.get("", response_model=List[TranscriptionSchema])
 async def list_transcriptions(
     limit: int = Query(10, ge=1, le=100),
     offset: int = Query(0, ge=0),
     status: str = Query(None),
-    current_user: dict = Depends(get_current_active_user)
+    db: Session = Depends(get_db)
 ):
     """
     文字起こしリストを取得
-    
-    Args:
-        limit: 取得件数 (1-100)
-        offset: オフセット
-        status: ステータスフィルター (completed, processing, failed)
-        current_user: 認証されたユーザー
-    
-    Returns:
-        TranscriptionListResponse: 文字起こしリスト
     """
-    # TODO: データベースから取得
-    return TranscriptionListResponse(
-        total=0,
-        items=[],
-        limit=limit,
-        offset=offset
-    )
+    query = db.query(Transcription)
+    
+    if status:
+        query = query.filter(Transcription.status == status)
+    
+    transcriptions = query.order_by(Transcription.created_at.desc()).offset(offset).limit(limit).all()
+    return transcriptions
 
 
-@router.get("/{transcription_id}", response_model=TranscriptionResponse)
+@router.get("/{transcription_id}", response_model=TranscriptionSchema)
 async def get_transcription(
     transcription_id: str,
-    current_user: dict = Depends(get_current_active_user)
+    db: Session = Depends(get_db)
 ):
     """
     文字起こし詳細を取得
-    
-    Args:
-        transcription_id: 文字起こしID
-        current_user: 認証されたユーザー
-    
-    Returns:
-        TranscriptionResponse: 文字起こし情報
     """
-    # TODO: データベースから取得
-    raise HTTPException(status_code=501, detail="未実装")
+    transcription = db.query(Transcription).filter(Transcription.id == transcription_id).first()
+    if not transcription:
+        raise HTTPException(status_code=404, detail="文字起こしが見つかりません")
+    
+    return transcription

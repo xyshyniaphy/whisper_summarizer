@@ -13,7 +13,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 # Whisper.cppバイナリのパス
-WHISPER_BINARY = "/app/whisper-main"
+WHISPER_BINARY = "/app/whisper-cli"
 WHISPER_MODEL = "/app/models/ggml-large-v3-turbo.bin"
 WHISPER_LANGUAGE = os.getenv("WHISPER_LANGUAGE", "ja")
 WHISPER_THREADS = os.getenv("WHISPER_THREADS", "4")
