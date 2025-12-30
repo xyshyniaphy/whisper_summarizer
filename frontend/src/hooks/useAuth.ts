@@ -2,7 +2,7 @@
  * 認証状態管理カスタムフック
  */
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { User, Session, AuthError } from '@supabase/supabase-js'
 import { supabase } from '../services/supabase'
 
@@ -12,7 +12,13 @@ interface AuthState {
   loading: boolean
 }
 
-export function useAuth() {
+interface AuthActions {
+  signUp: (email: string, password: string, fullName?: string) => Promise<{ user: User | null; session: Session | null; error: AuthError | null }>
+  signIn: (email: string, password: string) => Promise<{ user: User | null; session: Session | null; error: AuthError | null }>
+  signOut: () => Promise<{ error: AuthError | null }>
+}
+
+export function useAuth(): AuthState & AuthActions {
   const [authState, setAuthState] = useState<AuthState>({
     user: null,
     session: null,
@@ -21,18 +27,22 @@ export function useAuth() {
 
   useEffect(() => {
     // 現在のセッションを取得
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    const getSession = async () => {
+      const { data: { session }, error } = await supabase.auth.getSession()
+      if (error) {
+        console.error('Error getting session:', error.message)
+      }
       setAuthState({
         user: session?.user ?? null,
         session: session,
         loading: false
       })
-    })
+    }
+
+    getSession()
 
     // 認証状態の変更を監視
-    const {
-      data: { subscription }
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setAuthState({
         user: session?.user ?? null,
         session: session,
@@ -43,7 +53,8 @@ export function useAuth() {
     return () => subscription.unsubscribe()
   }, [])
 
-  const signUp = async (email: string, password: string, fullName?: string) => {
+  // 新規ユーザー登録
+  const signUp = useCallback(async (email: string, password: string, fullName?: string) => {
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
@@ -54,29 +65,35 @@ export function useAuth() {
       }
     })
 
-    if (error) throw error
-    return data
-  }
+    return {
+      user: data.user,
+      session: data.session,
+      error
+    }
+  }, [])
 
-  const signIn = async (email: string, password: string) => {
+  // サインイン
+  const signIn = useCallback(async (email: string, password: string) => {
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password
     })
 
-    if (error) throw error
-    return data
-  }
+    return {
+      user: data.user,
+      session: data.session,
+      error
+    }
+  }, [])
 
-  const signOut = async () => {
+  // サインアウト
+  const signOut = useCallback(async () => {
     const { error } = await supabase.auth.signOut()
-    if (error) throw error
-  }
+    return { error }
+  }, [])
 
   return {
-    user: authState.user,
-    session: authState.session,
-    loading: authState.loading,
+    ...authState,
     signUp,
     signIn,
     signOut

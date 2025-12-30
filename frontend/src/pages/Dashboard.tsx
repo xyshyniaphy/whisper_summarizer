@@ -5,10 +5,9 @@ export default function Dashboard() {
     const { user, signOut } = useAuth()
 
     const handleSignOut = async () => {
-        try {
-            await signOut()
-        } catch (error) {
-            console.error('ログアウトエラー:', error)
+        const result = await signOut()
+        if (result.error) {
+            console.error('ログアウトエラー:', result.error.message)
         }
     }
 

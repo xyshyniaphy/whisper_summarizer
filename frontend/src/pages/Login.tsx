@@ -18,13 +18,16 @@ export default function Login() {
         setLoading(true)
 
         try {
-            if (isSignUp) {
-                await signUp(email, password, fullName)
-            } else {
-                await signIn(email, password)
+            const result = isSignUp
+                ? await signUp(email, password, fullName)
+                : await signIn(email, password)
+
+            if (result.error) {
+                setError(result.error.message || 'エラーが発生しました')
             }
+            // If successful, the auth state change will trigger a redirect via App.tsx
         } catch (err: any) {
-            setError(err.message || 'エラーが発生しました')
+            setError(err.message || '予期しないエラーが発生しました')
         } finally {
             setLoading(false)
         }
