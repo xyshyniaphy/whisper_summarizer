@@ -14,10 +14,11 @@ services:
       SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
       SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
       
-      # GLM4.7
-      GLM_API_KEY: ${GLM_API_KEY}
-      GLM_API_ENDPOINT: ${GLM_API_ENDPOINT:-https://api.glm.ai/v1}
-      GLM_MODEL: ${GLM_MODEL:-glm-4.0-turbo}
+      # Gemini API
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.0-flash-exp}
+      REVIEW_LANGUAGE: ${REVIEW_LANGUAGE:-zh}
+      GEMINI_API_ENDPOINT: ${GEMINI_API_ENDPOINT:-}
       
       # Backend Config
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}

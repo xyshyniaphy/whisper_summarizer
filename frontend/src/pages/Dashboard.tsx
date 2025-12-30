@@ -1,8 +1,8 @@
-import { Container, Title, Button, Text } from '@mantine/core'
 import { useAuth } from '../hooks/useAuth'
+import { Button } from '../components/ui/Button'
 
 export default function Dashboard() {
-    const { user, signOut } = useAuth()
+    const [{ user }, { signOut }] = useAuth()
 
     const handleSignOut = async () => {
         const result = await signOut()
@@ -12,20 +12,20 @@ export default function Dashboard() {
     }
 
     return (
-        <Container>
-            <Title order={1} mt={40}>ダッシュボード</Title>
+        <div className="container mx-auto px-4 py-8">
+            <h1 className="text-3xl font-bold mt-10">ダッシュボード</h1>
 
-            <Text mt={20}>
+            <p className="mt-5">
                 ようこそ、{user?.email} さん
-            </Text>
+            </p>
 
-            <Text mt={20} c="dimmed">
+            <p className="mt-5 text-gray-500 dark:text-gray-400 text-sm">
                 音声ファイルのアップロード機能は現在実装中です。
-            </Text>
+            </p>
 
-            <Button mt={30} onClick={handleSignOut}>
+            <Button className="mt-8" onClick={handleSignOut}>
                 ログアウト
             </Button>
-        </Container>
+        </div>
     )
 }

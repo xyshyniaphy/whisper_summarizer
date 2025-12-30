@@ -1,6 +1,7 @@
 import { useState } from 'react'
-import { TextInput, PasswordInput, Button, Paper, Title, Text, Container } from '@mantine/core'
 import { useAuth } from '../hooks/useAuth'
+import { Button } from '../components/ui/Button'
+import { Card, CardContent } from '../components/ui/Card'
 
 export default function Login() {
     const [email, setEmail] = useState('')
@@ -10,7 +11,7 @@ export default function Login() {
     const [error, setError] = useState('')
     const [loading, setLoading] = useState(false)
 
-    const { signIn, signUp } = useAuth()
+    const [{ signIn, signUp }] = useAuth()
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -25,7 +26,6 @@ export default function Login() {
             if (result.error) {
                 setError(result.error.message || 'エラーが発生しました')
             }
-            // If successful, the auth state change will trigger a redirect via App.tsx
         } catch (err: any) {
             setError(err.message || '予期しないエラーが発生しました')
         } finally {
@@ -34,68 +34,86 @@ export default function Login() {
     }
 
     return (
-        <Container size={420} my={40}>
-            <Title ta="center">
-                Whisper Summarizer
-            </Title>
-            <Text c="dimmed" size="sm" ta="center" mt={5}>
-                {isSignUp ? '新規アカウント作成' : 'ログイン'}
-            </Text>
+        <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 px-4">
+            <div className="w-full max-w-md">
+                <h1 className="text-3xl font-bold text-center mb-2">
+                    Whisper Summarizer
+                </h1>
+                <p className="text-gray-600 dark:text-gray-400 text-center text-sm mb-8">
+                    {isSignUp ? '新規アカウント作成' : 'ログイン'}
+                </p>
 
-            <Paper withBorder shadow="md" p={30} mt={30} radius="md">
-                <form onSubmit={handleSubmit}>
-                    {isSignUp && (
-                        <TextInput
-                            label="氏名"
-                            placeholder="山田 太郎"
-                            value={fullName}
-                            onChange={(e) => setFullName(e.target.value)}
-                            mb="md"
-                        />
-                    )}
+                <Card>
+                    <CardContent className="pt-6">
+                        <form onSubmit={handleSubmit} className="space-y-4">
+                            {isSignUp && (
+                                <div>
+                                    <label className="block text-sm font-medium mb-1">
+                                        氏名
+                                    </label>
+                                    <input
+                                        type="text"
+                                        placeholder="山田 太郎"
+                                        value={fullName}
+                                        onChange={(e) => setFullName(e.target.value)}
+                                        className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                                    />
+                                </div>
+                            )}
 
-                    <TextInput
-                        label="メールアドレス"
-                        placeholder="you@example.com"
-                        required
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        mb="md"
-                    />
+                            <div>
+                                <label className="block text-sm font-medium mb-1">
+                                    メールアドレス
+                                </label>
+                                <input
+                                    type="email"
+                                    placeholder="you@example.com"
+                                    required
+                                    value={email}
+                                    onChange={(e) => setEmail(e.target.value)}
+                                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                                />
+                            </div>
 
-                    <PasswordInput
-                        label="パスワード"
-                        placeholder="パスワード"
-                        required
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        mb="md"
-                    />
+                            <div>
+                                <label className="block text-sm font-medium mb-1">
+                                    パスワード
+                                </label>
+                                <input
+                                    type="password"
+                                    placeholder="パスワード"
+                                    required
+                                    value={password}
+                                    onChange={(e) => setPassword(e.target.value)}
+                                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                                />
+                            </div>
 
-                    {error && (
-                        <Text c="red" size="sm" mb="md">
-                            {error}
-                        </Text>
-                    )}
+                            {error && (
+                                <p className="text-red-600 text-sm">
+                                    {error}
+                                </p>
+                            )}
 
-                    <Button fullWidth mt="xl" type="submit" loading={loading}>
-                        {isSignUp ? 'サインアップ' : 'ログイン'}
-                    </Button>
-                </form>
+                            <Button type="submit" className="w-full" disabled={loading}>
+                                {loading ? '処理中...' : (isSignUp ? 'サインアップ' : 'ログイン')}
+                            </Button>
+                        </form>
 
-                <Text c="dimmed" size="sm" ta="center" mt={20}>
-                    {isSignUp ? 'アカウントをお持ちですか？' : 'アカウントをお持ちでないですか？'}
-                    {' '}
-                    <Text
-                        component="a"
-                        size="sm"
-                        style={{ cursor: 'pointer', color: '#228be6' }}
-                        onClick={() => setIsSignUp(!isSignUp)}
-                    >
-                        {isSignUp ? 'ログイン' : 'サインアップ'}
-                    </Text>
-                </Text>
-            </Paper>
-        </Container>
+                        <p className="text-gray-600 dark:text-gray-400 text-sm text-center mt-5">
+                            {isSignUp ? 'アカウントをお持ちですか？' : 'アカウントをお持ちでないですか？'}
+                            {' '}
+                            <button
+                                type="button"
+                                className="text-primary-600 hover:underline"
+                                onClick={() => setIsSignUp(!isSignUp)}
+                            >
+                                {isSignUp ? 'ログイン' : 'サインアップ'}
+                            </button>
+                        </p>
+                    </CardContent>
+                </Card>
+            </div>
+        </div>
     )
 }

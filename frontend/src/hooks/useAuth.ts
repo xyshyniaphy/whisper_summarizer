@@ -1,16 +1,17 @@
 /**
- * 認証状態管理カスタムフック
+ * 認証状態管理カスタムフック (Jotai版)
  */
 
-import { useState, useEffect, useCallback } from 'react'
+import { useEffect, useCallback } from 'react'
 import { User, Session, AuthError } from '@supabase/supabase-js'
+import { useAtom, useSetAtom } from 'jotai'
 import { supabase } from '../services/supabase'
-
-interface AuthState {
-  user: User | null
-  session: Session | null
-  loading: boolean
-}
+import {
+  userAtom,
+  sessionAtom,
+  roleAtom,
+  loadingAtom,
+} from '../atoms/auth'
 
 interface AuthActions {
   signUp: (email: string, password: string, fullName?: string) => Promise<{ user: User | null; session: Session | null; error: AuthError | null }>
@@ -18,12 +19,14 @@ interface AuthActions {
   signOut: () => Promise<{ error: AuthError | null }>
 }
 
-export function useAuth(): AuthState & AuthActions {
-  const [authState, setAuthState] = useState<AuthState>({
-    user: null,
-    session: null,
-    loading: true
-  })
+export function useAuth(): [
+  { user: User | null; session: Session | null; loading: boolean; role: 'user' | 'admin' | null },
+  AuthActions
+] {
+  const [user, setUser] = useAtom(userAtom)
+  const [session, setSession] = useAtom(sessionAtom)
+  const [role, setRole] = useAtom(roleAtom)
+  const [loading, setLoading] = useAtom(loadingAtom)
 
   useEffect(() => {
     // 現在のセッションを取得
@@ -32,26 +35,24 @@ export function useAuth(): AuthState & AuthActions {
       if (error) {
         console.error('Error getting session:', error.message)
       }
-      setAuthState({
-        user: session?.user ?? null,
-        session: session,
-        loading: false
-      })
+      setUser(session?.user ?? null)
+      setSession(session)
+      setRole(session?.user?.user_metadata?.role ?? 'user')
+      setLoading(false)
     }
 
     getSession()
 
     // 認証状態の変更を監視
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setAuthState({
-        user: session?.user ?? null,
-        session: session,
-        loading: false
-      })
+      setUser(session?.user ?? null)
+      setSession(session)
+      setRole(session?.user?.user_metadata?.role ?? 'user')
+      setLoading(false)
     })
 
     return () => subscription.unsubscribe()
-  }, [])
+  }, [setUser, setSession, setRole, setLoading])
 
   // 新規ユーザー登録
   const signUp = useCallback(async (email: string, password: string, fullName?: string) => {
@@ -60,42 +61,54 @@ export function useAuth(): AuthState & AuthActions {
       password,
       options: {
         data: {
-          full_name: fullName || ''
-        }
-      }
+          full_name: fullName || '',
+          role: 'user',
+        },
+      },
     })
+
+    if (data.user) {
+      setUser(data.user)
+      setRole('user')
+    }
 
     return {
       user: data.user,
       session: data.session,
-      error
+      error,
     }
-  }, [])
+  }, [setUser, setRole])
 
   // サインイン
   const signIn = useCallback(async (email: string, password: string) => {
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
-      password
+      password,
     })
+
+    if (data.user) {
+      setUser(data.user)
+      setRole(data.user.user_metadata?.role ?? 'user')
+    }
 
     return {
       user: data.user,
       session: data.session,
-      error
+      error,
     }
-  }, [])
+  }, [setUser, setRole])
 
   // サインアウト
   const signOut = useCallback(async () => {
     const { error } = await supabase.auth.signOut()
+    setUser(null)
+    setSession(null)
+    setRole(null)
     return { error }
-  }, [])
+  }, [setUser, setSession, setRole])
 
-  return {
-    ...authState,
-    signUp,
-    signIn,
-    signOut
-  }
+  return [
+    { user, session, loading, role },
+    { signUp, signIn, signOut },
+  ]
 }

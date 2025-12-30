@@ -6,7 +6,7 @@ import { TranscriptionList } from './pages/TranscriptionList'
 import { TranscriptionDetail } from './pages/TranscriptionDetail'
 
 function App() {
-    const { user, loading } = useAuth()
+    const [{ user, loading }, { signIn, signUp, signOut }] = useAuth()
 
     // Auth loading state is less critical now as we allow anonymous access to main features
     // but we can still keep it for the login route logic if needed.

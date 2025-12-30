@@ -18,11 +18,13 @@ Whisper Summarizerは、音声ファイルを自動で文字起こしし、Googl
 
 | コンポーネント | 技術 |
 |---|---|
-| フロントエンド | React 19 + TypeScript + Vite + Mantine |
+| フロントエンド | React 19 + TypeScript + Vite + Tailwind CSS |
+| ステート管理 | Jotai (atomic state) |
+| UIコンポーネント | Tailwind CSS + lucide-react (icons) |
 | バックエンド | FastAPI + Python 3.12 + uv |
 | 音声処理 | Whisper.cpp v3-turbo (CPU専用) + 静的FFmpeg |
-| AI要約 | Google Gemini 2.0 Flash (旧: GLM4.7) |
-| 認証 | Supabase Auth |
+| AI要約 | Google Gemini 2.0 Flash |
+| 認証 | Supabase Auth (JWT) |
 | データベース | Supabase PostgreSQL (マネージド) |
 | コンテナ | Docker + Docker Compose |
 
@@ -40,7 +42,7 @@ Whisper Summarizerは、音声ファイルを自動で文字起こしし、Googl
 
 - Docker & Docker Compose
 - Supabaseプロジェクト (https://supabase.com)
-- GLM4.7 APIキー
+- Google Gemini APIキー
 
 ### 環境変数の設定
 
@@ -56,7 +58,6 @@ SUPABASE_URL=https://xxxx.supabase.co
 SUPABASE_ANON_KEY=eyJ...
 SUPABASE_SERVICE_ROLE_KEY=eyJ...
 
-# GLM4.7 API設定
 # Google Gemini API設定 (要約生成用)
 GEMINI_API_KEY=your_gemini_api_key
 GEMINI_MODEL=gemini-2.0-flash-exp  # 使用モデル (gemini-2.0-flash-exp, gemini-1.5-pro 等)
@@ -184,7 +185,7 @@ whisper_summarizer/
 ```bash
 # 1. 環境変数を設定
 cp .env.sample .env
-# .envを編集してSupabaseとGLM4.7のAPIキーを設定
+# .envを編集してSupabaseとGoogle GeminiのAPIキーを設定
 
 # 2. 開発環境を起動
 ./run_dev.sh up-d

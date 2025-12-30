@@ -1,0 +1,196 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Project Overview
+
+Whisper Summarizer is a microservices web application for audio transcription and AI-powered summarization. It uses:
+- **Whisper.cpp** (v3-turbo) for CPU-based audio transcription
+- **Google Gemini 2.0 Flash** API for summarization
+- **Supabase** for authentication and PostgreSQL database
+- **Docker Compose** for orchestration
+
+### Services Architecture
+
+```
+┌─────────────┐     ┌─────────────┐     ┌──────────────────┐
+│  Frontend   │────▶│  Backend    │────▶│  Whisper.cpp     │
+│  (React)    │     │  (FastAPI)  │     │  Service         │
+│  :3000      │     │  :8000      │     │  :8001           │
+└─────────────┘     └─────────────┘     └──────────────────┘
+                           │
+                           ▼
+                    ┌─────────────┐
+                    │  Supabase   │
+                    │  (Auth+DB)  │
+                    └─────────────┘
+```
+
+## Development Commands
+
+### Starting Development Environment
+
+```bash
+# Quick start (background)
+./run_dev.sh up-d
+
+# With logs (foreground)
+./run_dev.sh
+
+# View logs
+./run_dev.sh logs
+
+# Stop services
+./run_dev.sh down
+```
+
+Access URLs:
+- Frontend: http://localhost:3000
+- Backend API: http://localhost:8000
+- API Docs: http://localhost:8000/docs
+
+### Testing
+
+Use `run_test.sh` for all testing - this is the only supported way to run tests:
+
+```bash
+./run_test.sh frontend    # Frontend tests only
+./run_test.sh backend     # Backend tests only
+./run_test.sh e2e         # E2E tests only (requires dev environment running)
+./run_test.sh all         # All tests
+./run_test.sh build       # Build test images
+./run_test.sh clean       # Cleanup test containers
+```
+
+### Building
+
+```bash
+# Whisper.cpp base image
+./build_whisper.sh              # With cache
+./build_whisper.sh --no-cache   # Without cache
+
+# Production
+docker-compose up -d --build
+
+# Development rebuild (when package.json changes)
+docker-compose -f docker-compose.dev.yml build --no-cache frontend
+docker-compose -f docker-compose.dev.yml up -d --force-recreate
+```
+
+**Note**: When `package.json` changes, use `--no-cache` to rebuild the frontend image. The `deps` stage caches `node_modules` and won't pick up new dependencies otherwise.
+
+## Code Architecture
+
+### Backend Structure (`backend/app/`)
+
+```
+app/
+├── api/              # API route handlers (FastAPI routers)
+│   ├── auth.py       # Supabase auth endpoints
+│   ├── audio.py      # Audio upload/management
+│   └── transcriptions.py
+├── core/
+│   ├── config.py     # Settings (Pydantic BaseSettings)
+│   ├── supabase.py   # Supabase client initialization
+│   └── gemini.py     # Gemini API integration
+├── models/           # SQLAlchemy ORM models
+├── schemas/          # Pydantic request/response schemas
+├── db/
+│   └── session.py    # Database session management
+└── main.py           # FastAPI app initialization
+```
+
+**Key patterns:**
+- FastAPI with dependency injection for auth
+- SQLAlchemy ORM with UUID primary keys
+- Pydantic schemas for validation
+- Service layer pattern for external API calls (Gemini)
+
+### Frontend Structure (`frontend/src/`)
+
+```
+src/
+├── pages/            # Route-level components
+│   ├── Login.tsx     # Public auth page
+│   ├── Dashboard.tsx # Protected dashboard
+│   ├── TranscriptionList.tsx # Transcription list page
+│   └── TranscriptionDetail.tsx # Detail page with summary
+├── components/       # Reusable UI components
+│   ├── ui/           # Tailwind UI components
+│   │   ├── Button.tsx
+│   │   ├── Card.tsx
+│   │   ├── Badge.tsx
+│   │   ├── Modal.tsx
+│   │   ├── Accordion.tsx
+│   │   └── index.ts
+│   └── AudioUploader.tsx # File upload with drag & drop
+├── hooks/            # Custom React hooks
+│   └── useAuth.ts    # Supabase auth state management (Jotai-based)
+├── atoms/            # Jotai state atoms
+│   ├── auth.ts       # Authentication atoms (user, session, role)
+│   ├── theme.ts      # Theme atom (light/dark mode)
+│   └── transcriptions.ts # Transcription state atoms
+├── services/
+│   └── api.ts        # Axios instance + API functions
+├── types/            # TypeScript type definitions
+├── utils/
+│   └── cn.ts         # Tailwind className utility (clsx + tailwind-merge)
+├── App.tsx           # React Router setup
+└── main.tsx          # Entry point with Jotai Provider
+```
+
+**Key patterns:**
+- **Jotai** for atomic state management (replaces React Context)
+- **Tailwind CSS** for styling (replaces Mantine UI)
+- **lucide-react** for icons (replaces @tabler/icons-react)
+- React Router v7 for navigation
+- `useAuth` hook returns tuple: `[{ user, session, role, loading }, { signUp, signIn, signOut }]`
+- Role-based access control: `role` extracted from `user.user_metadata.role` ('user' | 'admin')
+- Dark mode via selector pattern (`.dark` class on documentElement)
+- Protected routes check `user` state from `useAuth`
+
+### Authentication Flow
+
+1. Frontend: `useAuth` hook manages auth state via Supabase client
+2. Backend: Validates JWT via `SUPABASE_ANON_KEY` on protected routes
+3. Tokens stored in `localStorage` (access token) and Supabase client (refresh)
+
+**Supabase keys usage:**
+- `SUPABASE_ANON_KEY` - Frontend client, bypasses RLS for public policies
+- `SUPABASE_SERVICE_ROLE_KEY` - Backend admin operations, bypasses all RLS
+
+### Environment Variables
+
+Required in `.env`:
+
+```bash
+# Supabase
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_ANON_KEY=eyJ...
+SUPABASE_SERVICE_ROLE_KEY=eyJ...
+DATABASE_URL=postgresql://postgres:pass@host:5432/postgres
+
+# Gemini API
+GEMINI_API_KEY=your-key
+GEMINI_MODEL=gemini-2.0-flash-exp
+REVIEW_LANGUAGE=zh    # zh, ja, en
+GEMINI_API_ENDPOINT=  # Optional custom endpoint
+
+# Whisper
+WHISPER_LANGUAGE=zh
+WHISPER_THREADS=4
+
+# Backend
+SECRET_KEY=your-secret
+CORS_ORIGINS=http://localhost:3000
+```
+
+## Important Notes
+
+1. **Whisper.cpp service** runs as separate Docker container (3.46GB image with v3-turbo model)
+2. **Hot reload**: Development uses volume mounts for instant code updates
+3. **Test coverage target**: 70%+ (currently 73.37% for backend)
+4. **uv** is used for Python dependency management (not pip)
+5. **Tailwind CSS** is the styling framework - prefer utility classes over custom CSS
+6. **Jotai** is used for global state - prefer atoms over React Context
+7. **Data persistence**: `data/` directory is volume-mounted (uploads, output, test artifacts)

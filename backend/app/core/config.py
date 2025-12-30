@@ -16,17 +16,12 @@ class Settings(BaseSettings):
     SUPABASE_URL: str
     SUPABASE_ANON_KEY: str
     SUPABASE_SERVICE_ROLE_KEY: str
-    
-    # GLM4.7
-    GLM_API_KEY: str
-    GLM_API_ENDPOINT: str = "https://api.glm.ai/v1"
-    GLM_MODEL: str = "glm-4.0-turbo"
-    
-    # Gemini
+
+    # Gemini API
     GEMINI_API_KEY: str
-    GEMINI_API_ENDPOINT: Optional[str] = None  # カスタムエンドポイント（オプション）
     GEMINI_MODEL: str = "gemini-2.0-flash-exp"
     REVIEW_LANGUAGE: str = "zh"  # zh (中国語), ja (日本語), en (英語)
+    GEMINI_API_ENDPOINT: Optional[str] = None  # カスタムエンドポイント（オプション）
     
     # Backend
     SECRET_KEY: str = "your-secret-key-change-in-production"

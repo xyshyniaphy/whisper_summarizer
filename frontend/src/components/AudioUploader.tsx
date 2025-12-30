@@ -1,73 +1,139 @@
-import React, { useState } from 'react';
-import { Group, Text, useMantineTheme, rem, Button, Progress, Card } from '@mantine/core';
-import { IconUpload, IconPhoto, IconX, IconFileMusic } from '@tabler/icons-react';
-import { Dropzone, DropzoneProps, FileWithPath } from '@mantine/dropzone';
-import { api } from '../services/api';
-import { useNavigate } from 'react-router-dom';
+import React, { useState } from 'react'
+import { Upload, X, FileAudio } from 'lucide-react'
+import { api } from '../services/api'
+import { useNavigate } from 'react-router-dom'
+import { Card, CardContent } from './ui/Card'
 
-export function AudioUploader() {
-    const theme = useMantineTheme();
-    const navigate = useNavigate();
-    const [loading, setLoading] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+interface AudioUploaderProps {}
 
-    const handleDrop = async (files: FileWithPath[]) => {
-        if (files.length === 0) return;
+export function AudioUploader({}: AudioUploaderProps) {
+    const navigate = useNavigate()
+    const [loading, setLoading] = useState(false)
+    const [error, setError] = useState<string | null>(null)
+    const [isDragging, setIsDragging] = useState(false)
+    const [isRejected, setIsRejected] = useState(false)
 
-        setLoading(true);
-        setError(null);
-        try {
-            const file = files[0];
-            const transcription = await api.uploadAudio(file);
-            navigate(`/transcriptions/${transcription.id}`);
-        } catch (err: any) {
-            console.error(err);
-            setError(err.response?.data?.detail || "アップロードに失敗しました");
-        } finally {
-            setLoading(false);
+    const acceptedTypes = ['audio/mpeg', 'audio/wav', 'audio/aac', 'audio/flac', 'audio/ogg', 'audio/x-m4a', 'audio/mp4']
+    const maxSize = 50 * 1024 * 1024 // 50MB
+
+    const validateFile = (file: File): boolean => {
+        if (!acceptedTypes.includes(file.type)) {
+            setError('対応していないファイル形式です')
+            setIsRejected(true)
+            return false
         }
-    };
+        if (file.size > maxSize) {
+            setError('ファイルサイズが50MBを超えています')
+            setIsRejected(true)
+            return false
+        }
+        return true
+    }
+
+    const handleDrop = async (e: React.DragEvent<HTMLDivElement>) => {
+        e.preventDefault()
+        setIsDragging(false)
+        setIsRejected(false)
+        setError(null)
+
+        const files = Array.from(e.dataTransfer.files)
+        if (files.length > 0 && validateFile(files[0])) {
+            await uploadFile(files[0])
+        }
+    }
+
+    const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const files = e.target.files
+        if (files && files.length > 0) {
+            setIsRejected(false)
+            setError(null)
+            if (validateFile(files[0])) {
+                await uploadFile(files[0])
+            }
+        }
+    }
+
+    const uploadFile = async (file: File) => {
+        setLoading(true)
+        setError(null)
+        try {
+            const transcription = await api.uploadAudio(file)
+            navigate(`/transcriptions/${transcription.id}`)
+        } catch (err: any) {
+            console.error(err)
+            setError(err.response?.data?.detail || 'アップロードに失敗しました')
+        } finally {
+            setLoading(false)
+        }
+    }
+
+    const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+        e.preventDefault()
+        setIsDragging(true)
+    }
+
+    const handleDragLeave = () => {
+        setIsDragging(false)
+    }
 
     return (
-        <Card shadow="sm" padding="lg" radius="md" withBorder>
-            <Dropzone
-                onDrop={handleDrop}
-                onReject={(files) => console.log('rejected files', files)}
-                maxSize={50 * 1024 ** 2} // 50MB
-                accept={['audio/mpeg', 'audio/wav', 'audio/aac', 'audio/flac', 'audio/ogg', 'audio/x-m4a', 'audio/mp4']}
-                loading={loading}
-            >
-                <Group justify="center" gap="xl" style={{ minHeight: rem(220), pointerEvents: 'none' }}>
-                    <Dropzone.Accept>
-                        <IconUpload
-                            style={{ width: rem(52), height: rem(52), color: 'var(--mantine-color-blue-6)' }}
-                            stroke={1.5}
-                        />
-                    </Dropzone.Accept>
-                    <Dropzone.Reject>
-                        <IconX
-                            style={{ width: rem(52), height: rem(52), color: 'var(--mantine-color-red-6)' }}
-                            stroke={1.5}
-                        />
-                    </Dropzone.Reject>
-                    <Dropzone.Idle>
-                        <IconFileMusic
-                            style={{ width: rem(52), height: rem(52), color: 'var(--mantine-color-dimmed)' }}
-                            stroke={1.5}
-                        />
-                    </Dropzone.Idle>
+        <Card>
+            <CardContent className="pt-6">
+                <div
+                    onDrop={handleDrop}
+                    onDragOver={handleDragOver}
+                    onDragLeave={handleDragLeave}
+                    className={`
+                        relative border-2 border-dashed rounded-lg p-8 text-center transition-colors cursor-pointer
+                        ${isDragging
+                            ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
+                            : isRejected
+                            ? 'border-red-300 dark:border-red-700'
+                            : 'border-gray-300 dark:border-gray-600 hover:border-gray-400 dark:hover:border-gray-500'
+                        }
+                        ${loading ? 'pointer-events-none opacity-50' : ''}
+                    `}
+                >
+                    <input
+                        type="file"
+                        accept={acceptedTypes.join(',')}
+                        onChange={handleFileSelect}
+                        disabled={loading}
+                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                    />
 
-                    <div>
-                        <Text size="xl" inline>
-                            音声ファイルをここにドラッグ&ドロップ
-                        </Text>
-                        <Text size="sm" c="dimmed" inline mt={7}>
-                            またはクリックしてファイルを選択 (mp3, wav, m4a, etc)
-                        </Text>
+                    <div className="flex flex-col items-center justify-center gap-4 pointer-events-none min-h-[220px]">
+                        {isRejected ? (
+                            <X className="w-12 h-12 text-red-500" />
+                        ) : isDragging ? (
+                            <Upload className="w-12 h-12 text-blue-500" />
+                        ) : (
+                            <FileAudio className="w-12 h-12 text-gray-400 dark:text-gray-600" />
+                        )}
+
+                        <div>
+                            <p className="text-lg font-medium">
+                                音声ファイルをここにドラッグ&ドロップ
+                            </p>
+                            <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
+                                またはクリックしてファイルを選択 (mp3, wav, m4a, etc)
+                            </p>
+                        </div>
+
+                        {loading && (
+                            <div className="absolute inset-0 flex items-center justify-center bg-white/80 dark:bg-gray-900/80 rounded-lg">
+                                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600" />
+                            </div>
+                        )}
                     </div>
-                </Group>
-            </Dropzone>
-            {error && <Text c="red" mt="sm">{error}</Text>}
+                </div>
+
+                {error && (
+                    <p className="text-red-600 dark:text-red-400 mt-4 text-sm text-center">
+                        {error}
+                    </p>
+                )}
+            </CardContent>
         </Card>
-    );
+    )
 }
