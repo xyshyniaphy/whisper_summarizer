@@ -105,14 +105,27 @@ class WhisperService:
             str(wav_path)
         ]
         
+        print(f"DEBUG: Running ffmpeg command: {ffmpeg_cmd}", flush=True)
+
+        
         try:
+            logger.info(f"Converting audio: {input_path} -> {wav_path}")
+            cmd_str = ' '.join(str(x) for x in ffmpeg_cmd)
+            logger.info(f"Running FFmpeg command: {cmd_str}")
+            
             result = subprocess.run(
                 ffmpeg_cmd,
                 capture_output=True,
                 text=True,
                 timeout=300,
-                check=True
+                check=False
             )
+            
+            if result.returncode != 0:
+                logger.error(f"FFmpeg failed with code {result.returncode}")
+                logger.error(f"FFmpeg STDERR:\n{result.stderr}")
+                result.check_returncode()
+
             logger.info(f"音声変換完了: {wav_path}")
             return wav_path
         
@@ -142,14 +155,29 @@ class WhisperService:
             "-osrt",  # SRT出力 (タイムスタンプ)
         ]
         
+        print(f"DEBUG: Running whisper command: {whisper_cmd}", flush=True)
+
+        
         try:
+            # Ensure all args are strings for logging
+            cmd_str = ' '.join(str(x) for x in whisper_cmd)
+            logger.info(f"Running Whisper command: {cmd_str}")
             result = subprocess.run(
                 whisper_cmd,
                 capture_output=True,
                 text=True,
                 timeout=600,
-                check=True
+                check=False  # Do not raise immediately to capture output
             )
+            
+            logger.info(f"Whisper finished with return code: {result.returncode}")
+            if result.stdout:
+                logger.info(f"Whisper STDOUT:\n{result.stdout}")
+            if result.stderr:
+                logger.warning(f"Whisper STDERR:\n{result.stderr}")
+                
+            result.check_returncode() # Now raise if failed
+            
             logger.info(f"Whisper.cpp実行完了: {output_prefix}")
             return result
         
