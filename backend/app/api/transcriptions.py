@@ -48,3 +48,46 @@ async def get_transcription(
         raise HTTPException(status_code=404, detail="文字起こしが見つかりません")
     
     return transcription
+
+
+@router.delete("/{transcription_id}", status_code=204)
+async def delete_transcription(
+    transcription_id: str,
+    db: Session = Depends(get_db)
+):
+    """
+    文字起こしを削除 (ファイルも含む)
+    """
+    transcription = db.query(Transcription).filter(Transcription.id == transcription_id).first()
+    if not transcription:
+        raise HTTPException(status_code=404, detail="文字起こしが見つかりません")
+
+    # ファイル削除
+    try:
+        import os
+        from pathlib import Path
+        
+        # アップロードファイル削除
+        if transcription.file_path and os.path.exists(transcription.file_path):
+            os.remove(transcription.file_path)
+            
+        # 出力ファイル削除 (wav, txt, srt) - 簡易的な推定
+        # whisper_service.pyの実装に依存するが、output_dir/id.* を探して消す
+        output_dir = Path("/app/data/output")
+        for ext in [".wav", ".txt", ".srt", ".vtt", ".json"]:
+            output_file = output_dir / f"{transcription.id}{ext}"
+            converted_wav = output_dir / f"{transcription.id}_converted.wav"
+            
+            if output_file.exists():
+                output_file.unlink()
+            if converted_wav.exists():
+                converted_wav.unlink()
+                
+    except Exception as e:
+        logger.error(f"ファイル削除エラー: {e}")
+        # DB削除は続行する
+        pass
+
+    db.delete(transcription)
+    db.commit()
+    return None

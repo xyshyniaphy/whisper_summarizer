@@ -10,6 +10,7 @@ Whisper Summarizerは、音声ファイルを自動で文字起こしし、AI(GL
 
 - **音声文字起こし**: Whisper.cpp (v3-turbo) によるCPU処理
 - **AI要約生成**: GLM4.7による高品質な要約
+- **音声管理**: アップロードした音声と文字起こし結果の削除機能
 - **ユーザー認証**: Supabase Authによる安全な認証
 - **マイクロサービス構成**: Docker Composeによる統合環境
 
@@ -63,6 +64,10 @@ GLM_MODEL=glm-4.0-turbo
 # Supabase PostgreSQL接続文字列
 # SupabaseダッシュボードのSettings > Database > Connection Stringから取得
 DATABASE_URL=postgresql://postgres:[YOUR-PASSWORD]@db.[PROJECT-REF].supabase.co:5432/postgres
+
+# Whisper設定
+WHISPER_LANGUAGE=zh  # 文字起こし言語 (zh, ja, en 等)
+WHISPER_THREADS=4    # Whisper処理に使用するスレッド数 (CPUコア数に合わせて調整)
 ```
 
 ### Whisper.cppベースイメージのビルド
@@ -161,9 +166,11 @@ whisper_summarizer/
 │
 ├── whispercpp/            # Whisper.cppベースイメージ
 │   ├── Dockerfile        # マルチステージビルド (静的FFmpeg統合)
-│   ├── data/             # 入力音声ファイル
-│   ├── output/           # 文字起こし結果
 │   └── models/           # Whisperモデル (ビルド時ダウンロード)
+│
+├── data/                 # データ保存用 (Dockerボリュームマウント)
+│   ├── uploads/          # アップロードされた音声ファイル
+│   └── output/           # 文字起こし結果
 │
 ├── docker-compose.yml     # 本番環境
 ├── docker-compose.dev.yml # 開発環境
@@ -211,6 +218,13 @@ cp .env.sample .env
 
 - 文字起こし結果をタイムスタンプ付きで表示
 - GLM4.7による要約を表示
+
+### 5. 音声の削除 (New)
+
+- 文字起こし履歴リストから、不要なアイテムを削除できます (ゴミ箱アイコン)
+- 関連する音声ファイルと文字起こしデータもサーバーから削除されます
+
+
 
 ## 開発
 
@@ -272,6 +286,55 @@ docker-compose -f docker-compose.dev.yml exec backend bash
 
 # フロントエンドコンテナ
 docker-compose -f docker-compose.dev.yml exec frontend sh
+```
+
+## テスト
+
+プロジェクトには包括的な自動テストが実装されています。
+
+### バックエンドテスト (Pytest)
+
+```bash
+# テストを実行
+cd backend
+uv run pytest
+
+# 特定のテストを実行
+uv run pytest ../tests/backend/api/test_auth_api.py
+
+# マーカーでフィルター
+uv run pytest -m unit          # 単体テストのみ
+uv run pytest -m integration   # 統合テストのみ
+```
+
+### フロントエンドテスト (Vitest)
+
+```bash
+# テストを実行
+cd frontend
+npm test
+
+# ウォッチモード
+npm test -- --watch
+```
+
+### E2Eテスト (Playwright)
+
+```bash
+# 依存関係をインストール
+cd tests/e2e
+npm install
+
+# Playwrightブラウザをインストール (初回のみ)
+npx playwright install
+
+# E2Eテストを実行 (開発環境が起動している必要がある)
+npm test
+```
+
+**注意**: E2Eテストを実行する前に、開発環境を起動してください:
+```bash
+./run_dev.sh up-d
 ```
 
 ## API仕様

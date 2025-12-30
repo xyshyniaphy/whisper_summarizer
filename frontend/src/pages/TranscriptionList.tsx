@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { Title, Container, Table, Badge, Button, Group, Text, Card } from '@mantine/core';
+import { Title, Container, Table, Badge, Button, Group, Text, Card, ActionIcon, Tooltip } from '@mantine/core';
+import { IconTrash } from '@tabler/icons-react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
 import { Transcription } from '../types';
@@ -22,6 +23,19 @@ export function TranscriptionList() {
         }
     };
 
+    const handleDelete = async (e: React.MouseEvent, id: string) => {
+        e.stopPropagation();
+        if (!window.confirm('本当に削除しますか？')) return;
+
+        try {
+            await api.deleteTranscription(id);
+            loadTranscriptions();
+        } catch (e) {
+            console.error(e);
+            alert('削除に失敗しました');
+        }
+    };
+
     const rows = transcriptions.map((item) => (
         <Table.Tr key={item.id} style={{ cursor: 'pointer' }} onClick={() => navigate(`/transcriptions/${item.id}`)}>
             <Table.Td>{item.file_name}</Table.Td>
@@ -33,6 +47,17 @@ export function TranscriptionList() {
                 </Badge>
             </Table.Td>
             <Table.Td>{new Date(item.created_at).toLocaleString()}</Table.Td>
+            <Table.Td>
+                <Tooltip label="削除">
+                    <ActionIcon
+                        variant="subtle"
+                        color="red"
+                        onClick={(e) => handleDelete(e, item.id)}
+                    >
+                        <IconTrash size={20} />
+                    </ActionIcon>
+                </Tooltip>
+            </Table.Td>
         </Table.Tr>
     ));
 
@@ -49,6 +74,7 @@ export function TranscriptionList() {
                             <Table.Th>ファイル名</Table.Th>
                             <Table.Th>ステータス</Table.Th>
                             <Table.Th>作成日時</Table.Th>
+                            <Table.Th style={{ width: 60 }}></Table.Th>
                         </Table.Tr>
                     </Table.Thead>
                     <Table.Tbody>{rows}</Table.Tbody>

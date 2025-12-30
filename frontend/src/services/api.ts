@@ -24,5 +24,9 @@ export const api = {
   getTranscription: async (id: string): Promise<Transcription> => {
     const response = await axios.get<Transcription>(`${API_URL}/transcriptions/${id}`);
     return response.data;
+  },
+
+  deleteTranscription: async (id: string): Promise<void> => {
+    await axios.delete(`${API_URL}/transcriptions/${id}`);
   }
 };
