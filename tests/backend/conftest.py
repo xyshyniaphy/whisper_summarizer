@@ -39,6 +39,74 @@ def test_client() -> Generator[TestClient, None, None]:
   with TestClient(app) as client:
     yield client
 
+@pytest.fixture
+def real_auth_user() -> dict:
+    """
+    実テスト用のユーザー情報フィクスチャ
+    """
+    import uuid
+    uid = uuid.uuid4()
+    return {
+        "id": str(uid),
+        "email": f"test-real-{str(uid)[:8]}@example.com",
+        "raw_uuid": uid
+    }
+
+
+@pytest.fixture
+def real_auth_client(real_auth_user: dict) -> Generator[TestClient, None, None]:
+    """
+    実DBと認証バイパスを使用したTestClient
+    
+    DBにテストユーザーを作成し、認証をそのユーザーでバイパスする。
+    テスト終了後にユーザーと関連データを削除する。
+    """
+    from app.main import app
+    from app.core.supabase import get_current_active_user
+    from app.db.session import SessionLocal
+    from app.models.user import User
+    from app.models.transcription import Transcription
+    from app.models.summary import Summary
+
+    async def override_auth():
+        return {
+            "id": real_auth_user["id"],
+            "email": real_auth_user["email"],
+            "email_confirmed_at": "2025-01-01T00:00:00Z"
+        }
+
+    # ユーザー作成
+    db = SessionLocal()
+    try:
+        user = User(id=real_auth_user["raw_uuid"], email=real_auth_user["email"])
+        db.add(user)
+        db.commit()
+    except Exception:
+        db.rollback()
+    finally:
+        db.close()
+
+    app.dependency_overrides[get_current_active_user] = override_auth
+
+    with TestClient(app) as client:
+        yield client
+
+    # クリーンアップ
+    app.dependency_overrides = {}
+    db = SessionLocal()
+    try:
+        # 関連データの削除
+        db.query(Summary).filter(Summary.transcription_id.in_(
+            db.query(Transcription.id).filter(Transcription.user_id == real_auth_user["id"])
+        )).delete(synchronize_session=False)
+        db.query(Transcription).filter(Transcription.user_id == real_auth_user["id"]).delete(synchronize_session=False)
+        db.query(User).filter(User.id == real_auth_user["raw_uuid"]).delete()
+        db.commit()
+    except Exception:
+        db.rollback()
+    finally:
+        db.close()
+
 
 @pytest.fixture
 def mock_supabase_client() -> MagicMock:
@@ -87,14 +155,24 @@ def mock_supabase_client() -> MagicMock:
 
 @pytest.fixture
 def sample_audio_file() -> bytes:
-  """
-  テスト用音声ファイルデータ
-  
-  Returns:
-    bytes: 音声ファイルバイナリデータ
-  """
-  # 小さなWAVファイルヘッダー (44バイト)
-  return b'RIFF' + b'\x00' * 40
+    """
+    テスト用音声ファイルデータ（有効な1秒間の無音WAVファイル）
+    
+    Returns:
+        bytes: 音声ファイルバイナリデータ
+    """
+    import wave
+    import io
+    
+    with io.BytesIO() as buffer:
+        with wave.open(buffer, 'wb') as wav_file:
+            # モノラル, 16bit, 16kHz
+            wav_file.setnchannels(1)
+            wav_file.setsampwidth(2)
+            wav_file.setframerate(16000)
+            # 1秒分の無音データ (16000フレーム * 2バイト)
+            wav_file.writeframes(b'\x00' * 32000)
+        return buffer.getvalue()
 
 
 @pytest.fixture

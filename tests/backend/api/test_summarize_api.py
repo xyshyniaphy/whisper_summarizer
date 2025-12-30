@@ -1,13 +1,18 @@
 """
 Gemini要約API エンドポイントテスト
 
-固定テキストを使用してGemini要約機能の動作を検証する。
+実際のバックエンドAPIを呼び出してGemini要約機能をテストする。
+DBは実DBを使用し、Gemini API呼び出しのみモックする。
 """
 
 import pytest
+import uuid
+import os
 from fastapi.testclient import TestClient
-from unittest.mock import patch, AsyncMock, MagicMock
-
+from unittest.mock import patch, AsyncMock
+from app.models.transcription import Transcription
+from app.models.summary import Summary
+from app.db.session import SessionLocal
 
 # 固定テスト用テキスト
 FIXED_TEST_TRANSCRIPTION = """
@@ -31,286 +36,85 @@ EXPECTED_SUMMARY = """
 締め切りは来月末に設定されています。
 """
 
-# 中国語期待される要約
-EXPECTED_SUMMARY_ZH = """
-# 概述
-今天的会议讨论了新项目，目标是提升用户体验。
 
-# 主要要点
-- 讨论新项目
-- 目标是提升用户体验
-- 下一步将创建原型
+@pytest.mark.integration
+class TestSummarizeAPI:
+    """Gemini要約API統合テスト"""
 
-# 详细信息
-截止日期是下个月末。
-"""
+    def setup_transcription(self, user_id: str, file_name: str = "test.wav", text: str = FIXED_TEST_TRANSCRIPTION) -> str:
+        """テスト用の文字起こしデータを作成するヘルパー"""
+        db = SessionLocal()
+        try:
+            transcription = Transcription(
+                id=str(uuid.uuid4()),
+                user_id=user_id,
+                file_name=file_name,
+                original_text=text,
+                status="completed"
+            )
+            db.add(transcription)
+            db.commit()
+            db.refresh(transcription)
+            return transcription.id
+        finally:
+            db.close()
 
-
-def create_mock_db_session(transcription=None, existing_summary=None):
-  """
-  モックDBセッションを作成するヘルパー関数
-  
-  Args:
-    transcription: 返すTranscriptionオブジェクト
-    existing_summary: 返すSummaryオブジェクト
-    
-  Returns:
-    モックDBセッション
-  """
-  mock_db_session = MagicMock()
-  
-  # query()の戻り値を設定
-  queries = []
-  
-  if transcription is not None:
-    # Transcription取得用のモック
-    mock_transcription_query = MagicMock()
-    mock_transcription_filter = MagicMock()
-    mock_transcription_filter.first.return_value = transcription
-    mock_transcription_query.filter.return_value = mock_transcription_filter
-    queries.append(mock_transcription_query)
-  
-  if existing_summary is not None or transcription is not None:
-    # Summary取得用のモック
-    mock_summary_query = MagicMock()
-    mock_summary_filter = MagicMock()
-    mock_summary_filter.first.return_value = existing_summary
-    mock_summary_query.filter.return_value = mock_summary_filter
-    queries.append(mock_summary_query)
-  
-  # その他のquery呼び出し用（add, commit, refresh）
-  queries.append(MagicMock())
-  
-  mock_db_session.query.side_effect = queries
-  mock_db_session.add = MagicMock()
-  mock_db_session.commit = MagicMock()
-  mock_db_session.refresh = MagicMock()
-  
-  return mock_db_session
-
-
-class TestGeminiSummarizeAPI:
-  """Gemini要約APIテストクラス"""
-  
-  @pytest.mark.integration
-  def test_generate_summary_success(self, test_client: TestClient) -> None:
-    """
-    要約生成が成功するテスト
-    
-    Args:
-      test_client: FastAPI TestClient
-    """
-    # GeminiClientをモック
-    with patch("app.api.transcriptions.get_gemini_client") as mock_get_client:
-      mock_gemini_client = AsyncMock()
-      mock_gemini_client.generate_summary.return_value = EXPECTED_SUMMARY
-      mock_gemini_client.model = "gemini-2.0-flash-exp"
-      mock_get_client.return_value = mock_gemini_client
-      
-      # 認証をモック
-      mock_user = {"id": "test-user-id", "email": "test@example.com"}
-      with patch("app.api.transcriptions.get_current_active_user", new_callable=AsyncMock) as mock_get_user:
-        mock_get_user.return_value = mock_user
+    def test_generate_summary_success(self, real_auth_client: TestClient, real_auth_user: dict) -> None:
+        """要約生成が成功するテスト"""
+        trans_id = self.setup_transcription(real_auth_user["id"])
         
-        # Transcriptionを作成
-        from app.models.transcription import Transcription
-        mock_transcription = Transcription(
-          id="test-transcription-id",
-          user_id="test-user-id",
-          file_name="test.wav",
-          original_text=FIXED_TEST_TRANSCRIPTION,
-          status="completed"
-        )
-        
-        # DBセッションをモック
-        with patch("app.api.deps.get_db") as mock_get_db:
-          mock_db_session = create_mock_db_session(transcription=mock_transcription, existing_summary=None)
-          mock_get_db.return_value = mock_db_session
-          
-          response = test_client.post(
-            "/api/transcriptions/test-transcription-id/summarize",
-            headers={"Authorization": "Bearer test-token"}
-          )
-          
-          # 認証が実装されていない場合は401、実装されている場合は200/201
-          assert response.status_code in [200, 201, 401]
-          
-          # 成功した場合のレスポンス検証
-          if response.status_code in [200, 201]:
-            data = response.json()
-            assert "summary_text" in data
-            assert data["summary_text"] == EXPECTED_SUMMARY
-  
-  @pytest.mark.integration
-  def test_generate_summary_transcription_not_found(self, test_client: TestClient) -> None:
-    """
-    存在しない文字起こしIDで404を返すテスト
-    
-    Args:
-      test_client: FastAPI TestClient
-    """
-    mock_user = {"id": "test-user-id"}
-    with patch("app.api.transcriptions.get_current_active_user", new_callable=AsyncMock) as mock_get_user:
-      mock_get_user.return_value = mock_user
-      
-      with patch("app.api.deps.get_db") as mock_get_db:
-        # Transcriptionが見つからない場合のモック
-        mock_db_session = create_mock_db_session(transcription=None)
-        mock_get_db.return_value = mock_db_session
-        
-        response = test_client.post(
-          "/api/transcriptions/non-existent-id/summarize",
-          headers={"Authorization": "Bearer test-token"}
-        )
-        
-        assert response.status_code in [404, 401]
-  
-  @pytest.mark.integration
-  def test_generate_summary_no_transcription_text(self, test_client: TestClient) -> None:
-    """
-    文字起こしテキストがない場合に400を返すテスト
-    
-    Args:
-      test_client: FastAPI TestClient
-    """
-    mock_user = {"id": "test-user-id"}
-    with patch("app.api.transcriptions.get_current_active_user", new_callable=AsyncMock) as mock_get_user:
-      mock_get_user.return_value = mock_user
-      
-      from app.models.transcription import Transcription
-      mock_transcription = Transcription(
-        id="test-transcription-id",
-        user_id="test-user-id",
-        file_name="test.wav",
-        original_text=None,  # テキストなし
-        status="processing"
-      )
-      
-      with patch("app.api.deps.get_db") as mock_get_db:
-        mock_db_session = create_mock_db_session(transcription=mock_transcription)
-        mock_get_db.return_value = mock_db_session
-        
-        response = test_client.post(
-          "/api/transcriptions/test-transcription-id/summarize",
-          headers={"Authorization": "Bearer test-token"}
-        )
-        
-        assert response.status_code in [400, 401]
-  
-  @pytest.mark.integration
-  def test_generate_summary_already_exists(self, test_client: TestClient) -> None:
-    """
-    既存の要約がある場合、それを返すテスト
-    
-    Args:
-      test_client: FastAPI TestClient
-    """
-    mock_user = {"id": "test-user-id"}
-    with patch("app.api.transcriptions.get_current_active_user", new_callable=AsyncMock) as mock_get_user:
-      mock_get_user.return_value = mock_user
-      
-      from app.models.transcription import Transcription
-      from app.models.summary import Summary
-      
-      mock_transcription = Transcription(
-        id="test-transcription-id",
-        user_id="test-user-id",
-        file_name="test.wav",
-        original_text=FIXED_TEST_TRANSCRIPTION,
-        status="completed"
-      )
-      
-      mock_summary = Summary(
-        id="existing-summary-id",
-        transcription_id="test-transcription-id",
-        summary_text="既存の要約テキスト",
-        model_name="gemini-2.0-flash-exp"
-      )
-      
-      with patch("app.api.deps.get_db") as mock_get_db:
-        mock_db_session = create_mock_db_session(transcription=mock_transcription, existing_summary=mock_summary)
-        mock_get_db.return_value = mock_db_session
-        
-        response = test_client.post(
-          "/api/transcriptions/test-transcription-id/summarize",
-          headers={"Authorization": "Bearer test-token"}
-        )
-        
-        # 認証が実装されていない場合は401、実装されている場合は200
-        assert response.status_code in [200, 401]
-        
-        # 成功した場合、既存の要約が返されることを確認
-        if response.status_code == 200:
-          data = response.json()
-          assert data["summary_text"] == "既存の要約テキスト"
-  
-  def test_generate_summary_without_auth(self, test_client: TestClient) -> None:
-    """
-    認証なしで要約生成するとエラーになるテスト
-    
-    Args:
-      test_client: FastAPI TestClient
-    """
-    response = test_client.post("/api/transcriptions/test-id/summarize")
-    
-    # 認証が必須の場合は401
-    assert response.status_code in [401, 403]
-  
-  @pytest.mark.integration
-  def test_generate_summary_chinese_language(self, test_client: TestClient) -> None:
-    """
-    REVIEW_LANGUAGE=zh（中国語）で要約生成するテスト
-    
-    Args:
-      test_client: FastAPI TestClient
-    """
-    # GeminiClientをモック（中国語要約を返す）
-    with patch("app.api.transcriptions.get_gemini_client") as mock_get_client:
-      mock_gemini_client = AsyncMock()
-      mock_gemini_client.generate_summary.return_value = EXPECTED_SUMMARY_ZH
-      mock_gemini_client.model = "gemini-2.0-flash-exp"
-      mock_gemini_client.review_language = "zh"  # 中国語設定を確認
-      mock_get_client.return_value = mock_gemini_client
-      
-      # 認証をモック
-      mock_user = {"id": "test-user-id", "email": "test@example.com"}
-      with patch("app.api.transcriptions.get_current_active_user", new_callable=AsyncMock) as mock_get_user:
-        mock_get_user.return_value = mock_user
-        
-        # Transcriptionをモック
-        from app.models.transcription import Transcription
-        mock_transcription = Transcription(
-          id="test-transcription-id",
-          user_id="test-user-id",
-          file_name="test.wav",
-          original_text=FIXED_TEST_TRANSCRIPTION,
-          status="completed"
-        )
-        
-        # DBセッションをモック
-        with patch("app.api.deps.get_db") as mock_get_db:
-          mock_db_session = create_mock_db_session(transcription=mock_transcription, existing_summary=None)
-          mock_get_db.return_value = mock_db_session
-          
-          response = test_client.post(
-            "/api/transcriptions/test-transcription-id/summarize",
-            headers={"Authorization": "Bearer test-token"}
-          )
-          
-          # 認証が実装されていない場合は401、実装されている場合は200/201
-          assert response.status_code in [200, 201, 401]
-          
-          # 成功した場合のレスポンス検証
-          if response.status_code in [200, 201]:
-            data = response.json()
-            assert "summary_text" in data
-            # 中国語の要約が返されることを確認
-            assert EXPECTED_SUMMARY_ZH.strip() in data["summary_text"] or data["summary_text"].strip() in EXPECTED_SUMMARY_ZH
-            # 中国語の特徴的なキーワードが含まれていることを確認
-            assert "概述" in data["summary_text"] or "概要" in data["summary_text"]
-            assert "主要要点" in data["summary_text"] or "主要なポイント" in data["summary_text"]
+        # GeminiClientのモック
+        with patch("app.core.gemini.GeminiClient.generate_summary", new_callable=AsyncMock) as mock_generate:
+            mock_generate.return_value = EXPECTED_SUMMARY
             
-            # GeminiClientがreview_language="zh"で初期化されていることを確認
-            assert mock_gemini_client.review_language == "zh"
-            # generate_summaryが呼ばれたことを確認
-            mock_gemini_client.generate_summary.assert_called_once()
+            response = real_auth_client.post(f"/api/transcriptions/{trans_id}/summarize")
+            
+            assert response.status_code in [200, 201]
+            data = response.json()
+            assert data["summary_text"] == EXPECTED_SUMMARY
+            assert data["transcription_id"] == str(trans_id)
+
+    def test_generate_summary_transcription_not_found(self, real_auth_client: TestClient) -> None:
+        """存在しない文字起こしIDで404を返すテスト"""
+        non_existent_id = str(uuid.uuid4())
+        response = real_auth_client.post(f"/api/transcriptions/{non_existent_id}/summarize")
+        assert response.status_code == 404
+
+    def test_generate_summary_no_transcription_text(self, real_auth_client: TestClient, real_auth_user: dict) -> None:
+        """文字起こしテキストがない場合に400を返すテスト"""
+        trans_id = self.setup_transcription(real_auth_user["id"], text=None)
+        
+        response = real_auth_client.post(f"/api/transcriptions/{trans_id}/summarize")
+        assert response.status_code == 400
+
+    def test_generate_summary_already_exists(self, real_auth_client: TestClient, real_auth_user: dict) -> None:
+        """既存の要約がある場合それを返すテスト"""
+        trans_id = self.setup_transcription(real_auth_user["id"])
+        
+        with patch("app.core.gemini.GeminiClient.generate_summary", new_callable=AsyncMock) as mock_generate:
+            mock_generate.return_value = EXPECTED_SUMMARY
+            
+            # 1回目
+            response1 = real_auth_client.post(f"/api/transcriptions/{trans_id}/summarize")
+            assert response1.status_code in [200, 201]
+            
+            # 2回目 (Gemini APIは呼ばれないはずだが、呼ばれても同じ結果を確認)
+            response2 = real_auth_client.post(f"/api/transcriptions/{trans_id}/summarize")
+            assert response2.status_code == 200
+            assert response2.json()["summary_text"] == EXPECTED_SUMMARY
+
+    def test_generate_summary_chinese_language(self, real_auth_client: TestClient, real_auth_user: dict) -> None:
+        """中国語設定で要約生成ができるテスト"""
+        trans_id = self.setup_transcription(real_auth_user["id"])
+        
+        expected_zh = "# 概述\n..."
+        
+        # 環境変数を上書きするか、GeminiClientの呼び出しをモックして言語パラメータを確認する
+        with patch("app.core.gemini.GeminiClient.generate_summary", new_callable=AsyncMock) as mock_generate:
+            mock_generate.return_value = expected_zh
+            
+            # REVIEW_LANGUAGE環境変数はconftest.pyで設定されている("zh")
+            response = real_auth_client.post(f"/api/transcriptions/{trans_id}/summarize")
+            
+            assert response.status_code in [200, 201]
+            assert response.json()["summary_text"] == expected_zh

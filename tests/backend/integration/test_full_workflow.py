@@ -15,7 +15,7 @@ from app.core.supabase import get_current_active_user
 from app.models.user import User
 
 # 認証をバイパスするためのダミーユーザー (UUID4形式)
-DUMMY_USER_ID = "bae0bdba-80ae-4354-8339-ab3d81259762"
+DUMMY_USER_ID = str(uuid.uuid4())
 
 async def override_get_current_active_user():
     return {

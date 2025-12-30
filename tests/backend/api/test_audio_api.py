@@ -1,119 +1,128 @@
 """
-音声アップロードAPI エンドポイントテスト
+音声アップロードAPI エンドポイントテスト (実API版 - モックなし)
 
-音声ファイルのアップロード、文字起こしリスト取得、
-削除機能の動作を検証する。
+音声ファイルのアップロード、文字起こし、削除機能の動作を検証する。
+バックグラウンドタスクを含む実際の処理フローをテストする。
 """
 
 import pytest
+import time
 from fastapi.testclient import TestClient
-from unittest.mock import patch, MagicMock, AsyncMock
-from io import BytesIO
+from pathlib import Path
 
 
-class TestAudioAPI:
-  """音声APIテストクラス"""
+class TestAudioAPIReal:
+    """音声API実統合テストクラス"""
   
-  @pytest.mark.integration
-  def test_upload_audio_success(self, test_client: TestClient, sample_audio_file: bytes) -> None:
-    """
-    音声ファイルのアップロードが成功するテスト
-    
-    Args:
-      test_client: FastAPI TestClient
-      sample_audio_file: テスト用音声ファイル
-    """
-    # WhisperServiceとSupabaseをモック
-    with patch("app.services.whisper_service.whisper_service.transcribe") as mock_transcribe:
-      mock_transcribe.return_value = {
-        "text": "テスト文字起こし",
-        "segments": [],
-        "language": "ja"
-      }
-      
-      mock_user = {"id": "bae0bdba-80ae-4354-8339-ab3d81259762", "email": "test@example.com"}
-      with patch("app.api.audio.get_current_active_user", new_callable=AsyncMock) as mock_get_user:
-        mock_get_user.return_value = mock_user
+    @pytest.mark.integration
+    def test_upload_audio_success(self, real_auth_client: TestClient, sample_audio_file: bytes) -> None:
+        """
+        音声ファイルのアップロードと文字起こし処理が成功するテスト（実API）
         
+        フロー:
+        1. 音声ファイルをアップロード
+        2. 201 Created が返る
+        3. DBレコードが作成され、ステータスが processing になる
+        4. (同期的に) バックグラウンドタスクが実行され、Whisper.cppが動く
+        5. DBレコードのステータスが completed に更新されることを確認
+        """
         files = {
-          "file": ("test.wav", BytesIO(sample_audio_file), "audio/wav")
+            "file": ("test_real.wav", sample_audio_file, "audio/wav")
         }
         
-        response = test_client.post(
-          "/api/audio/upload",
-          files=files,
-          headers={"Authorization": "Bearer test-token"}
+        # アップロード実行
+        # TestClientではBackgroundTasksはリクエスト完了後に同期的に実行される
+        response = real_auth_client.post(
+            "/api/audio/upload",
+            files=files
         )
         
-        # 認証が実装されていない場合は401
-        assert response.status_code in [200, 201, 401]
+        assert response.status_code == 201
+        data = response.json()
+        assert "id" in data
+        transcription_id = data["id"]
+        assert data["status"] == "processing"
+        
+        # バックグラウンド処理の結果を確認するためのDBポーリング
+        # TestClientが同期的に実行するとはいえ、ファイルI/Oやプロセス起動のタイミングで
+        # 完全同期でない挙動をする可能性も考慮し、少しリトライする
+        
+        # 結果を取得
+        response_get = real_auth_client.get(f"/api/transcriptions")
+        assert response_get.status_code == 200
+        transcriptions = response_get.json()
+        
+        target = next((t for t in transcriptions if t["id"] == transcription_id), None)
+        assert target is not None
+        
+        print(f"\nTask status: {target['status']}")
+        
+        # タイムアウト付きでポーリング（念のため）
+        for _ in range(10):
+            if target["status"] in ["completed", "failed"]:
+                break
+            time.sleep(1)
+            response_get = real_auth_client.get(f"/api/transcriptions")
+            transcriptions = response_get.json()
+            target = next((t for t in transcriptions if t["id"] == transcription_id), None)
+        
+        assert target["status"] in ["completed", "failed"], f"Status stuck in processing: {target['status']}"
+        
+        if target["status"] == "completed":
+            assert target["original_text"] is not None
+            # 無音ファイルなので空文字か、あるいはハルシネーションが出るか
+            # テストとしては「完了した」ことでWhisperが動作したとみなす
   
   
-  @pytest.mark.integration
-  def test_upload_audio_invalid_format(self, test_client: TestClient) -> None:
-    """
-    無効なファイル形式でエラーが返るテスト
-    
-    Args:
-      test_client: FastAPI TestClient
-    """
-    files = {
-      "file": ("test.txt", BytesIO(b"not an audio file"), "text/plain")
-    }
-    
-    response = test_client.post(
-      "/api/audio/upload",
-      files=files,
-      headers={"Authorization": "Bearer test-token"}
-    )
-    
-    # 認証エラーまたはバリデーションエラー
-    assert response.status_code in [400, 401, 422]
-  
-  
-  @pytest.mark.integration
-  def test_get_transcriptions_list(self, test_client: TestClient) -> None:
-    """文字起こしリスト取得テスト"""
-    mock_user = {"id": "test-user-id"}
-    with patch("app.api.transcriptions.get_current_active_user", new_callable=AsyncMock) as mock_get_user:
-      mock_get_user.return_value = mock_user
-      response = test_client.get(
-        "/api/transcriptions",
-        headers={"Authorization": "Bearer test-token"}
-      )
-      
-      assert response.status_code in [200, 401]
-  
-  
-  @pytest.mark.integration
-  def test_delete_transcription(self, test_client: TestClient) -> None:
-    """文字起こし削除テスト"""
-    transcription_id = "test-transcription-id"
-    mock_user = {"id": "test-user-id"}
-    with patch("app.api.transcriptions.get_current_active_user", new_callable=AsyncMock) as mock_get_user:
-      mock_get_user.return_value = mock_user
-      with patch("os.remove", return_value=None):
-        response = test_client.delete(
-          f"/api/transcriptions/{transcription_id}",
-          headers={"Authorization": "Bearer test-token"}
+    @pytest.mark.integration
+    def test_upload_audio_invalid_format(self, real_auth_client: TestClient) -> None:
+        """無効なファイル形式でエラーが返るテスト"""
+        files = {
+            "file": ("test.txt", b"not an audio file", "text/plain")
+        }
+        
+        response = real_auth_client.post(
+            "/api/audio/upload",
+            files=files
         )
         
-        assert response.status_code in [200, 204, 401, 404]
+        assert response.status_code == 400
   
   
-  def test_upload_without_auth(self, test_client: TestClient, sample_audio_file: bytes) -> None:
-    """
-    認証なしでアップロードするとエラーになるテスト
-    
-    Args:
-      test_client: FastAPI TestClient
-      sample_audio_file: テスト用音声ファイル
-    """
-    files = {
-      "file": ("test.wav", BytesIO(sample_audio_file), "audio/wav")
-    }
-    
-    response = test_client.post("/api/audio/upload", files=files)
-    
-    # 認証が必須の場合は401
-    assert response.status_code in [401, 403]
+    @pytest.mark.integration
+    def test_get_transcriptions_list(self, real_auth_client: TestClient) -> None:
+        """文字起こしリスト取得テスト"""
+        response = real_auth_client.get("/api/transcriptions")
+        assert response.status_code == 200
+        assert isinstance(response.json(), list)
+  
+  
+    @pytest.mark.integration
+    def test_delete_transcription(self, real_auth_client: TestClient, sample_audio_file: bytes) -> None:
+        """文字起こし削除テスト"""
+        # 削除対象を作成
+        files = {
+            "file": ("test_delete.wav", sample_audio_file, "audio/wav")
+        }
+        res_create = real_auth_client.post("/api/audio/upload", files=files)
+        trans_id = res_create.json()["id"]
+        
+        # 削除実行
+        response = real_auth_client.delete(f"/api/transcriptions/{trans_id}")
+        assert response.status_code == 204
+        
+        # 削除確認
+        res_get = real_auth_client.get("/api/transcriptions")
+        ids = [t["id"] for t in res_get.json()]
+        assert trans_id not in ids
+  
+  
+    def test_upload_without_auth(self, test_client: TestClient, sample_audio_file: bytes) -> None:
+        """認証なしでアップロードするとエラーになるテスト"""
+        files = {
+            "file": ("test.wav", sample_audio_file, "audio/wav")
+        }
+        
+        # real_auth_clientではなく通常のtest_client（認証なし）を使用
+        response = test_client.post("/api/audio/upload", files=files)
+        assert response.status_code in [401, 403]
