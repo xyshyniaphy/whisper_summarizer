@@ -11,14 +11,15 @@ import pytest
 from fastapi.testclient import TestClient
 from unittest.mock import MagicMock, AsyncMock
 
-# 環境変数をテスト用に設定
-os.environ["SUPABASE_URL"] = "http://test-supabase-url.com"
-os.environ["SUPABASE_ANON_KEY"] = "test-anon-key"
-os.environ["SUPABASE_SERVICE_ROLE_KEY"] = "test-service-role-key"
-os.environ["DATABASE_URL"] = "postgresql://test:test@localhost:5432/test_db"
-os.environ["GLM_API_KEY"] = "test-glm-api-key"
-os.environ["GLM_API_ENDPOINT"] = "http://test-glm-endpoint.com"
-os.environ["GLM_MODEL"] = "test-model"
+# 環境変数をテスト用に設定（既に設定されている場合は上書きしない）
+# 統合テストでは実際の.envファイルの値を使用する
+os.environ.setdefault("SUPABASE_URL", "http://test-supabase-url.com")
+os.environ.setdefault("SUPABASE_ANON_KEY", "test-anon-key")
+os.environ.setdefault("SUPABASE_SERVICE_ROLE_KEY", "test-service-role-key")
+os.environ.setdefault("DATABASE_URL", "postgresql://test:test@localhost:5432/test_db")
+os.environ.setdefault("GLM_API_KEY", "test-glm-api-key")
+os.environ.setdefault("GLM_API_ENDPOINT", "http://test-glm-endpoint.com")
+os.environ.setdefault("GLM_MODEL", "test-model")
 
 
 @pytest.fixture

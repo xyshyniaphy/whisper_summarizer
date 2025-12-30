@@ -5,23 +5,9 @@ services:
       context: ..
       dockerfile: tests/backend/Dockerfile
     container_name: whisper_backend_test
+    env_file:
+      - ../.env
     environment:
-      # Database (Supabase PostgreSQL)
-      DATABASE_URL: ${DATABASE_URL}
-      
-      # Supabase
-      SUPABASE_URL: ${SUPABASE_URL}
-      SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
-      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
-      
-      # Backend Config
-      SECRET_KEY: ${SECRET_KEY:-test-secret-key}
-      LOG_LEVEL: ${LOG_LEVEL:-DEBUG}
-      
-      # Whisper.cpp Config
-      WHISPER_LANGUAGE: ${WHISPER_LANGUAGE:-ja}
-      WHISPER_THREADS: ${WHISPER_THREADS:-2}
-      
       # Python path
       PYTHONPATH: /app
     volumes:
@@ -30,6 +16,8 @@ services:
       - ../backend/pytest.ini:/app/pytest.ini
       # テストコードをマウント
       - ./backend:/app/tests/backend
+      # テストデータをマウント
+      - ../testdata:/app/testdata
       # データディレクトリ
       - ../data:/app/data
     working_dir: /app
@@ -44,10 +32,8 @@ services:
       dockerfile: tests/frontend/Dockerfile
       target: test
     container_name: whisper_frontend_test
-    environment:
-      VITE_SUPABASE_URL: ${SUPABASE_URL}
-      VITE_SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
-      VITE_BACKEND_URL: ${VITE_BACKEND_URL:-http://localhost:8000}
+    env_file:
+      - ../.env
     volumes:
       # フロントエンドソースコードをマウント
       - ../frontend/src:/app/src
@@ -72,11 +58,8 @@ services:
       context: ./e2e
       dockerfile: Dockerfile
     container_name: whisper_e2e_test
-    environment:
-      VITE_SUPABASE_URL: ${SUPABASE_URL}
-      VITE_SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
-      VITE_BACKEND_URL: ${VITE_BACKEND_URL:-http://backend:8000}
-      FRONTEND_URL: ${FRONTEND_URL:-http://frontend:3000}
+    env_file:
+      - ../.env
     volumes:
       - ./e2e:/app
       - /app/node_modules
