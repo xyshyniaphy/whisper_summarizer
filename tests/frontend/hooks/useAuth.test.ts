@@ -6,7 +6,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { renderHook, waitFor } from '@testing-library/react'
-import { useAuth } from '../../../frontend/src/hooks/useAuth'
+import { useAuth } from '../../src/hooks/useAuth'
 
 describe('useAuth', () => {
   beforeEach(() => {
@@ -26,7 +26,7 @@ describe('useAuth', () => {
       email: 'test@example.com',
     }
 
-    const { supabase } = await import('../../../frontend/src/services/supabase')
+    const { supabase } = await import('../../src/services/supabase')
     vi.mocked(supabase.auth.signInWithPassword).mockResolvedValue({
       data: {
         user: mockUser,
@@ -55,7 +55,7 @@ describe('useAuth', () => {
   })
 
   it('ログアウトが成功する', async () => {
-    const { supabase } = await import('../../../frontend/src/services/supabase')
+    const { supabase } = await import('../../src/services/supabase')
     vi.mocked(supabase.auth.signOut).mockResolvedValue({
       error: null,
     })
@@ -78,7 +78,7 @@ describe('useAuth', () => {
       email: 'newuser@example.com',
     }
 
-    const { supabase } = await import('../../../frontend/src/services/supabase')
+    const { supabase } = await import('../../src/services/supabase')
     vi.mocked(supabase.auth.signUp).mockResolvedValue({
       data: {
         user: mockUser,

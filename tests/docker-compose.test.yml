@@ -1,0 +1,93 @@
+services:
+  # バックエンドテスト環境
+  backend-test:
+    build:
+      context: ..
+      dockerfile: tests/backend/Dockerfile
+    container_name: whisper_backend_test
+    environment:
+      # Database (Supabase PostgreSQL)
+      DATABASE_URL: ${DATABASE_URL}
+      
+      # Supabase
+      SUPABASE_URL: ${SUPABASE_URL}
+      SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
+      
+      # Backend Config
+      SECRET_KEY: ${SECRET_KEY:-test-secret-key}
+      LOG_LEVEL: ${LOG_LEVEL:-DEBUG}
+      
+      # Whisper.cpp Config
+      WHISPER_LANGUAGE: ${WHISPER_LANGUAGE:-ja}
+      WHISPER_THREADS: ${WHISPER_THREADS:-2}
+      
+      # Python path
+      PYTHONPATH: /app
+    volumes:
+      # バックエンドソースコードをマウント
+      - ../backend/app:/app/app
+      - ../backend/pytest.ini:/app/pytest.ini
+      # テストコードをマウント
+      - ./backend:/app/tests/backend
+      # データディレクトリ
+      - ../data:/app/data
+    working_dir: /app
+    command: pytest -v --cov=app --cov-report=html --cov-report=term
+    networks:
+      - whisper_test_network
+
+  # フロントエンドテスト環境
+  frontend-test:
+    build:
+      context: ..
+      dockerfile: tests/frontend/Dockerfile
+      target: test
+    container_name: whisper_frontend_test
+    environment:
+      VITE_SUPABASE_URL: ${SUPABASE_URL}
+      VITE_SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
+      VITE_BACKEND_URL: ${VITE_BACKEND_URL:-http://localhost:8000}
+    volumes:
+      # フロントエンドソースコードをマウント
+      - ../frontend/src:/app/src
+      - ../frontend/public:/app/public
+      - ../frontend/index.html:/app/index.html
+      - ../frontend/vite.config.ts:/app/vite.config.ts
+      - ../frontend/vitest.config.ts:/app/vitest.config.ts
+      - ../frontend/tsconfig.json:/app/tsconfig.json
+      - ../frontend/tsconfig.node.json:/app/tsconfig.node.json
+      # テストコードをマウント
+      - ./frontend:/app/tests/frontend
+      # node_modulesを除外
+      - /app/node_modules
+    working_dir: /app
+    command: npm run test -- --run
+    networks:
+      - whisper_test_network
+
+  # E2Eテスト環境
+  e2e-test:
+    build:
+      context: ./e2e
+      dockerfile: Dockerfile
+    container_name: whisper_e2e_test
+    environment:
+      VITE_SUPABASE_URL: ${SUPABASE_URL}
+      VITE_SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
+      VITE_BACKEND_URL: ${VITE_BACKEND_URL:-http://backend:8000}
+      FRONTEND_URL: ${FRONTEND_URL:-http://frontend:3000}
+    volumes:
+      - ./e2e:/app
+      - /app/node_modules
+    working_dir: /app
+    command: npx playwright test
+    depends_on:
+      - backend-test
+      - frontend-test
+    networks:
+      - whisper_test_network
+
+networks:
+  whisper_test_network:
+    driver: bridge

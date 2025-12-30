@@ -42,7 +42,7 @@ export default defineConfig({
 
   // テスト実行前にサーバーを起動
   webServer: {
-    command: 'cd ../.. && ./run_dev.sh',
+    command: 'echo "開発環境は別途起動してください"',
     url: 'http://localhost:3000',
     timeout: 120 * 1000,
     reuseExistingServer: !process.env.CI,

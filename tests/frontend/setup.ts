@@ -14,7 +14,7 @@ afterEach(() => {
 })
 
 // Supabaseクライアントのモック
-vi.mock('../../frontend/src/services/supabase', () => ({
+vi.mock('../../src/services/supabase', () => ({
   supabase: {
     auth: {
       signUp: vi.fn(),
