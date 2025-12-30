@@ -292,12 +292,52 @@ docker-compose -f docker-compose.dev.yml exec frontend sh
 
 プロジェクトには包括的な自動テストが実装されています。
 
+### Dockerテスト環境 (推奨)
+
+独立したDockerコンテナで全てのテストを実行できます:
+
+```bash
+cd tests
+
+# 全てのテストを実行 (バックエンド + フロントエンド + E2E)
+./run.sh all
+
+# バックエンドテストのみ
+./run.sh backend
+
+# フロントエンドテストのみ
+./run.sh frontend
+
+# E2Eテストのみ (開発環境が必要)
+./run.sh e2e
+
+# テストイメージをビルド
+./run.sh build
+
+# テストコンテナとボリュームをクリーンアップ
+./run.sh clean
+```
+
+**テスト結果の確認:**
+- バックエンド: カバレッジレポートは `backend/htmlcov/index.html`
+- フロントエンド: Vitestの標準出力
+- E2E: Playwrightレポートは `tests/e2e/playwright-report/index.html`
+
+**現在のカバレッジ状況:**
+- バックエンド: **73.37%** (目標: 70%以上) ✅
+- テスト総数: 19件 (全てパス)
+
 ### バックエンドテスト (Pytest)
+
+ローカル環境でテストを実行する場合:
 
 ```bash
 # テストを実行
 cd backend
 uv run pytest
+
+# カバレッジ付きで実行
+uv run pytest --cov=app --cov-report=html --cov-report=term
 
 # 特定のテストを実行
 uv run pytest ../tests/backend/api/test_auth_api.py
@@ -306,6 +346,11 @@ uv run pytest ../tests/backend/api/test_auth_api.py
 uv run pytest -m unit          # 単体テストのみ
 uv run pytest -m integration   # 統合テストのみ
 ```
+
+**テストの構成:**
+- `tests/backend/api/` - APIエンドポイントのテスト
+- `tests/backend/services/` - サービスレイヤーのテスト
+- `tests/backend/integration/` - 統合テスト
 
 ### フロントエンドテスト (Vitest)
 
@@ -316,7 +361,14 @@ npm test
 
 # ウォッチモード
 npm test -- --watch
+
+# カバレッジ付きで実行
+npm test -- --coverage
 ```
+
+**テストの構成:**
+- `tests/frontend/hooks/` - カスタムフックのテスト
+- `tests/frontend/components/` - コンポーネントのテスト
 
 ### E2Eテスト (Playwright)
 
@@ -330,12 +382,22 @@ npx playwright install
 
 # E2Eテストを実行 (開発環境が起動している必要がある)
 npm test
+
+# UIモードで実行
+npm run test:ui
+
+# ヘッドフルモード (ブラウザを表示)
+npm run test:headed
 ```
 
 **注意**: E2Eテストを実行する前に、開発環境を起動してください:
 ```bash
 ./run_dev.sh up-d
 ```
+
+**テストの構成:**
+- `tests/e2e/tests/auth.spec.ts` - 認証フローのE2Eテスト
+- `tests/e2e/tests/transcription.spec.ts` - 文字起こしフローのE2Eテスト
 
 ## API仕様
 

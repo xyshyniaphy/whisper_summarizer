@@ -26,9 +26,21 @@
     - [ ] Optimize production build (`multi-stage build` for frontend).
     - [ ] Ensure non-root user execution in all containers.
 
-## 🧪 Testing
+## 🧪 Testing (Completed)
 - [x] **Unit Tests**
-    - [x] Add Backend tests (FastAPI + Pytest).
-    - [x] Add Frontend tests (React Testing Library).
+    - [x] Add Backend tests (FastAPI + Pytest) - 73.37% coverage achieved.
+    - [x] Add Frontend tests (React Testing Library + Vitest).
 - [x] **E2E Tests**
-    - [x] Automate the "Upload -> Transcribe -> Verify" flow with Cypress or Playwright.
+    - [x] Automate the "Upload -> Transcribe -> Verify" flow with Playwright.
+- [x] **Test Infrastructure**
+    - [x] Docker-based test environment (`tests/run.sh`).
+    - [x] Automated test execution for CI/CD readiness.
+
+## 📊 Code Quality
+- [ ] **Code Coverage**
+    - [ ] Increase backend coverage to 80%+ (currently 73.37%).
+    - [ ] Add frontend coverage tracking.
+- [ ] **Linting & Formatting**
+    - [ ] Setup ESLint for frontend.
+    - [ ] Setup Black/Ruff for backend.
+    - [ ] Add pre-commit hooks.
