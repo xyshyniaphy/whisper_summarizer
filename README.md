@@ -4,7 +4,7 @@
 
 ## 概要
 
-Whisper Summarizerは、音声ファイルを自動で文字起こしし、AI(GLM4.7)による要約を生成するWebアプリケーションです。
+Whisper Summarizerは、音声ファイルを自動で文字起こしし、Google Gemini 2.0 Flash APIによる要約を生成するWebアプリケーションです。
 
 ### 主な機能
 
@@ -21,7 +21,7 @@ Whisper Summarizerは、音声ファイルを自動で文字起こしし、AI(GL
 | フロントエンド | React 19 + TypeScript + Vite + Mantine |
 | バックエンド | FastAPI + Python 3.12 + uv |
 | 音声処理 | Whisper.cpp v3-turbo (CPU専用) + 静的FFmpeg |
-| AI要約 | GLM4.7 API |
+| AI要約 | Google Gemini 2.0 Flash (旧: GLM4.7) |
 | 認証 | Supabase Auth |
 | データベース | Supabase PostgreSQL (マネージド) |
 | コンテナ | Docker + Docker Compose |
@@ -57,9 +57,11 @@ SUPABASE_ANON_KEY=eyJ...
 SUPABASE_SERVICE_ROLE_KEY=eyJ...
 
 # GLM4.7 API設定
-GLM_API_KEY=your_glm_api_key
-GLM_API_ENDPOINT=https://api.glm.ai/v1
-GLM_MODEL=glm-4.0-turbo
+# Google Gemini API設定 (要約生成用)
+GEMINI_API_KEY=your_gemini_api_key
+GEMINI_MODEL=gemini-2.0-flash-exp  # 使用モデル (gemini-2.0-flash-exp, gemini-1.5-pro 等)
+REVIEW_LANGUAGE=zh                 # 要約生成言語 (zh, ja, en)
+GEMINI_API_ENDPOINT=               # オプション: カスタムエンドポイントを使用する場合のみ設定
 
 # Supabase PostgreSQL接続文字列
 # SupabaseダッシュボードのSettings > Database > Connection Stringから取得
@@ -216,8 +218,9 @@ cp .env.sample .env
 
 ### 4. 文字起こし・要約の確認 (実装中)
 
-- 文字起こし結果をタイムスタンプ付きで表示
-- GLM4.7による要約を表示
+- 文字起こし結果をタイムスタンプ付きで表示 (最初の200行)
+- Google Gemini 2.0 Flash による要約を表示 (Overview / Key Points / Details)
+- ダウンロード機能 (テキスト形式 .txt / 字幕形式 .srt)
 
 ### 5. 音声の削除 (New)
 

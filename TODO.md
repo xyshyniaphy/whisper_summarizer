@@ -4,14 +4,14 @@
 - [ ] **Performance Optimization**
     - [ ] Increase `WHISPER_THREADS` in `.env` (Default is 1, causing slow transcription).
     - [ ] Evaluate `whisper-cli` parameters for better speed/accuracy balance.
-- [ ] **Summarization Feature**
-    - [ ] Implement GLM4.7 integration in `SummarizeService`.
-    - [ ] Add "Summarize" button in Frontend.
-    - [ ] Display summary in `TranscriptionDetail` page.
+- [x] **Summarization Feature**
+    - [x] Implement Google Gemini integration in `GeminiClient`.
+    - [x] Add "Summarize" button in Frontend.
+    - [x] Display summary in `TranscriptionDetail` page.
 
 ## 🛠 Features & Improvements
 - [ ] **UI/UX**
-    - [ ] Add "Download" button for transcription results (txt, srt).
+    - [x] Add "Download" button for transcription results (txt, srt).
     - [ ] Add "Edit" functionality for transcription text (fix typos).
     - [ ] Improve "Processing" status indication (Projected time or progress bar).
 - [ ] **Data Management**

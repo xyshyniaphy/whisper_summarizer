@@ -60,17 +60,21 @@ services:
     container_name: whisper_e2e_test
     env_file:
       - ../.env
+    environment:
+      FRONTEND_URL: http://127.0.0.1:3000
     volumes:
       - ./e2e:/app
+      - ../data:/app/data
+      - ../testdata:/app/testdata
       - /app/node_modules
     working_dir: /app
     command: npx playwright test
-    depends_on:
-      - backend-test
-      - frontend-test
-    networks:
-      - whisper_test_network
+    # depends_on:
+    #   - backend-test
+    #   - frontend-test
+    network_mode: "host"
 
 networks:
   whisper_test_network:
     driver: bridge
+
