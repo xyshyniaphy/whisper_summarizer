@@ -99,6 +99,24 @@ export function TranscriptionDetail() {
     const downloadUrlTxt = api.getDownloadUrl(transcription.id, 'txt')
     const downloadUrlSrt = api.getDownloadUrl(transcription.id, 'srt')
 
+    const handleDownload = async (format: 'txt' | 'srt') => {
+        try {
+            const blob = await api.downloadFile(transcription.id, format)
+
+            // Create download link
+            const link = document.createElement('a')
+            link.href = URL.createObjectURL(blob)
+            link.download = `${transcription.file_name.replace(/\.[^/.]+$/, '')}.${format}`
+            document.body.appendChild(link)
+            link.click()
+            document.body.removeChild(link)
+            URL.revokeObjectURL(link.href)
+        } catch (error) {
+            console.error('Download failed:', error)
+            alert('下载失败')
+        }
+    }
+
     const getBadgeVariant = (stage: string): 'success' | 'error' | 'info' | 'warning' => {
         if (stage === 'completed') return 'success'
         if (stage === 'failed') return 'error'
@@ -140,22 +158,20 @@ export function TranscriptionDetail() {
                             <h3 className="text-lg font-semibold">转录结果</h3>
                             {transcription.stage === 'completed' && (
                                 <div className="flex gap-2">
-                                    <a
-                                        href={downloadUrlTxt}
-                                        download
+                                    <button
+                                        onClick={() => handleDownload('txt')}
                                         className="inline-flex items-center gap-1 px-3 py-1.5 text-sm bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
                                     >
                                         <Download className="w-4 h-4" />
                                         下载文本
-                                    </a>
-                                    <a
-                                        href={downloadUrlSrt}
-                                        download
+                                    </button>
+                                    <button
+                                        onClick={() => handleDownload('srt')}
                                         className="inline-flex items-center gap-1 px-3 py-1.5 text-sm bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
                                     >
                                         <Download className="w-4 h-4" />
                                         下载字幕(SRT)
-                                    </a>
+                                    </button>
                                 </div>
                             )}
                         </div>

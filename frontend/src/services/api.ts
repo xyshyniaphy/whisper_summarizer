@@ -87,5 +87,13 @@ export const api = {
 
   getDownloadUrl: (transcriptionId: string, format: 'txt' | 'srt'): string => {
     return `${API_URL}/transcriptions/${transcriptionId}/download?format=${format}`;
+  },
+
+  downloadFile: async (transcriptionId: string, format: 'txt' | 'srt'): Promise<Blob> => {
+    // Use relative path since apiClient already has baseURL = '/api'
+    const response = await apiClient.get(`/transcriptions/${transcriptionId}/download?format=${format}`, {
+      responseType: 'blob'
+    });
+    return response.data;
   }
 };
