@@ -30,7 +30,12 @@ class Settings(BaseSettings):
     
     # Whisper.cpp
     WHISPER_SERVICE_URL: str = "http://whispercpp:8001"
-    
+    WHISPER_LANGUAGE: str = "ja"
+    WHISPER_THREADS: int = 4
+
+    # Audio Processing
+    AUDIO_PARALLELISM: int = 1  # Max concurrent audio transcriptions (default: 1)
+
     class Config:
         env_file = ".env"
         case_sensitive = True

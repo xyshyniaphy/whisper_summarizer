@@ -10,6 +10,7 @@ import logging
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
+from threading import BoundedSemaphore
 from sqlalchemy.orm import Session
 
 from app.models.transcription import Transcription
@@ -18,6 +19,18 @@ from app.models.gemini_request_log import GeminiRequestLog
 from app.services.whisper_service import whisper_service
 from app.core.gemini import get_gemini_client
 from app.core.config import settings
+
+# Class-level semaphore for limiting concurrent transcriptions
+_transcription_semaphore: BoundedSemaphore | None = None
+
+
+def get_transcription_semaphore() -> BoundedSemaphore:
+    """Get or create the semaphore for limiting concurrent transcriptions."""
+    global _transcription_semaphore
+    if _transcription_semaphore is None:
+        _transcription_semaphore = BoundedSemaphore(settings.AUDIO_PARALLELISM)
+        logger.info(f"Initialized transcription semaphore with parallelism={settings.AUDIO_PARALLELISM}")
+    return _transcription_semaphore
 
 logger = logging.getLogger(__name__)
 
@@ -89,6 +102,19 @@ class TranscriptionProcessor:
         Returns:
             bool: True if successful, False if failed after all retries
         """
+        # Acquire semaphore to limit concurrent transcriptions
+        semaphore = get_transcription_semaphore()
+        logger.info(f"Waiting for semaphore for transcription: {transcription_id} (parallelism={settings.AUDIO_PARALLELISM})")
+        
+        with semaphore:
+            logger.info(f"Acquired semaphore, starting processing: {transcription_id}")
+            try:
+                return self._process_transcription_impl(transcription_id)
+            finally:
+                logger.info(f"Released semaphore for transcription: {transcription_id}")
+
+    def _process_transcription_impl(self, transcription_id: str) -> bool:
+        """Internal implementation of transcription processing."""
         db = self.db_session_factory()
 
         try:

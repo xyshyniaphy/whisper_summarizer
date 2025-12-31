@@ -28,6 +28,9 @@ services:
       # Whisper.cpp Config
       WHISPER_LANGUAGE: ${WHISPER_LANGUAGE:-ja}
       WHISPER_THREADS: ${WHISPER_THREADS:-4}
+
+      # Audio Processing
+      AUDIO_PARALLELISM: ${AUDIO_PARALLELISM:-1}
     ports:
       - "${BACKEND_PORT:-8000}:8000"
       - "5678:5678"  # デバッグポート

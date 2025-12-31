@@ -29,6 +29,9 @@ services:
       WHISPER_LANGUAGE: ${WHISPER_LANGUAGE:-ja}
       WHISPER_THREADS: ${WHISPER_THREADS:-4}
 
+      # Audio Processing
+      AUDIO_PARALLELISM: ${AUDIO_PARALLELISM:-1}
+
       # Logging
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
     ports:

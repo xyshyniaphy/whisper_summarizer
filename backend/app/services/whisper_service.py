@@ -15,8 +15,11 @@ logger = logging.getLogger(__name__)
 # Whisper.cppバイナリのパス
 WHISPER_BINARY = "/usr/local/bin/whisper-cli"
 WHISPER_MODEL = "/usr/local/share/whisper-models/ggml-large-v3-turbo.bin"
-WHISPER_LANGUAGE = os.getenv("WHISPER_LANGUAGE", "ja")
-WHISPER_THREADS = os.getenv("WHISPER_THREADS", "4")
+
+# Import settings for language and threads configuration
+from app.core.config import settings
+WHISPER_LANGUAGE = settings.WHISPER_LANGUAGE
+WHISPER_THREADS = str(settings.WHISPER_THREADS)
 
 
 class WhisperService:
@@ -33,6 +36,70 @@ class WhisperService:
             raise FileNotFoundError(f"Whisper.cppバイナリが見つかりません: {self.binary}")
         if not os.path.exists(self.model):
             raise FileNotFoundError(f"Whisperモデルが見つかりません: {self.model}")
+
+    def _get_audio_duration(self, audio_file_path: str) -> int:
+        """
+        Get audio duration in seconds using ffprobe.
+
+        Args:
+            audio_file_path: Path to audio file
+
+        Returns:
+            Duration in seconds (0 if unable to determine)
+        """
+        cmd = [
+            "ffprobe",
+            "-v", "error",
+            "-show_entries", "format=duration",
+            "-of", "default=noprint_wrappers=1:nokey=1",
+            audio_file_path
+        ]
+
+        try:
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=30,
+                check=True
+            )
+            duration = float(result.stdout.strip())
+            logger.info(f"Audio duration: {duration:.2f} seconds ({duration/3600:.2f} hours)")
+            return int(duration)
+        except (subprocess.TimeoutExpired, subprocess.CalledProcessError, ValueError) as e:
+            logger.warning(f"Failed to get audio duration: {e}, will use default timeout")
+            return 0
+
+    def _calculate_timeout(self, duration_seconds: int) -> int:
+        """
+        Calculate timeout based on audio duration.
+
+        Whisper typically processes at 0.3x - 0.7x real-time speed depending on hardware.
+        Using 2x multiplier provides safety margin for slower systems.
+
+        Args:
+            duration_seconds: Audio duration in seconds
+
+        Returns:
+            Timeout in seconds (minimum 300 for short files)
+        """
+        MINIMUM_TIMEOUT = 300  # 5 minutes for very short files
+        MULTIPLIER = 2  # Safety multiplier
+
+        if duration_seconds <= 0:
+            return MINIMUM_TIMEOUT
+
+        calculated_timeout = duration_seconds * MULTIPLIER + MINIMUM_TIMEOUT
+
+        # Log for user visibility
+        hours = duration_seconds / 3600
+        timeout_hours = calculated_timeout / 3600
+        logger.info(
+            f"Timeout calculation: {hours:.2f}h audio → {timeout_hours:.2f}h timeout "
+            f"({calculated_timeout}s)"
+        )
+
+        return calculated_timeout
     
     def transcribe(
         self,
@@ -64,12 +131,16 @@ class WhisperService:
         audio_filename = Path(audio_file_path).stem
         output_prefix = output_path / audio_filename
         
+        # Get audio duration and calculate dynamic timeout
+        duration = self._get_audio_duration(audio_file_path)
+        timeout = self._calculate_timeout(duration)
+
         # 音声ファイルをモノラル・16kHzに変換
-        wav_path = self._convert_to_wav(audio_file_path, output_dir)
-        
+        wav_path = self._convert_to_wav(audio_file_path, output_dir, timeout=min(timeout, 3600))
+
         try:
             # Whisper.cppを実行
-            result = self._run_whisper(wav_path, str(output_prefix))
+            result = self._run_whisper(wav_path, str(output_prefix), timeout)
             
             # 結果ファイルを解析
             transcription = self._parse_output(str(output_prefix))
@@ -81,14 +152,15 @@ class WhisperService:
             if wav_path.exists():
                 wav_path.unlink()
     
-    def _convert_to_wav(self, input_path: str, output_dir: str) -> Path:
+    def _convert_to_wav(self, input_path: str, output_dir: str, timeout: int = 300) -> Path:
         """
         音声ファイルをモノラル・16kHz WAVに変換
-        
+
         Args:
             input_path: 入力ファイルパス
             output_dir: 出力ディレクトリ
-        
+            timeout: Conversion timeout in seconds (default: 300)
+
         Returns:
             wav_path: 変換後のWAVファイルパス
         """
@@ -117,7 +189,7 @@ class WhisperService:
                 ffmpeg_cmd,
                 capture_output=True,
                 text=True,
-                timeout=300,
+                timeout=timeout,
                 check=False
             )
             
@@ -133,14 +205,15 @@ class WhisperService:
             logger.error(f"FFmpeg変換エラー: {e.stderr}")
             raise Exception(f"音声変換エラー: {e.stderr}")
     
-    def _run_whisper(self, wav_path: str, output_prefix: str) -> subprocess.CompletedProcess:
+    def _run_whisper(self, wav_path: str, output_prefix: str, timeout: int = 600) -> subprocess.CompletedProcess:
         """
         Whisper.cppバイナリを実行
-        
+
         Args:
             wav_path: WAVファイルパス
             output_prefix: 出力ファイルプレフィックス
-        
+            timeout: Transcription timeout in seconds (default: 600)
+
         Returns:
             result: subprocess実行結果
         """
@@ -166,7 +239,7 @@ class WhisperService:
                 whisper_cmd,
                 capture_output=True,
                 text=True,
-                timeout=600,
+                timeout=timeout,
                 check=False  # Do not raise immediately to capture output
             )
             
