@@ -4,33 +4,52 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+    image: whisper-summarizer-backend:latest
     container_name: whisper_backend
     environment:
       # Database (Supabase PostgreSQL)
       DATABASE_URL: ${DATABASE_URL}
-      
+
       # Supabase
       SUPABASE_URL: ${SUPABASE_URL}
       SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
       SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
-      
-      # GLM4.7
-      GLM_API_KEY: ${GLM_API_KEY}
-      GLM_API_ENDPOINT: ${GLM_API_ENDPOINT:-https://api.glm.ai/v1}
-      GLM_MODEL: ${GLM_MODEL:-glm-4.0-turbo}
-      
+
+      # Gemini API
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      GEMINI_API_ENDPOINT: ${GEMINI_API_ENDPOINT}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.0-flash-exp}
+      REVIEW_LANGUAGE: ${REVIEW_LANGUAGE:-zh}
+
       # Backend Config
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
       SECRET_KEY: ${SECRET_KEY:-your-secret-key-change-in-production}
-      
+
       # Whisper.cpp Config
       WHISPER_LANGUAGE: ${WHISPER_LANGUAGE:-ja}
       WHISPER_THREADS: ${WHISPER_THREADS:-4}
+
+      # Logging
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
     ports:
       - "${BACKEND_PORT:-8000}:8000"
+    volumes:
+      - backend_data:/app/data
+      - backend_output:/app/output
     networks:
       - whisper_network
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   # Reactフロントエンド (本番モード - Nginx)
   frontend:
@@ -38,18 +57,36 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
       target: production
+      args:
+        VITE_SUPABASE_URL: ${SUPABASE_URL}
+        VITE_SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
+    image: whisper-summarizer-frontend:latest
     container_name: whisper_frontend
-    environment:
-      VITE_SUPABASE_URL: ${SUPABASE_URL}
-      VITE_SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
-      VITE_BACKEND_URL: ${VITE_BACKEND_URL:-http://localhost:8000}
     ports:
-      - "80:80"
+      - "${FRONTEND_PORT:-80}:80"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     networks:
       - whisper_network
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  backend_data:
+    driver: local
+  backend_output:
+    driver: local
 
 networks:
   whisper_network:

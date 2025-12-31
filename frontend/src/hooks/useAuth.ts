@@ -4,7 +4,7 @@
 
 import { useEffect, useCallback } from 'react'
 import { User, Session, AuthError } from '@supabase/supabase-js'
-import { useAtom, useSetAtom } from 'jotai'
+import { useAtom } from 'jotai'
 import { supabase } from '../services/supabase'
 import {
   userAtom,
@@ -163,7 +163,7 @@ export function useAuth(): [
       return { error: null }
     }
 
-    const { data, error } = await supabase.auth.signInWithOAuth({
+    const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
         queryParams: {

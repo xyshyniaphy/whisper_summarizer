@@ -15,7 +15,7 @@ export default function Login() {
     const [loading, setLoading] = useState(false)
     const [googleLoading, setGoogleLoading] = useState(false)
 
-    const [{ user }, { signIn, signUp, signInWithGoogle }] = useAuth()
+    const [, { signIn, signUp, signInWithGoogle }] = useAuth()
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()

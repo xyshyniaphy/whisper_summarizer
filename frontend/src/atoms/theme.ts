@@ -11,8 +11,8 @@ export const themeAtom = atom<Theme>('light')
 
 // Theme atom with localStorage persistence and DOM manipulation
 export const themeWithPersistenceAtom = atom(
-  (get) => get(themeAtom),
-  (get, set, newTheme: Theme) => {
+  (_get) => _get(themeAtom),
+  (_get, set, newTheme: Theme) => {
     set(themeAtom, newTheme)
 
     // Persist to localStorage
