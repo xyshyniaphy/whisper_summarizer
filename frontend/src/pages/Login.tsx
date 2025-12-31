@@ -1,10 +1,12 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { Button } from '../components/ui/Button'
 import { Card, CardContent } from '../components/ui/Card'
 import { GoogleButton } from '../components/GoogleButton'
 
 export default function Login() {
+    const navigate = useNavigate()
     const [email, setEmail] = useState('')
     const [password, setPassword] = useState('')
     const [isSignUp, setIsSignUp] = useState(false)
@@ -13,7 +15,7 @@ export default function Login() {
     const [loading, setLoading] = useState(false)
     const [googleLoading, setGoogleLoading] = useState(false)
 
-    const [{ signIn, signUp }, { signInWithGoogle }] = useAuth()
+    const [{ user }, { signIn, signUp, signInWithGoogle }] = useAuth()
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -27,6 +29,9 @@ export default function Login() {
 
             if (result.error) {
                 setError(result.error.message || 'エラーが発生しました')
+            } else if (result.user) {
+                // 成功時にtranscriptionsへ遷移
+                navigate('/transcriptions')
             }
         } catch (err: any) {
             setError(err.message || '予期しないエラーが発生しました')

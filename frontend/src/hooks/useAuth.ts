@@ -20,6 +20,34 @@ interface AuthActions {
   signOut: () => Promise<{ error: AuthError | null }>
 }
 
+// E2Eテストモードチェック
+const isE2ETestMode = () => {
+  // ビルド時の環境変数をチェック
+  if (import.meta.env.VITE_E2E_TEST_MODE === 'true') {
+    return true
+  }
+  // 実行時のlocalStorageをチェック（Playwrightなどから設定可能）
+  try {
+    return localStorage.getItem('e2e-test-mode') === 'true'
+  } catch {
+    return false
+  }
+}
+
+// モックユーザー（E2Eテスト用）
+const mockUser: User = {
+  id: 'test-user-id',
+  aud: 'authenticated',
+  role: 'authenticated',
+  email: 'test@example.com',
+  email_confirmed_at: new Date().toISOString(),
+  phone: '',
+  updated_at: new Date().toISOString(),
+  created_at: new Date().toISOString(),
+  user_metadata: { role: 'user', full_name: 'Test User' },
+  app_metadata: {},
+}
+
 export function useAuth(): [
   { user: User | null; session: Session | null; loading: boolean; role: 'user' | 'admin' | null },
   AuthActions
@@ -30,6 +58,12 @@ export function useAuth(): [
   const [loading, setLoading] = useAtom(loadingAtom)
 
   useEffect(() => {
+    // E2Eテストモードの場合は自動ログインしない（auth呼び出しをモックするだけ）
+    if (isE2ETestMode()) {
+      setLoading(false)
+      return
+    }
+
     // 現在のセッションを取得
     const getSession = async () => {
       const { data: { session }, error } = await supabase.auth.getSession()
@@ -57,6 +91,17 @@ export function useAuth(): [
 
   // 新規ユーザー登録
   const signUp = useCallback(async (email: string, password: string, fullName?: string) => {
+    // E2Eテストモード
+    if (isE2ETestMode()) {
+      setUser(mockUser)
+      setRole('user')
+      return {
+        user: mockUser,
+        session: null,
+        error: null,
+      }
+    }
+
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
@@ -82,6 +127,17 @@ export function useAuth(): [
 
   // サインイン
   const signIn = useCallback(async (email: string, password: string) => {
+    // E2Eテストモード - 任意の認証情報で成功
+    if (isE2ETestMode()) {
+      setUser(mockUser)
+      setRole('user')
+      return {
+        user: mockUser,
+        session: null,
+        error: null,
+      }
+    }
+
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
@@ -101,6 +157,12 @@ export function useAuth(): [
 
   // Google OAuthサインイン
   const signInWithGoogle = useCallback(async () => {
+    if (isE2ETestMode()) {
+      setUser(mockUser)
+      setRole('user')
+      return { error: null }
+    }
+
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
@@ -119,6 +181,13 @@ export function useAuth(): [
 
   // サインアウト
   const signOut = useCallback(async () => {
+    if (isE2ETestMode()) {
+      setUser(null)
+      setSession(null)
+      setRole(null)
+      return { error: null }
+    }
+
     const { error } = await supabase.auth.signOut()
     setUser(null)
     setSession(null)

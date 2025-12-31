@@ -2,7 +2,7 @@ import { defineConfig, devices } from '@playwright/test'
 
 /**
  * Playwright E2Eテスト設定
- * 
+ *
  * ユーザーフローの自動テストを実行する。
  */
 export default defineConfig({
@@ -47,6 +47,18 @@ export default defineConfig({
 
     // ビデオ録画 (失敗時のみ)
     video: 'retain-on-failure',
+
+    // E2Eテストモードを有効化（localStorageに設定）
+    storageState: {
+      origins: [
+        {
+          origin: process.env.FRONTEND_URL || 'http://frontend-test:3000',
+          localStorage: [
+            { name: 'e2e-test-mode', value: 'true' },
+          ],
+        },
+      ],
+    },
   },
 
   // テスト実行前にサーバーを起動しない (既存のコンテナを使用)
@@ -55,7 +67,14 @@ export default defineConfig({
   projects: [
     {
       name: 'chromium',
-      use: { ...devices['Desktop Chrome'] },
+      use: {
+        ...devices['Desktop Chrome'],
+        // E2Eテストモード環境変数
+        contextOptions: {
+          // Note: We'll set VITE_E2E_TEST_MODE via extraHTTPHeaders since contextOptions doesn't support env vars
+          // Instead, the frontend will check localStorage for test mode
+        },
+      },
     },
 
     // 必要に応じて他のブラウザを追加

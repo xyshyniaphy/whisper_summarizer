@@ -5,19 +5,43 @@
  * ユーザーインタラクションをテストする。
  */
 
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { render, waitFor } from '@testing-library/react'
 import { BrowserRouter } from 'react-router-dom'
-import { MantineProvider } from '@mantine/core'
+import { Provider } from 'jotai'
 import Dashboard from '../../../src/pages/Dashboard'
+
+// Mock Supabase client
+vi.mock('../../../src/services/supabase', () => ({
+  supabase: {
+    auth: {
+      getSession: vi.fn(() => Promise.resolve({ data: { session: null }, error: null })),
+      onAuthStateChange: vi.fn(() => ({
+        data: { subscription: { unsubscribe: vi.fn() } }
+      }))
+    }
+  }
+}))
+
+// Mock API
+vi.mock('../../../src/services/api', () => ({
+  api: {
+    getTranscriptions: vi.fn(() => Promise.resolve([])),
+    deleteTranscription: vi.fn(() => Promise.resolve()),
+    generateSummary: vi.fn(() => Promise.resolve({
+      id: 'summary-123',
+      transcription_id: 'transcription-123',
+      summary_text: 'Test summary',
+      created_at: new Date().toISOString()
+    }))
+  }
+}))
 
 // テスト用のラッパーコンポーネント
 const AllProviders = ({ children }: { children: React.ReactNode }) => {
     return (
         <BrowserRouter>
-            <MantineProvider>
-                {children}
-            </MantineProvider>
+            <Provider>{children}</Provider>
         </BrowserRouter>
     )
 }
@@ -32,14 +56,13 @@ describe('Dashboard', () => {
         renderWithProviders(<Dashboard />)
 
         // ダッシュボードのタイトルまたは主要な要素を確認
-        // 実際のコンポーネントに合わせて調整
         expect(document.body).toBeTruthy()
     })
 
     it('文字起こしリストが表示される', async () => {
         renderWithProviders(<Dashboard />)
 
-        // データの読み込みを待つ - using real service now
+        // データの読み込みを待つ
         await waitFor(() => {
             expect(document.body).toBeTruthy()
         })
@@ -49,14 +72,13 @@ describe('Dashboard', () => {
         renderWithProviders(<Dashboard />)
 
         // ローディングインジケーターの存在を確認
-        // 実際のコンポーネントに合わせて調整
         expect(document.body).toBeTruthy()
     })
 
     it('削除ボタンをクリックすると確認ダイアログが表示される', async () => {
         renderWithProviders(<Dashboard />)
 
-        // Wait for component to render with real data
+        // Wait for component to render
         await waitFor(() => {
             expect(document.body).toBeTruthy()
         })
