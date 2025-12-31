@@ -2,7 +2,8 @@ import axios from 'axios';
 import { supabase } from './supabase';
 import { Transcription, Summary } from '../types';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
+// API URL - relative path works with both Vite dev proxy and Nginx production proxy
+const API_URL = '/api';
 
 // Create axios instance with interceptors for auth
 const apiClient = axios.create({
