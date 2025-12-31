@@ -32,4 +32,5 @@ class Transcription(Base):
 
     # Relationships
     # user = relationship("User", back_populates="transcriptions") # User model reference if needed
-    summaries = relationship("Summary", back_populates="transcription", cascade="all, delete-orphan")
+    summaries = relationship("Summary", back_populates="transcription", passive_deletes=True)
+    gemini_logs = relationship("GeminiRequestLog", back_populates="transcription", passive_deletes=True)

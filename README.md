@@ -223,10 +223,15 @@ cp .env.sample .env
 - Google Gemini 2.0 Flash による要約を表示 (Overview / Key Points / Details)
 - ダウンロード機能 (テキスト形式 .txt / 字幕形式 .srt)
 
-### 5. 音声の削除 (New)
+### 5. 音声の削除
 
 - 文字起こし履歴リストから、不要なアイテムを削除できます (ゴミ箱アイコン)
+- 削除条件:
+  - **完了したアイテム**: いつでも削除可能
+  - **失敗したアイテム**: いつでも削除可能
+  - **処理中のアイテム**: 24時間経過後のみ削除可能
 - 関連する音声ファイルと文字起こしデータもサーバーから削除されます
+- データベースのカスケード削除により、関連する要約データやAPIログも自動的に削除されます
 
 
 
@@ -426,6 +431,12 @@ npm run test:headed
 | GET | `/api/users/me` | 現在のユーザー情報 |
 | POST | `/api/audio/upload` | 音声アップロード |
 | GET | `/api/transcriptions` | 文字起こしリスト |
+| GET | `/api/transcriptions/{id}` | 文字起こし詳細 |
+| DELETE | `/api/transcriptions/{id}` | 文字起こし削除 (カスケード) |
+| POST | `/api/transcriptions/{id}/generate-pptx` | PPTX生成 (Marp) |
+| GET | `/api/transcriptions/{id}/download?format=txt` | テキストダウンロード |
+| GET | `/api/transcriptions/{id}/download?format=srt` | 字幕ダウンロード |
+| GET | `/api/transcriptions/{id}/download?format=pptx` | PowerPointダウンロード |
 
 ## トラブルシューティング
 

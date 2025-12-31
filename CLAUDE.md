@@ -215,3 +215,61 @@ CORS_ORIGINS=http://localhost:3000
 5. **Tailwind CSS** is the styling framework - prefer utility classes over custom CSS
 6. **Jotai** is used for global state - prefer atoms over React Context
 7. **Data persistence**: `data/` directory is volume-mounted (uploads, output, test artifacts)
+
+## Database Relationships & Cascade Deletes
+
+The application uses SQLAlchemy ORM with PostgreSQL foreign key constraints for data integrity.
+
+### Cascade Delete Configuration
+
+When deleting a transcription, related records in `summaries` and `gemini_request_logs` tables are automatically deleted via database-level `ON DELETE CASCADE`:
+
+**Model Configuration:**
+```python
+# In child models (e.g., gemini_request_log.py)
+transcription_id = Column(UUID(as_uuid=True), ForeignKey("transcriptions.id", ondelete="CASCADE"), nullable=False)
+transcription = relationship("Transcription", back_populates="gemini_logs", passive_deletes=True)
+
+# In parent model (transcription.py)
+gemini_logs = relationship("GeminiRequestLog", back_populates="transcription", passive_deletes=True)
+summaries = relationship("Summary", back_populates="transcription", passive_deletes=True)
+```
+
+**Key Points:**
+- `ondelete="CASCADE"` - Database-level constraint (requires migration to update existing tables)
+- `passive_deletes=True` - Tells SQLAlchemy to let database handle cascades (no ORM-level UPDATE statements)
+- `cascade="merge,save-update"` - Default cascade (no `delete`, `delete-orphan`)
+- Use explicit `back_populates` instead of `backref` for clarity
+
+**Migration for existing tables:**
+```python
+db.execute(text('ALTER TABLE gemini_request_logs DROP CONSTRAINT IF EXISTS gemini_request_logs_transcription_id_fkey'))
+db.execute(text('ALTER TABLE gemini_request_logs ADD CONSTRAINT gemini_request_logs_transcription_id_fkey FOREIGN KEY (transcription_id) REFERENCES transcriptions(id) ON DELETE CASCADE'))
+```
+
+**Rebuild required:** After model changes, rebuild backend container: `docker-compose -f docker-compose.dev.yml up -d --build --force-recreate backend`
+
+## Frontend UI Patterns
+
+### Loading States
+
+Use the `Loader2` component from lucide-react with `animate-spin` for loading indicators:
+
+```tsx
+import { Loader2 } from 'lucide-react'
+
+const [isLoading, setIsLoading] = useState(true)
+
+{isLoading ? (
+    <div className="flex flex-col items-center justify-center py-16">
+        <Loader2 className="w-10 h-10 text-blue-500 dark:text-blue-400 animate-spin" />
+        <p className="mt-4 text-gray-500 dark:text-gray-400">加载中...</p>
+    </div>
+) : (
+    // content
+)}
+```
+
+### Conditional Button Display
+
+The `shouldAllowDelete` function in `TranscriptionList.tsx` controls delete button visibility based on item status and age.

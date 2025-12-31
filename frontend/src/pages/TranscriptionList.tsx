@@ -40,24 +40,33 @@ export function TranscriptionList() {
 
     const handleDelete = async (e: React.MouseEvent, id: string) => {
         e.stopPropagation()
-        if (!window.confirm('确定要删除吗？')) return
+        e.preventDefault()
+        console.log('Delete clicked for id:', id)
 
+        if (!window.confirm('确定要删除吗？')) {
+            console.log('Delete cancelled')
+            return
+        }
+
+        console.log('Proceeding with delete for id:', id)
         try {
+            console.log('Calling API deleteTranscription...')
             await api.deleteTranscription(id)
+            console.log('Delete successful, reloading list...')
             loadTranscriptions()
         } catch (e) {
-            console.error(e)
-            alert('删除失败')
+            console.error('Delete failed:', e)
+            alert('删除失败: ' + (e as Error).message)
         }
     }
 
-    // Check if item should show delete button (failed or > 24 hours old)
+    // Check if item should show delete button (failed or > 24 hours old or completed)
     const shouldAllowDelete = (item: Transcription): boolean => {
         if (item.stage === 'failed') return true
-        if (item.stage !== 'completed') {
-            const hoursSinceCreation = (Date.now() - new Date(item.created_at).getTime()) / (1000 * 60 * 60)
-            if (hoursSinceCreation > 24) return true
-        }
+        if (item.stage === 'completed') return true
+        // For processing items, only allow delete if > 24 hours old
+        const hoursSinceCreation = (Date.now() - new Date(item.created_at).getTime()) / (1000 * 60 * 60)
+        if (hoursSinceCreation > 24) return true
         return false
     }
 

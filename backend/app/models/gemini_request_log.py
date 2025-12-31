@@ -18,7 +18,7 @@ class GeminiRequestLog(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
 
     # Request information
-    transcription_id = Column(UUID(as_uuid=True), ForeignKey("transcriptions.id"), nullable=False)
+    transcription_id = Column(UUID(as_uuid=True), ForeignKey("transcriptions.id", ondelete="CASCADE"), nullable=False)
     file_name = Column(String(500), nullable=True)  # Original filename
     model_name = Column(String(100), nullable=False)  # e.g., gemini-2.0-flash-exp
 
@@ -46,4 +46,4 @@ class GeminiRequestLog(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     # Relationships
-    transcription = relationship("Transcription", backref="gemini_logs")
+    transcription = relationship("Transcription", back_populates="gemini_logs", passive_deletes=True)
