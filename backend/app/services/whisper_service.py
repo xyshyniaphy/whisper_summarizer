@@ -328,7 +328,7 @@ class WhisperService:
         cmd_str = ' '.join(str(x) for x in whisper_cmd)
 
         # Prominent logging before execution
-        logger("=" * 80)
+        logger.info("=" * 80)
         logger.info(f"[WHISPER START] Starting transcription")
         logger.info(f"[WHISPER] Input file: {wav_path} ({wav_size_mb:.2f} MB)")
         logger.info(f"[WHISPER] Output prefix: {output_prefix}")
@@ -338,7 +338,7 @@ class WhisperService:
         logger.info(f"[WHISPER] Timeout: {timeout}s")
         logger.info(f"[WHISPER] Command: {cmd_str}")
         logger.info(f"[WHISPER] Transcription ID: {transcription_id}")
-        logger("=" * 80)
+        logger.info("=" * 80)
 
         # Also print to stdout for immediate visibility
         print(f"\n{'='*80}", flush=True)
@@ -420,9 +420,9 @@ class WhisperService:
                         f"Whisper transcription failed (exit code {result.returncode}): {result.stderr}"
                     )
 
-                logger("=" * 80)
+                logger.info("=" * 80)
                 logger.info(f"[WHISPER SUCCESS] Transcription completed successfully")
-                logger("=" * 80)
+                logger.info("=" * 80)
                 print(f"\n{'='*80}", flush=True)
                 print(f"[WHISPER] Transcription completed successfully!", flush=True)
                 print(f"{'='*80}\n", flush=True)
@@ -879,7 +879,7 @@ class WhisperService:
         completed_count = 0
         failed_count = 0
 
-        logger("=" * 80)
+        logger.info("=" * 80)
         logger.info(f"[PARALLEL TRANSCRIPTION] Starting {total_chunks} chunks with {max_workers} workers")
         print(f"\n{'='*80}", flush=True)
         print(f"[PARALLEL] Transcribing {total_chunks} chunks with {max_workers} workers...", flush=True)
@@ -926,8 +926,8 @@ class WhisperService:
                         "chunk_start_time": chunk_info["start_time"],
                         "chunk_end_time": chunk_info["end_time"]
                     }
-        
-        logger("=" * 80)
+
+        logger.info("=" * 80)
         logger.info(f"[PARALLEL TRANSCRIPTION] Completed: {completed_count} succeeded, {failed_count} failed out of {total_chunks}")
         print(f"\n{'='*80}", flush=True)
         print(f"[PARALLEL] Done: {completed_count} succeeded, {failed_count} failed", flush=True)
