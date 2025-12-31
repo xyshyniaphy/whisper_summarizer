@@ -89,11 +89,21 @@ export const api = {
     return `${API_URL}/transcriptions/${transcriptionId}/download?format=${format}`;
   },
 
-  downloadFile: async (transcriptionId: string, format: 'txt' | 'srt'): Promise<Blob> => {
+  downloadFile: async (transcriptionId: string, format: 'txt' | 'srt' | 'pptx'): Promise<Blob> => {
     // Use relative path since apiClient already has baseURL = '/api'
     const response = await apiClient.get(`/transcriptions/${transcriptionId}/download?format=${format}`, {
       responseType: 'blob'
     });
+    return response.data;
+  },
+
+  generatePptx: async (transcriptionId: string): Promise<{ status: string; message: string }> => {
+    const response = await apiClient.post(`/transcriptions/${transcriptionId}/generate-pptx`);
+    return response.data;
+  },
+
+  getPptxStatus: async (transcriptionId: string): Promise<{ status: string; exists: boolean }> => {
+    const response = await apiClient.get(`/transcriptions/${transcriptionId}/pptx-status`);
     return response.data;
   }
 };

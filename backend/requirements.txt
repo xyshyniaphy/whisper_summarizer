@@ -13,6 +13,7 @@ supabase
 python-dotenv==1.0.1
 aiofiles==24.1.0
 google-genai>=1.0.0
+python-pptx>=1.0.0
 
 # Development dependencies
 ruff>=0.8.0
