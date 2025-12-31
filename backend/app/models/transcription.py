@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Text, Float, DateTime, ForeignKey
+from sqlalchemy import Column, String, Text, Float, DateTime, ForeignKey, Integer
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
@@ -13,9 +13,16 @@ class Transcription(Base):
     file_name = Column(String, nullable=False)
     file_path = Column(Text, nullable=True)
     original_text = Column(Text, nullable=True)
-    status = Column(String, default="processing")
+    status = Column(String, default="processing")  # Legacy, use stage instead
     language = Column(String, nullable=True)
     duration_seconds = Column(Float, nullable=True)
+
+    # Process tracking fields
+    stage = Column(String, default="uploading", nullable=False)  # uploading, transcribing, summarizing, completed, failed
+    error_message = Column(Text, nullable=True)  # Last error message
+    retry_count = Column(Integer, default=0, nullable=False)  # Number of retries attempted
+    completed_at = Column(DateTime(timezone=True), nullable=True)  # When fully completed
+
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now(), server_default=func.now())
 

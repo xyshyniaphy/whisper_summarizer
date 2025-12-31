@@ -3,9 +3,13 @@ export interface Transcription {
   file_name: string;
   file_path?: string;
   original_text?: string;
-  status: 'processing' | 'completed' | 'failed';
+  status: 'processing' | 'completed' | 'failed';  // Legacy, use stage instead
+  stage: 'uploading' | 'transcribing' | 'summarizing' | 'completed' | 'failed';
   language?: string;
   duration_seconds?: number;
+  error_message?: string;
+  retry_count?: number;
+  completed_at?: string;
   created_at: string;
   updated_at: string;
   summaries?: Summary[];

@@ -1,0 +1,316 @@
+"""
+Transcription Processor Service
+Handles complete workflow: upload -> transcribe -> summarize with retry logic
+"""
+
+import os
+import time
+import asyncio
+import logging
+from datetime import datetime, timedelta
+from pathlib import Path
+from typing import Optional
+from sqlalchemy.orm import Session
+
+from app.models.transcription import Transcription
+from app.models.summary import Summary
+from app.models.gemini_request_log import GeminiRequestLog
+from app.services.whisper_service import whisper_service
+from app.core.gemini import get_gemini_client
+from app.core.config import settings
+
+logger = logging.getLogger(__name__)
+
+# Process stage constants
+STAGE_UPLOADING = "uploading"
+STAGE_TRANSCRIBING = "transcribing"
+STAGE_SUMMARIZING = "summarizing"
+STAGE_COMPLETED = "completed"
+STAGE_FAILED = "failed"
+
+# Retry configuration
+MAX_RETRIES = 3
+RETRY_DELAY_SECONDS = 5
+
+# Log file configuration
+LOG_DIR = Path("/app/logs")
+LOG_DIR.mkdir(exist_ok=True)
+LOG_FILE = LOG_DIR / "transcription_processor.log"
+
+
+def setup_debug_logging():
+    """Setup detailed debug logging to file if LOG_LEVEL is DEBUG"""
+    if settings.LOG_LEVEL.upper() == "DEBUG":
+        # Clear and create new log file
+        if LOG_FILE.exists():
+            LOG_FILE.unlink()
+        LOG_FILE.touch()
+
+        # Add file handler for detailed debug logs
+        file_handler = logging.FileHandler(LOG_FILE, encoding='utf-8')
+        file_handler.setLevel(logging.DEBUG)
+        file_handler.setFormatter(
+            logging.Formatter(
+                '%(asctime)s - %(name)s - %(levelname)s - %(funcName)s:%(lineno)d - %(message)s',
+                datefmt='%Y-%m-%d %H:%M:%S'
+            )
+        )
+
+        # Add to root logger so all modules log to file
+        root_logger = logging.getLogger()
+        root_logger.addHandler(file_handler)
+        root_logger.setLevel(logging.DEBUG)
+
+        logger.info(f"DEBUG logging enabled. Log file: {LOG_FILE}")
+    else:
+        logger.info(f"LOG_LEVEL is {settings.LOG_LEVEL}, debug file logging disabled")
+
+
+class TranscriptionProcessor:
+    """Handles complete transcription workflow with retry logic"""
+
+    def __init__(self, db_session_factory):
+        """
+        Initialize processor
+
+        Args:
+            db_session_factory: Callable that returns a new DB session
+        """
+        self.db_session_factory = db_session_factory
+        setup_debug_logging()
+
+    def process_transcription(self, transcription_id: str) -> bool:
+        """
+        Process transcription through complete workflow with retry
+
+        Args:
+            transcription_id: Transcription UUID
+
+        Returns:
+            bool: True if successful, False if failed after all retries
+        """
+        db = self.db_session_factory()
+
+        try:
+            transcription = db.query(Transcription).filter(
+                Transcription.id == transcription_id
+            ).first()
+
+            if not transcription:
+                logger.error(f"Transcription not found: {transcription_id}")
+                return False
+
+            logger.info(f"Starting processing: {transcription_id} - {transcription.file_name}")
+
+            # Execute workflow with retry
+            for attempt in range(MAX_RETRIES):
+                try:
+                    transcription.retry_count = attempt
+                    db.commit()
+
+                    # Step 1: Transcribe
+                    if not self._transcribe_with_retry(transcription, db):
+                        raise Exception("Transcription failed after retries")
+
+                    # Step 2: Summarize
+                    if not self._summarize_with_retry(transcription, db):
+                        raise Exception("Summarization failed after retries")
+
+                    # Mark as completed
+                    transcription.stage = STAGE_COMPLETED
+                    transcription.completed_at = datetime.utcnow()
+                    transcription.error_message = None
+                    db.commit()
+
+                    logger.info(
+                        f"Processing completed successfully: {transcription_id} | "
+                        f"Text length: {len(transcription.original_text or '')} | "
+                        f"Summary: {'Yes' if transcription.summaries else 'No'}"
+                    )
+                    return True
+
+                except Exception as e:
+                    logger.error(f"Attempt {attempt + 1}/{MAX_RETRIES} failed: {e}")
+
+                    transcription.error_message = str(e)
+                    db.commit()
+
+                    if attempt < MAX_RETRIES - 1:
+                        wait_time = RETRY_DELAY_SECONDS * (attempt + 1)
+                        logger.info(f"Retrying in {wait_time} seconds...")
+                        time.sleep(wait_time)
+                    else:
+                        # Final attempt failed
+                        transcription.stage = STAGE_FAILED
+                        transcription.error_message = f"Failed after {MAX_RETRIES} attempts: {str(e)}"
+                        db.commit()
+                        logger.error(f"Processing failed after all retries: {transcription_id}")
+                        return False
+
+        except Exception as e:
+            logger.error(f"Unexpected error in process_transcription: {e}")
+            return False
+        finally:
+            db.close()
+
+    def _transcribe_with_retry(self, transcription: Transcription, db: Session) -> bool:
+        """
+        Transcribe audio file with retry logic
+
+        Args:
+            transcription: Transcription model instance
+            db: Database session
+
+        Returns:
+            bool: True if successful
+        """
+        # Update stage to transcribing
+        transcription.stage = STAGE_TRANSCRIBING
+        transcription.error_message = None
+        db.commit()
+
+        logger.debug(f"Starting transcription for: {transcription.file_name}")
+
+        try:
+            output_dir = Path("/app/data/output")
+            output_dir.mkdir(exist_ok=True, parents=True)
+
+            # Run whisper transcription
+            result = whisper_service.transcribe(
+                transcription.file_path,
+                output_dir=str(output_dir)
+            )
+
+            # Save results
+            transcription.original_text = result["text"]
+            transcription.language = result["language"]
+            transcription.error_message = None
+            db.commit()
+
+            logger.debug(
+                f"Transcription successful: {transcription.id} | "
+                f"Language: {result['language']} | "
+                f"Text length: {len(result['text'])}"
+            )
+            return True
+
+        except Exception as e:
+            logger.error(f"Transcription error: {e}")
+            transcription.error_message = f"Transcription failed: {str(e)}"
+            db.commit()
+            raise
+
+    def _summarize_with_retry(self, transcription: Transcription, db: Session) -> bool:
+        """
+        Generate summary with retry logic
+
+        Args:
+            transcription: Transcription model instance
+            db: Database session
+
+        Returns:
+            bool: True if successful
+        """
+        if not transcription.original_text:
+            logger.warning(f"No text to summarize for: {transcription.id}")
+            return True  # Not an error, just nothing to summarize
+
+        # Check if summary already exists
+        existing_summary = db.query(Summary).filter(
+            Summary.transcription_id == transcription.id
+        ).first()
+
+        if existing_summary:
+            logger.debug(f"Summary already exists for: {transcription.id}")
+            return True
+
+        # Update stage to summarizing
+        transcription.stage = STAGE_SUMMARIZING
+        db.commit()
+
+        logger.debug(f"Starting summarization for: {transcription.id}")
+
+        try:
+            gemini_client = get_gemini_client()
+            # Run async function in event loop
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                gemini_response = loop.run_until_complete(
+                    gemini_client.generate_summary(
+                        transcription.original_text,
+                        file_name=transcription.file_name
+                    )
+                )
+            finally:
+                loop.close()
+
+            # Check for errors
+            if gemini_response.status == "error":
+                raise Exception(gemini_response.error_message)
+
+            # Create summary record
+            new_summary = Summary(
+                transcription_id=transcription.id,
+                summary_text=gemini_response.summary,
+                model_name=gemini_response.model_name
+            )
+            db.add(new_summary)
+
+            # Create debug log
+            request_log = GeminiRequestLog(
+                transcription_id=transcription.id,
+                file_name=transcription.file_name,
+                model_name=gemini_response.model_name,
+                prompt=gemini_response.prompt,
+                input_text=transcription.original_text[:5000],
+                input_text_length=gemini_response.input_text_length,
+                output_text=gemini_response.summary,
+                output_text_length=gemini_response.output_text_length,
+                input_tokens=gemini_response.input_tokens,
+                output_tokens=gemini_response.output_tokens,
+                total_tokens=gemini_response.total_tokens,
+                response_time_ms=gemini_response.response_time_ms,
+                temperature=gemini_response.temperature,
+                status="success"
+            )
+            db.add(request_log)
+
+            db.commit()
+
+            logger.debug(
+                f"Summarization successful: {transcription.id} | "
+                f"Tokens: {gemini_response.total_tokens} | "
+                f"Time: {gemini_response.response_time_ms:.0f}ms"
+            )
+            return True
+
+        except Exception as e:
+            logger.error(f"Summarization error: {e}")
+            transcription.error_message = f"Summarization failed: {str(e)}"
+            db.commit()
+            raise
+
+
+def should_allow_delete(transcription: Transcription) -> bool:
+    """
+    Check if transcription should be deletable based on age and status
+
+    Args:
+        transcription: Transcription model instance
+
+    Returns:
+        bool: True if delete button should be shown
+    """
+    # Allow delete if failed
+    if transcription.stage == STAGE_FAILED:
+        return True
+
+    # Allow delete if not completed after 24 hours
+    if transcription.stage != STAGE_COMPLETED:
+        if transcription.created_at:
+            cutoff_time = datetime.utcnow() - timedelta(hours=24)
+            if transcription.created_at < cutoff_time:
+                return True
+
+    return False

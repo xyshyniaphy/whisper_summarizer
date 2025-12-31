@@ -7,10 +7,11 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_db
 from app.core.supabase import get_current_active_user
 from app.models.transcription import Transcription
+from app.models.user import User
 from app.schemas.transcription import Transcription as TranscriptionSchema
-from app.services.whisper_service import whisper_service
+from app.services.transcription_processor import TranscriptionProcessor, should_allow_delete
+from app.db.session import SessionLocal
 from uuid import uuid4
-from datetime import datetime
 import logging
 import shutil
 from pathlib import Path
@@ -25,60 +26,31 @@ UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 OUTPUT_DIR = Path("/app/data/output") # Whisper output
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
+# Create processor instance
+processor = TranscriptionProcessor(SessionLocal)
 
-def process_audio(file_path: Path, transcription_id: str, db: Session):
+
+def get_or_create_user(db: Session, user_id: str, email: str) -> User:
     """
-    バックグラウンドで音声を処理し、DBを更新する
+    Get existing user or create new one in local database.
+    Syncs Supabase auth users to local users table.
     """
-    logger.info(f"バックグラウンド処理開始: {transcription_id}")
-    try:
-        # DBからレコードを再取得 (セッションが切れている可能性があるため新しいセッションを使うべきだが、
-        # ここでは簡易的に渡されたセッションを使うか、都度作成するか検討。
-        # FastAPIのBackgroundTasksではDependency Injectionのセッションはクローズされる可能性がある。
-        # そのため、ここではセッションを新しく作るのが正しいが、簡易実装として
-        # エラーハンドリング内で処理する。
-        # 正しくは BackgroundTasks に db session を渡すべきではない。
-        pass
-    except Exception as e:
-        logger.error(f"バックグラウンド処理準備エラー: {e}")
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        logger.info(f"Creating new local user record for Supabase user: {user_id}")
+        user = User(id=user_id, email=email)
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+    return user
 
-    # 注: 本番実装ではCeleryなどを使うべきだが、ここでは簡易的に同期実行後にDB更新を行う
-    # ただし、Sessionオブジェクトはリクエストスコープで閉じるため、
-    # BackgroundTasks内でDB操作をするには新しいセッションが必要。
-    # 簡略化のため、今回は「同期的に処理してからレスポンスを返す」か
-    # 「メモリ内で処理」するかだが、ユーザー体験向上のためBackgroundTasksを使う。
-    # そのため、ここで新しいセッションを作成する。
-    from app.db.session import SessionLocal
-    background_db = SessionLocal()
-    
-    try:
-        transcription = background_db.query(Transcription).filter(Transcription.id == transcription_id).first()
-        if not transcription:
-            logger.error(f"Transcription not found: {transcription_id}")
-            return
 
-        # Whisper実行
-        result = whisper_service.transcribe(
-            str(file_path),
-            output_dir=str(OUTPUT_DIR)
-        )
-        
-        # DB更新
-        transcription.original_text = result["text"]
-        transcription.language = result["language"]
-        transcription.status = "completed"
-        # durationはWhisper結果から計算できるなら入れるが、今回は省略
-        
-        background_db.commit()
-        logger.info(f"処理完了: {transcription_id}")
-        
-    except Exception as e:
-        logger.error(f"処理失敗: {transcription_id}, error: {e}")
-        if transcription:
-            transcription.status = "failed"
-            background_db.commit()
-    finally:
-        background_db.close()
+def process_audio_task(transcription_id: str):
+    """
+    バックグラウンドタスクからプロセッサを呼び出す
+    """
+    logger.info(f"Starting background processing for: {transcription_id}")
+    processor.process_transcription(transcription_id)
 
 
 @router.post("/upload", response_model=TranscriptionSchema, status_code=201)
@@ -89,49 +61,60 @@ def upload_audio(
     current_user: dict = Depends(get_current_active_user)
 ):
     """
-    音声ファイルをアップロードして文字起こしを開始
+    音声ファイルをアップロードして自動処理を開始（転記→要約）
     """
     # ファイル形式のバリデーション
     allowed_extensions = [".m4a", ".mp3", ".wav", ".aac", ".flac", ".ogg"]
     file_extension = Path(file.filename).suffix.lower()
-    
+
     if file_extension not in allowed_extensions:
         raise HTTPException(
             status_code=400,
             detail=f"サポートされていないファイル形式です。許可: {', '.join(allowed_extensions)}"
         )
-    
+
+    # Sync user to local database
+    user_id = current_user.get("id")
+    user_email = current_user.get("email", "")
+    get_or_create_user(db, user_id, user_email)
+
     # DBレコード作成
     new_transcription = Transcription(
         file_name=file.filename,
-        status="processing",
-        user_id=current_user.get("id")
+        stage="uploading",
+        status="processing",  # Legacy field
+        user_id=user_id
     )
     db.add(new_transcription)
     db.commit()
     db.refresh(new_transcription)
-    
+
     # ファイル保存
     file_path = UPLOAD_DIR / f"{new_transcription.id}{file_extension}"
     new_transcription.file_path = str(file_path)
     db.commit()
-    
+
     try:
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
-            
-        # バックグラウンドタスク登録
-        background_tasks.add_task(process_audio, file_path, str(new_transcription.id), db)
-        
+
+        # バックグラウンドタスク登録（自動転記→要約）
+        background_tasks.add_task(process_audio_task, str(new_transcription.id))
+
+        logger.info(f"File uploaded successfully: {file.filename} -> {new_transcription.id}")
         return new_transcription
-        
+
     except Exception as e:
         logger.error(f"アップロードエラー: {e}")
+        new_transcription.stage = "failed"
+        new_transcription.error_message = f"Upload failed: {str(e)}"
+        db.commit()
         db.delete(new_transcription)
         db.commit()
         raise HTTPException(status_code=500, detail="ファイルの保存に失敗しました")
     finally:
         file.file.close()
+
 
 @router.get("/{audio_id}")
 async def get_audio_placeholder():

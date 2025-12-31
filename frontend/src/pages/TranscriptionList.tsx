@@ -1,11 +1,20 @@
 import React, { useCallback, useEffect, useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Trash2 } from 'lucide-react'
+import { Trash2, AlertCircle } from 'lucide-react'
 import { api } from '../services/api'
 import { Transcription } from '../types'
 import { AudioUploader } from '../components/AudioUploader'
 import { Card } from '../components/ui/Card'
 import { Badge } from '../components/ui/Badge'
+
+// Stage display mapping
+const STAGE_LABELS: Record<string, string> = {
+  uploading: '上传中',
+  transcribing: '转录中',
+  summarizing: '摘要生成中',
+  completed: '已完成',
+  failed: '失败'
+}
 
 export function TranscriptionList() {
     const [transcriptions, setTranscriptions] = useState<Transcription[]>([])
@@ -44,9 +53,20 @@ export function TranscriptionList() {
         }
     }
 
-    const getBadgeVariant = (status: string): 'success' | 'error' | 'info' => {
-        if (status === 'completed') return 'success'
-        if (status === 'failed') return 'error'
+    // Check if item should show delete button (failed or > 24 hours old)
+    const shouldAllowDelete = (item: Transcription): boolean => {
+        if (item.stage === 'failed') return true
+        if (item.stage !== 'completed') {
+            const hoursSinceCreation = (Date.now() - new Date(item.created_at).getTime()) / (1000 * 60 * 60)
+            if (hoursSinceCreation > 24) return true
+        }
+        return false
+    }
+
+    const getBadgeVariant = (stage: string): 'success' | 'error' | 'info' | 'warning' => {
+        if (stage === 'completed') return 'success'
+        if (stage === 'failed') return 'error'
+        if (stage === 'uploading') return 'warning'
         return 'info'
     }
 
@@ -84,24 +104,41 @@ export function TranscriptionList() {
                                         onClick={() => navigate(`/transcriptions/${item.id}`)}
                                     >
                                         <td className="px-6 py-4 whitespace-nowrap">
-                                            {item.file_name}
+                                            <div className="flex flex-col">
+                                                <span className="font-medium">{item.file_name}</span>
+                                                {item.error_message && (
+                                                    <span className="text-xs text-red-500 dark:text-red-400 flex items-center gap-1 mt-1">
+                                                        <AlertCircle className="w-3 h-3" />
+                                                        {item.error_message.length > 50
+                                                            ? item.error_message.substring(0, 50) + '...'
+                                                            : item.error_message}
+                                                    </span>
+                                                )}
+                                            </div>
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap">
-                                            <Badge variant={getBadgeVariant(item.status)}>
-                                                {item.status}
+                                            <Badge variant={getBadgeVariant(item.stage)}>
+                                                {STAGE_LABELS[item.stage] || item.stage}
                                             </Badge>
+                                            {item.retry_count && item.retry_count > 0 && (
+                                                <span className="ml-2 text-xs text-gray-500 dark:text-gray-400">
+                                                    重试 {item.retry_count} 次
+                                                </span>
+                                            )}
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
-                                            {new Date(item.created_at).toLocaleString('ja-JP')}
+                                            {new Date(item.created_at).toLocaleString('zh-CN')}
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-right">
-                                            <button
-                                                onClick={(e) => handleDelete(e, item.id)}
-                                                className="p-2 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg"
-                                                title="删除"
-                                            >
-                                                <Trash2 className="w-5 h-5" />
-                                            </button>
+                                            {shouldAllowDelete(item) && (
+                                                <button
+                                                    onClick={(e) => handleDelete(e, item.id)}
+                                                    className="p-2 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg"
+                                                    title="删除"
+                                                >
+                                                    <Trash2 className="w-5 h-5" />
+                                                </button>
+                                            )}
                                         </td>
                                     </tr>
                                 ))}

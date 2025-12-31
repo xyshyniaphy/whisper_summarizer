@@ -85,11 +85,6 @@ export const api = {
     await apiClient.delete(`/transcriptions/${id}`);
   },
 
-  generateSummary: async (transcriptionId: string): Promise<Summary> => {
-    const response = await apiClient.post<Summary>(`/transcriptions/${transcriptionId}/summarize`);
-    return response.data;
-  },
-
   getDownloadUrl: (transcriptionId: string, format: 'txt' | 'srt'): string => {
     return `${API_URL}/transcriptions/${transcriptionId}/download?format=${format}`;
   }

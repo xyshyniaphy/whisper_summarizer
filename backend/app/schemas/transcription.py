@@ -1,12 +1,22 @@
 from pydantic import BaseModel, UUID4, ConfigDict
 from typing import Optional, List
 from datetime import datetime
-# Circular import avoidance might be needed if Summary schema includes Transcription
-# from .summary import Summary
+
+class SummaryBase(BaseModel):
+    summary_text: str
+    model_name: Optional[str] = None
+
+class Summary(SummaryBase):
+    id: UUID4
+    transcription_id: UUID4
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
 
 class TranscriptionBase(BaseModel):
     file_name: str
-    status: Optional[str] = "processing"
+    status: Optional[str] = "processing"  # Legacy
+    stage: Optional[str] = "uploading"
     language: Optional[str] = None
     duration_seconds: Optional[float] = None
 
@@ -16,17 +26,21 @@ class TranscriptionCreate(TranscriptionBase):
 class TranscriptionUpdate(TranscriptionBase):
     original_text: Optional[str] = None
     status: Optional[str] = None
+    stage: Optional[str] = None
+    error_message: Optional[str] = None
 
 class TranscriptionInDBBase(TranscriptionBase):
     id: UUID4
     user_id: Optional[UUID4] = None
     original_text: Optional[str] = None
     file_path: Optional[str] = None
+    error_message: Optional[str] = None
+    retry_count: Optional[int] = 0
+    completed_at: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
 
 class Transcription(TranscriptionInDBBase):
-    pass
-    # summaries: List["Summary"] = [] # Type checking issues might arise
+    summaries: List[Summary] = []

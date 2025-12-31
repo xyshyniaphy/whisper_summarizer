@@ -53,30 +53,72 @@ class GeminiClient:
   async def generate_summary(
     self,
     transcription: str,
+    file_name: str = None,
     system_prompt: Optional[str] = None
-  ) -> str:
+  ):
     """
     文字起こしテキストから要約を生成
-    
+
     Args:
       transcription: 文字起こしテキスト
+      file_name: ファイル名（ロギング用）
       system_prompt: システムプロンプト (オプション)
-    
+
     Returns:
-      summary: 生成された要約
-    
+      GeminiResponse: 生成された要約とデバッグ情報
+
     Raises:
       Exception: API呼び出しエラー
     """
+    from app.schemas.gemini_response import GeminiResponse
+    import time
+
     if not system_prompt:
       # 言語に応じたシステムプロンプトを生成
       system_prompt = self._get_system_prompt_by_language()
-    
-    # カスタムエンドポイントを使用する場合はhttpxで直接呼び出し
-    if self.api_endpoint:
-      return await self._generate_summary_with_custom_endpoint(transcription, system_prompt)
-    else:
-      return await self._generate_summary_with_sdk(transcription, system_prompt)
+
+    start_time = time.time()
+
+    try:
+      # カスタムエンドポイントを使用する場合はhttpxで直接呼び出し
+      if self.api_endpoint:
+        response_data = await self._generate_summary_with_custom_endpoint(transcription, system_prompt, file_name)
+      else:
+        response_data = await self._generate_summary_with_sdk(transcription, system_prompt, file_name)
+
+      response_time_ms = (time.time() - start_time) * 1000
+
+      # GeminiResponseを構築
+      return GeminiResponse(
+        summary=response_data.get("summary", ""),
+        model_name=self.model,
+        prompt=system_prompt,
+        input_text_length=len(transcription),
+        output_text_length=len(response_data.get("summary", "")),
+        input_tokens=response_data.get("input_tokens"),
+        output_tokens=response_data.get("output_tokens"),
+        total_tokens=response_data.get("total_tokens"),
+        response_time_ms=response_time_ms,
+        temperature=0.7,
+        status="success",
+        raw_response=response_data.get("raw_response")
+      )
+
+    except Exception as e:
+      response_time_ms = (time.time() - start_time) * 1000
+      logger.error(f"Gemini API エラー: {str(e)}")
+
+      return GeminiResponse(
+        summary="",
+        model_name=self.model,
+        prompt=system_prompt,
+        input_text_length=len(transcription),
+        output_text_length=0,
+        response_time_ms=response_time_ms,
+        temperature=0.7,
+        status="error",
+        error_message=str(e)
+      )
   
   def _get_system_prompt_by_language(self) -> str:
     """
@@ -139,10 +181,14 @@ Please use concise and easy-to-understand language, and make good use of bullet 
   async def _generate_summary_with_sdk(
     self,
     transcription: str,
-    system_prompt: str
-  ) -> str:
+    system_prompt: str,
+    file_name: str = None
+  ) -> dict:
     """
     Google Gemini SDKを使用して要約を生成
+
+    Returns:
+      dict: summary, input_tokens, output_tokens, total_tokens, raw_response
     """
     try:
       # コンテンツの構築
@@ -156,7 +202,7 @@ Please use concise and easy-to-understand language, and make good use of bullet 
           ],
         ),
       ]
-      
+
       # 設定の構築
       generate_content_config = types.GenerateContentConfig(
         system_instruction=[
@@ -165,36 +211,61 @@ Please use concise and easy-to-understand language, and make good use of bullet 
         temperature=0.7,
         max_output_tokens=2000,
       )
-      
+
       # 非ストリーミング生成を使用
       response = self.client.models.generate_content(
         model=self.model,
         contents=contents,
         config=generate_content_config,
       )
-      
+
       summary = response.text
-      logger.info(f"要約を生成しました (長さ: {len(summary)} 文字)")
-      
-      return summary
-    
+
+      # トークン使用量を取得（SDKから取得できる場合）
+      input_tokens = None
+      output_tokens = None
+      total_tokens = None
+
+      # 使用トークン情報の抽出を試みる
+      if hasattr(response, 'usage_metadata') and response.usage_metadata:
+        input_tokens = response.usage_metadata.prompt_token_count or getattr(response.usage_metadata, 'input_token_count', None)
+        output_tokens = response.usage_metadata.candidates_token_count or getattr(response.usage_metadata, 'output_token_count', None)
+        total_tokens = response.usage_metadata.total_token_count
+
+      logger.info(f"要約を生成しました (ファイル: {file_name}, 長さ: {len(summary)} 文字)")
+
+      return {
+        "summary": summary,
+        "input_tokens": input_tokens,
+        "output_tokens": output_tokens,
+        "total_tokens": total_tokens,
+        "raw_response": {
+          "model": self.model,
+          "finish_reason": getattr(response, 'finish_reason', None),
+        }
+      }
+
     except Exception as e:
-      logger.error(f"Gemini API エラー: {str(e)}")
+      logger.error(f"Gemini SDK API エラー: {str(e)}")
       raise Exception(f"要約生成エラー: {str(e)}")
   
   async def _generate_summary_with_custom_endpoint(
     self,
     transcription: str,
-    system_prompt: str
-  ) -> str:
+    system_prompt: str,
+    file_name: str = None
+  ) -> dict:
     """
     カスタムエンドポイントを使用して要約を生成
     httpxで直接REST APIを呼び出す
+
+    Returns:
+      dict: summary, input_tokens, output_tokens, total_tokens, raw_response
     """
     try:
       # エンドポイントURLを構築
       url = f"{self.api_endpoint}/models/{self.model}:generateContent"
-      
+
       # リクエストボディを構築（Gemini API形式）
       payload = {
         "contents": [
@@ -219,18 +290,18 @@ Please use concise and easy-to-understand language, and make good use of bullet 
           "maxOutputTokens": 2000
         }
       }
-      
+
       headers = {
         "Content-Type": "application/json",
         "x-goog-api-key": self.api_key
       }
-      
+
       async with httpx.AsyncClient(timeout=120.0) as client:
         response = await client.post(url, json=payload, headers=headers)
         response.raise_for_status()
-        
+
         result = response.json()
-        
+
         # レスポンスからテキストを抽出
         if "candidates" in result and len(result["candidates"]) > 0:
           candidate = result["candidates"][0]
@@ -238,15 +309,34 @@ Please use concise and easy-to-understand language, and make good use of bullet 
             parts = candidate["content"]["parts"]
             if len(parts) > 0 and "text" in parts[0]:
               summary = parts[0]["text"]
-              logger.info(f"要約を生成しました (カスタムエンドポイント, 長さ: {len(summary)} 文字)")
-              return summary
-        
+
+              # トークン使用量を取得（APIレスポンスから）
+              input_tokens = None
+              output_tokens = None
+              total_tokens = None
+
+              if "usageMetadata" in result:
+                metadata = result["usageMetadata"]
+                input_tokens = metadata.get("promptTokenCount")
+                output_tokens = metadata.get("candidatesTokenCount")
+                total_tokens = metadata.get("totalTokenCount")
+
+              logger.info(f"要約を生成しました (カスタムエンドポイント, ファイル: {file_name}, 長さ: {len(summary)} 文字)")
+
+              return {
+                "summary": summary,
+                "input_tokens": input_tokens,
+                "output_tokens": output_tokens,
+                "total_tokens": total_tokens,
+                "raw_response": result
+              }
+
         raise Exception(f"要約の抽出に失敗しました: {result}")
-    
+
     except httpx.HTTPStatusError as e:
       logger.error(f"Custom Endpoint HTTPエラー: {e.response.status_code} - {e.response.text}")
       raise Exception(f"要約生成エラー: {e.response.status_code}")
-    
+
     except Exception as e:
       logger.error(f"Custom Endpoint エラー: {str(e)}")
       raise Exception(f"要約生成エラー: {str(e)}")
