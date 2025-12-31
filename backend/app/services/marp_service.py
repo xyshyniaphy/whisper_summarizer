@@ -1,306 +1,342 @@
 """
-MARP PPTX Generation Service
+Marp Markdown Generation Service
 
-Creates PowerPoint presentations using Marp CLI from Markdown.
+Generates Marp-compatible markdown from transcriptions for presentation creation.
+Uses Gemini AI to intelligently structure content into topics.
 """
 
-import subprocess
+import json
 import logging
+import subprocess
 from pathlib import Path
-from datetime import datetime
+from typing import Any
+import asyncio
 
 from app.models.transcription import Transcription
+from app.core.gemini import get_gemini_client
 
 logger = logging.getLogger(__name__)
 
 
+# Prompt for structuring transcription into Marp presentation format
+STRUCTURE_PROMPT = """你是一个专业的演示文稿设计师。请将这段转录文本转换为结构化的Marp Markdown演示文稿。
+
+转录内容:
+{transcription_text}
+
+输出格式（只返回JSON，不要有其他文字）:
+{{
+  "title": "从文件名或内容提取的标题",
+  "topics": [
+    {{"title": "主题标题", "content": "要点1\\n要点2\\n要点3"}},
+    {{"title": "另一个主题", "content": "要点1\\n要点2\\n要点3"}}
+  ],
+  "summary": ["总结要点1", "总结要点2", "总结要点3", "总结要点4"],
+  "appointments": ["后续安排1", "后续安排2"]
+}}
+
+要求:
+- 提取3-5个主要主题
+- 每个主题用3-5个简洁的要点说明
+- 总结最多4-5行
+- 后续安排：未来的日期、截止日期、行动项、待办事项
+- 如果没有明确的后续安排，返回空数组
+- 只返回JSON，不要有其他文字或解释
+- content字段中的要点用\\n分隔"""
+
+
 class MarpService:
-    """Service for generating PowerPoint presentations using Marp CLI."""
+    """Service for generating Marp-compatible markdown from transcriptions."""
 
-    # Characters per slide (rough estimate for content fitting)
-    CHARS_PER_SLIDE = 800
-    # Maximum slides for content (to prevent huge files)
-    MAX_CONTENT_SLIDES = 50
-
-    def __init__(self, output_dir: Path = Path("/app/data/output")):
+    def __init__(
+        self,
+        output_dir: Path = Path("/app/data/output"),
+        theme: str = "gaia",
+        size: str = "16:9"
+    ):
         """
         Initialize Marp service.
 
         Args:
-            output_dir: Directory to save generated PPTX files
+            output_dir: Directory to save generated markdown files
+            theme: Marp theme (gaia, default, uncover)
+            size: Slide size (16:9, 4:3)
         """
         self.output_dir = output_dir
         self.output_dir.mkdir(parents=True, exist_ok=True)
+        self.theme = theme
+        self.size = size
+        self.gemini_client = get_gemini_client()
 
-    def generate_pptx(
-        self,
-        transcription: Transcription,
-        summary_text: str | None = None
-    ) -> Path:
-        """
-        Generate a PowerPoint presentation using Marp CLI.
-
-        Args:
-            transcription: Transcription model instance
-            summary_text: Optional AI summary text
-
-        Returns:
-            Path to the generated PPTX file
-
-        Raises:
-            ValueError: If transcription has no content
-            RuntimeError: If Marp CLI execution fails
-        """
-        if not transcription.original_text:
-            raise ValueError("Cannot generate PPTX: transcription has no content")
-
-        # Generate Marp Markdown content
-        markdown_content = self._generate_marp_markdown(transcription, summary_text)
-
-        # Write Markdown to temporary file
-        md_path = self.output_dir / f"{transcription.id}.md"
-        md_path.write_text(markdown_content, encoding="utf-8")
-
-        # Run Marp CLI to convert to PPTX
-        pptx_path = self.output_dir / f"{transcription.id}.pptx"
-
-        try:
-            result = subprocess.run(
-                [
-                    "marp",
-                    str(md_path),
-                    "--no-stdin",
-                    "--allow-local-files",
-                    "-o", str(pptx_path)
-                ],
-                capture_output=True,
-                text=True,
-                timeout=300,  # 5 minutes timeout
-                check=True
-            )
-            logger.info(f"Marp CLI output: {result.stdout}")
-
-            # Clean up temporary Markdown file
-            md_path.unlink(missing_ok=True)
-
-            return pptx_path
-
-        except subprocess.TimeoutExpired:
-            logger.error(f"Marp CLI timeout for transcription {transcription.id}")
-            raise RuntimeError("PPTX generation timed out")
-        except subprocess.CalledProcessError as e:
-            logger.error(f"Marp CLI failed: {e.stderr}")
-            raise RuntimeError(f"PPTX generation failed: {e.stderr}")
-        except Exception as e:
-            logger.error(f"Unexpected error during PPTX generation: {e}")
-            raise RuntimeError(f"PPTX generation error: {e}")
-
-    def _generate_marp_markdown(
+    async def generate_markdown(
         self,
         transcription: Transcription,
         summary_text: str | None = None
     ) -> str:
         """
-        Generate Marp Markdown content from transcription data.
+        Generate Marp-compatible markdown from transcription.
 
         Args:
             transcription: Transcription model instance
             summary_text: Optional AI summary text
 
         Returns:
-            Marp-formatted Markdown string
+            Markdown string in Marp format
+
+        Raises:
+            ValueError: If transcription has no content
+            Exception: If AI generation fails
         """
+        if not transcription.original_text:
+            raise ValueError("Cannot generate markdown: transcription has no content")
+
+        # Step 1: Use AI to structure the content
+        structure = await self._create_structure_from_ai(transcription)
+
+        # Step 2: Build Marp markdown
+        markdown = self._build_marp_markdown(structure, transcription)
+
+        return markdown
+
+    async def _create_structure_from_ai(self, transcription: Transcription) -> dict[str, Any]:
+        """
+        Use Gemini AI to structure transcription into presentation format.
+
+        Args:
+            transcription: Transcription model instance
+
+        Returns:
+            Dictionary with title, topics, summary, appointments
+
+        Raises:
+            Exception: If AI generation or parsing fails
+        """
+        # Create prompt for AI
+        prompt = STRUCTURE_PROMPT.format(
+            transcription_text=transcription.original_text[:15000]  # Limit length
+        )
+
+        # Call Gemini API - use generate_summary with custom prompt
+        response = await self.gemini_client.generate_summary(
+            transcription=transcription.original_text[:15000],
+            file_name=transcription.file_name,
+            system_prompt=prompt
+        )
+
+        ai_response = response.summary
+
+        # Parse JSON response
+        try:
+            # Extract JSON from response (AI may add surrounding text)
+            json_start = ai_response.find("{")
+            json_end = ai_response.rfind("}") + 1
+
+            if json_start == -1 or json_end == 0:
+                raise ValueError("No JSON found in AI response")
+
+            json_str = ai_response[json_start:json_end]
+            structure = json.loads(json_str)
+
+            # Validate structure
+            required_keys = ["title", "topics", "summary", "appointments"]
+            for key in required_keys:
+                if key not in structure:
+                    structure[key] = [] if key in ["summary", "appointments"] else ""
+
+            return structure
+
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse AI response as JSON: {e}")
+            logger.error(f"AI response: {ai_response}")
+            raise Exception(f"Failed to parse AI response: {e}")
+
+    def _build_marp_markdown(
+        self,
+        structure: dict[str, Any],
+        transcription: Transcription
+    ) -> str:
+        """
+        Build Marp markdown from structured content.
+
+        Args:
+            structure: Dictionary with title, topics, summary, appointments
+            transcription: Transcription model instance
+
+        Returns:
+            Complete Marp markdown string
+        """
+        lines = []
+
         # Frontmatter
-        frontmatter = """---
-marp: true
-theme: gaia
-paginate: true
-backgroundColor: #fff
-color: #333
-style: |
-  section {
-    font-family: 'Helvetica', 'Noto Sans SC', sans-serif;
-    font-size: 24px;
-  }
-  h1 {
-    color: #1971c2;
-  }
-  h2 {
-    color: #1864ab;
-  }
-  strong {
-    color: #1971c2;
-  }
----
+        lines.append("---")
+        lines.append(f"theme: {self.theme}")
+        lines.append(f"size: {self.size}")
+        lines.append("style: |")
+        lines.append("  section {")
+        lines.append("    font-family: 'Noto Sans CJK SC', 'Microsoft YaHei', 'SimHei', sans-serif;")
+        lines.append("    font-size: 24px;")
+        lines.append("  }")
+        lines.append("  h1, h2, h3 {")
+        lines.append("    font-family: 'Noto Sans CJK SC', 'Microsoft YaHei', 'SimHei', sans-serif;")
+        lines.append("  }")
+        lines.append("---")
+        lines.append("")
 
-<!-- _class: lead -->
-
-"""
-
-        # Title slide
-        duration_info = ""
+        # Slide 1: Title slide
+        lines.append("# <!-- fit --> " + structure.get("title", transcription.file_name))
+        lines.append("")
+        lines.append("*转录文档*")
         if transcription.duration_seconds:
             minutes = int(transcription.duration_seconds // 60)
             seconds = int(transcription.duration_seconds % 60)
-            duration_info = f" | 时长: {minutes}:{seconds:02d}"
+            lines.append(f"*时长: {minutes}:{seconds:02d}*")
+        lines.append("")
+        lines.append("---")
+        lines.append("")
 
-        title_slide = f"""# {transcription.file_name}
+        # Slide 2: Table of Contents
+        lines.append("## 目录")
+        lines.append("")
+        for topic in structure.get("topics", []):
+            title = topic.get("title", "")
+            lines.append(f"- {title}")
+        if structure.get("summary"):
+            lines.append("- 总结")
+        if structure.get("appointments"):
+            lines.append("- 后续安排")
+        lines.append("")
+        lines.append("---")
+        lines.append("")
 
-转录文档{duration_info} | 生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M')}
+        # Slides 3+: Topics
+        for topic in structure.get("topics", []):
+            title = topic.get("title", "")
+            content = topic.get("content", "")
 
----
+            lines.append(f"## {title}")
+            lines.append("")
 
-# 目录
+            # Split content by newlines and create bullet points
+            if content:
+                for point in content.split("\\n"):
+                    point = point.strip()
+                    if point:
+                        lines.append(f"- {point}")
 
-- 转录内容
-- AI摘要
+            lines.append("")
+            lines.append("---")
+            lines.append("")
 
----
+        # Slide: Summary
+        if structure.get("summary"):
+            lines.append("## 总结")
+            lines.append("")
+            for point in structure["summary"][:5]:  # Max 5 lines
+                lines.append(f"- {point}")
+            lines.append("")
+            lines.append("---")
+            lines.append("")
 
-"""
+        # Slide: Future appointments
+        if structure.get("appointments"):
+            lines.append("## 后续安排")
+            lines.append("")
+            for appointment in structure["appointments"]:
+                lines.append(f"- {appointment}")
+            lines.append("")
+            lines.append("---")
+            lines.append("")
 
-        # AI Summary slide (if available)
-        summary_slides = ""
-        if summary_text:
-            summary_slides = self._create_summary_slides(summary_text)
+        # Remove trailing separator if any
+        if lines and lines[-1] == "---":
+            lines = lines[:-1]
+        if lines and lines[-1] == "":
+            lines = lines[:-1]
 
-        # Content slides
-        content_slides = self._create_content_slides(transcription.original_text)
+        return "\n".join(lines)
 
-        return frontmatter + title_slide + summary_slides + content_slides
-
-    def _create_summary_slides(self, summary_text: str) -> str:
-        """Create Marp slides for AI summary."""
-        # Split into paragraphs and create bullet points
-        paragraphs = [p.strip() for p in summary_text.split('\n\n') if p.strip()]
-
-        bullets = "\n".join(f"- {para}" for para in paragraphs[:10])  # Max 10 bullets
-
-        return f"""# AI 摘要
-
-{bullets}
-
----
-
-"""
-
-    def _create_content_slides(self, content: str) -> str:
-        """Create Marp slides for transcription content."""
-        # Split content into chunks
-        chunks = self._chunk_content(content)
-
-        slides = []
-        for i, chunk in enumerate(chunks, start=1):
-            if len(chunks) > 1:
-                title = f"# 转录内容 ({i}/{len(chunks)})"
-            else:
-                title = "# 转录内容"
-
-            # Convert chunk content to slides with proper formatting
-            formatted_content = self._format_content_for_marp(chunk)
-            slides.append(f"""{title}
-
-{formatted_content}
-
----
-""")
-
-        return "\n".join(slides)
-
-    def _format_content_for_marp(self, content: str) -> str:
+    def save_markdown(
+        self,
+        transcription_id: str,
+        markdown: str
+    ) -> Path:
         """
-        Format content for Marp Markdown.
-
-        - Preserve paragraph structure
-        - Escape special Markdown characters
-        - Limit line length for readability
-        """
-        lines = content.split('\n')
-        formatted_lines = []
-
-        for line in lines:
-            line = line.strip()
-            if not line:
-                continue
-
-            # Escape special Markdown characters but preserve basic formatting
-            line = self._escape_markdown(line)
-            formatted_lines.append(line)
-
-        return "\n\n".join(formatted_lines)
-
-    def _escape_markdown(self, text: str) -> str:
-        """
-        Escape special Markdown characters.
-
-        Note: We intentionally don't escape some characters like *, _ to allow
-        basic formatting that LLMs might generate.
-        """
-        # Characters that must be escaped in Markdown
-        special_chars = {
-            '#': '\\#',
-            '`': '\\`',
-            '[': '\\[',
-            ']': '\\]',
-            '<': '\\<',
-            '>': '\\>',
-            '|': '\\|',
-        }
-
-        for char, escaped in special_chars.items():
-            text = text.replace(char, escaped)
-
-        return text
-
-    def _chunk_content(self, content: str) -> list[str]:
-        """
-        Split long content into chunks suitable for slides.
+        Save markdown to file.
 
         Args:
-            content: Full transcription text
+            transcription_id: Transcription ID
+            markdown: Markdown content
 
         Returns:
-            List of content chunks
+            Path to saved markdown file
         """
-        if len(content) <= self.CHARS_PER_SLIDE:
-            return [content]
+        output_path = self.output_dir / f"{transcription_id}.md"
+        output_path.write_text(markdown, encoding="utf-8")
+        logger.info(f"Saved markdown to {output_path}")
+        return output_path
 
-        chunks = []
-        current_chunk = []
-        current_length = 0
-        slide_count = 0
+    def convert_to_pptx(
+        self,
+        markdown_path: Path,
+        output_path: Path | None = None
+    ) -> Path:
+        """
+        Convert markdown to PPTX using Marp CLI.
 
-        # Split by lines first to preserve paragraph structure
-        lines = content.split('\n')
+        Args:
+            markdown_path: Path to markdown file
+            output_path: Optional output path (defaults to markdown_path with .pptx)
 
-        for line in lines:
-            line_length = len(line) + 1  # +1 for newline
+        Returns:
+            Path to generated PPTX file
 
-            # Check if we need a new slide
-            if (current_length + line_length > self.CHARS_PER_SLIDE and
-                    current_chunk):
-                # Check if we're about to exceed max slides
-                if slide_count >= self.MAX_CONTENT_SLIDES - 1:
-                    # Append truncation to current chunk (last chunk) and stop
-                    current_chunk.append(f"\n[内容过长，已截断。前 {slide_count + 1} 张幻灯片已包含前 "
-                                        f"{(slide_count + 1) * self.CHARS_PER_SLIDE} 字符]")
-                    chunks.append('\n'.join(current_chunk))
-                    current_chunk = []  # Clear to prevent adding extra chunk after loop
-                    break
-                # Add current chunk and start a new one
-                chunks.append('\n'.join(current_chunk))
-                current_chunk = []
-                current_length = 0
-                slide_count += 1
+        Raises:
+            Exception: If Marp CLI conversion fails
+        """
+        if output_path is None:
+            output_path = markdown_path.with_suffix(".pptx")
 
-            current_chunk.append(line)
-            current_length += line_length
+        # Marp CLI command
+        cmd = [
+            "marp",
+            str(markdown_path),
+            "-o", str(output_path),
+            "--theme", self.theme,
+            "--allow-local-files"
+        ]
 
-        # Add remaining content (only if we haven't hit the limit)
-        if current_chunk:
-            chunks.append('\n'.join(current_chunk))
+        try:
+            logger.info(f"Running Marp CLI: {' '.join(cmd)}")
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=60,
+                check=True
+            )
 
-        return chunks
+            logger.info(f"Marp conversion successful: {output_path}")
+            if result.stdout:
+                logger.debug(f"Marp stdout: {result.stdout}")
+
+            return output_path
+
+        except subprocess.TimeoutExpired:
+            raise Exception(f"Marp CLI timeout after 60 seconds")
+        except subprocess.CalledProcessError as e:
+            logger.error(f"Marp CLI error: {e.stderr}")
+            raise Exception(f"Marp CLI conversion failed: {e.stderr}")
+        except FileNotFoundError:
+            raise Exception("Marp CLI not found. Install with: npm install -g @marp-team/marp-cli")
+
+    def markdown_exists(self, transcription_id: str) -> bool:
+        """Check if markdown file exists for given transcription."""
+        markdown_path = self.output_dir / f"{transcription_id}.md"
+        return markdown_path.exists()
+
+    def get_markdown_path(self, transcription_id: str) -> Path:
+        """Get the path to markdown file for given transcription."""
+        return self.output_dir / f"{transcription_id}.md"
 
     def pptx_exists(self, transcription_id: str) -> bool:
         """Check if PPTX file exists for given transcription."""
@@ -321,5 +357,4 @@ def get_marp_service() -> MarpService:
     global _marp_service
     if _marp_service is None:
         _marp_service = MarpService()
-        logger.info("Initialized Marp service")
     return _marp_service

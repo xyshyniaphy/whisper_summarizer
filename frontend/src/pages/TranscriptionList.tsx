@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Trash2, AlertCircle } from 'lucide-react'
+import { Trash2, AlertCircle, Loader2 } from 'lucide-react'
 import { api } from '../services/api'
 import { Transcription } from '../types'
 import { AudioUploader } from '../components/AudioUploader'
@@ -18,21 +18,19 @@ const STAGE_LABELS: Record<string, string> = {
 
 export function TranscriptionList() {
     const [transcriptions, setTranscriptions] = useState<Transcription[]>([])
+    const [isLoading, setIsLoading] = useState(true)
+    const [hasLoaded, setHasLoaded] = useState(false)
     const navigate = useNavigate()
-    const isLoadingRef = useRef(false)
 
     const loadTranscriptions = useCallback(async () => {
-        // Prevent duplicate calls (React 18 StrictMode)
-        if (isLoadingRef.current) return
-        isLoadingRef.current = true
-
         try {
             const data = await api.getTranscriptions()
             setTranscriptions(data)
         } catch (e) {
             console.error(e)
         } finally {
-            isLoadingRef.current = false
+            setIsLoading(false)
+            setHasLoaded(true)
         }
     }, [])
 
@@ -77,7 +75,12 @@ export function TranscriptionList() {
 
             <h2 className="text-2xl font-bold mb-4 mt-8">转录历史</h2>
             <Card>
-                {transcriptions.length > 0 ? (
+                {isLoading ? (
+                    <div className="flex flex-col items-center justify-center py-16">
+                        <Loader2 className="w-10 h-10 text-blue-500 dark:text-blue-400 animate-spin" />
+                        <p className="mt-4 text-gray-500 dark:text-gray-400">加载中...</p>
+                    </div>
+                ) : transcriptions.length > 0 ? (
                     <div className="overflow-x-auto">
                         <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
                             <thead className="bg-gray-50 dark:bg-gray-900">

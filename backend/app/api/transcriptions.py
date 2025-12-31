@@ -160,7 +160,9 @@ async def download_transcription(
 
 async def _generate_pptx_task(transcription_id: str, db: Session) -> None:
   """
-  后台任务：使用Marp生成PPTX文件
+  后台任务：使用Marp生成PPTX文件（AI驱动结构化）
+
+  使用Gemini AI智能提取主题、生成目录、总结和后续安排。
 
   Args:
     transcription_id: 转录ID
@@ -189,16 +191,24 @@ async def _generate_pptx_task(transcription_id: str, db: Session) -> None:
     if transcription.summaries and len(transcription.summaries) > 0:
       summary_text = transcription.summaries[0].summary_text
 
-    # 使用Marp生成PPTX
+    # 使用AI生成Marp Markdown结构
     marp_service = get_marp_service()
-    marp_service.generate_pptx(transcription, summary_text)
+    markdown = await marp_service.generate_markdown(transcription, summary_text)
+
+    # 保存Markdown文件
+    md_path = marp_service.save_markdown(transcription_id, markdown)
+    logger.info(f"Markdown生成成功: {md_path}")
+
+    # 转换为PPTX
+    pptx_path = marp_service.convert_to_pptx(md_path)
+    logger.info(f"PPTX转换成功: {pptx_path}")
 
     # Update status to ready
     transcription.pptx_status = "ready"
     transcription.pptx_error_message = None
     db.commit()
 
-    logger.info(f"PPTX生成成功 (Marp): {transcription_id}.pptx")
+    logger.info(f"PPTX生成成功 (AI结构化): {transcription_id}.pptx")
 
   except Exception as e:
     # Update status to error
@@ -326,4 +336,122 @@ async def get_pptx_status(
       "status": status,
       "exists": exists
     }
+  )
+
+
+@router.get("/{transcription_id}/markdown")
+async def get_markdown(
+  transcription_id: str,
+  db: Session = Depends(get_db),
+  current_user: dict = Depends(get_current_active_user)
+):
+  """
+  获取Marp Markdown内容
+
+  使用AI生成结构化的Markdown内容（包含主题、目录、总结、后续安排）。
+  如果markdown文件不存在，则重新生成。
+
+  Args:
+    transcription_id: 转录ID
+
+  Returns:
+    JSONResponse: Markdown内容
+  """
+  # 验证转录所有权
+  transcription = db.query(Transcription).filter(
+    Transcription.id == transcription_id,
+    Transcription.user_id == current_user.get("id")
+  ).first()
+
+  if not transcription:
+    raise HTTPException(status_code=404, detail="未找到转录")
+
+  if not transcription.original_text:
+    raise HTTPException(status_code=400, detail="转录内容为空")
+
+  marp_service = get_marp_service()
+
+  # Check if markdown exists
+  if marp_service.markdown_exists(transcription_id):
+    md_path = marp_service.get_markdown_path(transcription_id)
+    markdown = md_path.read_text(encoding="utf-8")
+    return JSONResponse(
+      content={
+        "markdown": markdown,
+        "cached": True
+      }
+    )
+
+  # Generate new markdown
+  try:
+    # 获取摘要
+    summary_text = None
+    if transcription.summaries and len(transcription.summaries) > 0:
+      summary_text = transcription.summaries[0].summary_text
+
+    markdown = await marp_service.generate_markdown(transcription, summary_text)
+
+    # Save markdown for future use
+    marp_service.save_markdown(transcription_id, markdown)
+
+    return JSONResponse(
+      content={
+        "markdown": markdown,
+        "cached": False
+      }
+    )
+
+  except Exception as e:
+    logger.error(f"Markdown生成失败 {transcription_id}: {e}")
+    raise HTTPException(status_code=500, detail=f"Markdown生成失败: {str(e)}")
+
+
+@router.get("/{transcription_id}/download-markdown")
+async def download_markdown(
+  transcription_id: str,
+  db: Session = Depends(get_db),
+  current_user: dict = Depends(get_current_active_user)
+):
+  """
+  下载Marp Markdown文件
+
+  Args:
+    transcription_id: 转录ID
+
+  Returns:
+    FileResponse: Markdown文件下载
+  """
+  # 验证转录所有权
+  transcription = db.query(Transcription).filter(
+    Transcription.id == transcription_id,
+    Transcription.user_id == current_user.get("id")
+  ).first()
+
+  if not transcription:
+    raise HTTPException(status_code=404, detail="未找到转录")
+
+  marp_service = get_marp_service()
+  md_path = marp_service.get_markdown_path(transcription_id)
+
+  # Generate if doesn't exist
+  if not md_path.exists():
+    try:
+      # 获取摘要
+      summary_text = None
+      if transcription.summaries and len(transcription.summaries) > 0:
+        summary_text = transcription.summaries[0].summary_text
+
+      markdown = await marp_service.generate_markdown(transcription, summary_text)
+      marp_service.save_markdown(transcription_id, markdown)
+    except Exception as e:
+      raise HTTPException(status_code=500, detail=f"Markdown生成失败: {str(e)}")
+
+  # 设置文件名
+  original_filename = Path(transcription.file_name).stem
+  download_filename = f"{original_filename}-marp.md"
+
+  return FileResponse(
+    path=md_path,
+    filename=download_filename,
+    media_type="text/markdown"
   )
