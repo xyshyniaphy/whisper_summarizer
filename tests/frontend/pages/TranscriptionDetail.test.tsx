@@ -1,0 +1,360 @@
+/**
+ * TranscriptionDetailページのテスト
+ *
+ * 転写詳細表示、要約表示、ダウンロード機能、
+ * PPTX生成、ポーリングをテストする。
+ */
+
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { Provider } from 'jotai'
+import TranscriptionDetail from '../../../src/pages/TranscriptionDetail'
+
+// Mock Supabase client
+vi.mock('../../../src/services/supabase', () => ({
+  supabase: {
+    auth: {
+      getSession: vi.fn(() => Promise.resolve({ data: { session: null }, error: null })),
+      onAuthStateChange: vi.fn(() => ({
+        data: { subscription: { unsubscribe: vi.fn() } }
+      }))
+    }
+  }
+}))
+
+// Mock API
+const mockGetTranscription = vi.fn()
+const mockDownloadFile = vi.fn()
+const mockGeneratePptx = vi.fn()
+const mockGetPptxStatus = vi.fn()
+
+vi.mock('../../../src/services/api', () => ({
+  api: {
+    getTranscription: (id: string) => mockGetTranscription(id),
+    downloadFile: (id: string, format: string) => mockDownloadFile(id, format),
+    generatePptx: (id: string) => mockGeneratePptx(id),
+    getPptxStatus: (id: string) => mockGetPptxStatus(id),
+    getDownloadUrl: (id: string, format: string) => `/api/transcriptions/${id}/download?format=${format}`
+  }
+}))
+
+// Mock DOM methods
+global.URL.createObjectURL = vi.fn(() => 'blob:mock-url') as any
+global.URL.revokeObjectURL = vi.fn() as any
+
+const wrapper = ({ children }: { children: React.ReactNode }) => (
+  <BrowserRouter>
+    <Provider>{children}</Provider>
+  </BrowserRouter>
+)
+
+// Helper to render with route
+const renderWithRoute = (id: string) => {
+  return render(
+    <Routes>
+      <Route path="/transcriptions/:id" element={<TranscriptionDetail />} />
+    </Routes>,
+    {
+      wrapper,
+      path: `/transcriptions/${id}`
+    }
+  )
+}
+
+// Mock transcription data
+const mockTranscription = {
+  id: 'test-1',
+  user_id: 'user-1',
+  file_name: 'test-audio.mp3',
+  original_text: 'This is a test transcription.\n\nIt has multiple paragraphs.\n\nAnd even more content to display.',
+  language: 'en',
+  duration_seconds: 120.5,
+  stage: 'completed',
+  error_message: null,
+  retry_count: 0,
+  created_at: '2024-01-01T00:00:00Z',
+  updated_at: '2024-01-01T00:05:00Z',
+  summaries: [
+    {
+      id: 'summary-1',
+      transcription_id: 'test-1',
+      summary_text: 'This is a test summary with key points.',
+      created_at: '2024-01-01T00:06:00Z'
+    }
+  ]
+}
+
+const mockTranscriptionProcessing = {
+  ...mockTranscription,
+  stage: 'transcribing',
+  original_text: null
+}
+
+const mockTranscriptionFailed = {
+  ...mockTranscription,
+  stage: 'failed',
+  error_message: 'Audio file is corrupted'
+}
+
+describe('TranscriptionDetail', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.useFakeTimers()
+    mockGetTranscription.mockResolvedValue(mockTranscription)
+    mockDownloadFile.mockResolvedValue(new Blob(['test content']))
+    mockGeneratePptx.mockResolvedValue({ status: 'generating' })
+    mockGetPptxStatus.mockResolvedValue({ status: 'ready', exists: true })
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  describe('Rendering', () => {
+    it('転写詳細が正常にレンダリングされる', async () => {
+      renderWithRoute('test-1')
+
+      await waitFor(() => {
+        expect(screen.getByText('test-audio.mp3')).toBeTruthy()
+      })
+    })
+
+    it('ローディング状態が表示される', () => {
+      mockGetTranscription.mockImplementation(() => new Promise(() => {}))
+      renderWithRoute('test-1')
+
+      expect(screen.queryByText(/test-audio.mp3/)).toBeNull()
+    })
+
+    it('存在しない転写の場合、「未找到」が表示される', async () => {
+      mockGetTranscription.mockResolvedValue(null as any)
+      renderWithRoute('nonexistent')
+
+      await waitFor(() => {
+        expect(screen.getByText('未找到')).toBeTruthy()
+      })
+    })
+
+    it('戻るボタンが表示される', async () => {
+      renderWithRoute('test-1')
+
+      await waitFor(() => {
+        expect(screen.getByText('← 返回列表')).toBeTruthy()
+      })
+    })
+  })
+
+  describe('Transcription Display', () => {
+    it('転写テキストが表示される', async () => {
+      renderWithRoute('test-1')
+
+      await waitFor(() => {
+        expect(screen.getByText(/This is a test transcription/)).toBeTruthy()
+      })
+    })
+
+    it('ステータスバッジが正しく表示される', async () => {
+      renderWithRoute('test-1')
+
+      await waitFor(() => {
+        expect(screen.getByText('已完成')).toBeTruthy()
+      })
+    })
+  })
+
+  describe('Error Display', () => {
+    it('エラーメッセージがある場合、エラーカードが表示される', async () => {
+      mockGetTranscription.mockResolvedValue(mockTranscriptionFailed)
+      renderWithRoute('test-1')
+
+      await waitFor(() => {
+        expect(screen.getByText('处理失败')).toBeTruthy()
+        expect(screen.getByText(/Audio file is corrupted/)).toBeTruthy()
+      })
+    })
+  })
+
+  describe('Summary Display', () => {
+    it('要約が表示される', async () => {
+      renderWithRoute('test-1')
+
+      await waitFor(() => {
+        expect(screen.getByText('AI摘要')).toBeTruthy()
+        expect(screen.getByText(/This is a test summary/)).toBeTruthy()
+      })
+    })
+
+    it('要約がない場合のメッセージが表示される', async () => {
+      const noSummaryTranscription = { ...mockTranscription, summaries: [] }
+      mockGetTranscription.mockResolvedValue(noSummaryTranscription)
+      renderWithRoute('test-1')
+
+      await waitFor(() => {
+        const summaryText = screen.queryByText(/未找到摘要数据/)
+        expect(summaryText).toBeTruthy()
+      })
+    })
+
+    it('転写中のメッセージが表示される', async () => {
+      mockGetTranscription.mockResolvedValue(mockTranscriptionProcessing)
+      renderWithRoute('test-1')
+
+      await waitFor(() => {
+        expect(screen.getByText(/转录完成后将自动生成摘要/)).toBeTruthy()
+      })
+    })
+  })
+
+  describe('Download Functionality', () => {
+    it('テキストダウンロードボタンが表示される', async () => {
+      renderWithRoute('test-1')
+
+      await waitFor(() => {
+        expect(screen.getByText('下载文本')).toBeTruthy()
+      })
+    })
+
+    it('SRTダウンロードボタンが表示される', async () => {
+      renderWithRoute('test-1')
+
+      await waitFor(() => {
+        expect(screen.getByText('下载字幕(SRT)')).toBeTruthy()
+      })
+    })
+
+    it('テキストダウンロードが動作する', async () => {
+      const user = userEvent.setup()
+      renderWithRoute('test-1')
+
+      await waitFor(() => {
+        expect(screen.getByText('下载文本')).toBeTruthy()
+      })
+
+      const downloadButton = screen.getByText('下载文本')
+      await user.click(downloadButton)
+
+      await waitFor(() => {
+        expect(mockDownloadFile).toHaveBeenCalledWith('test-1', 'txt')
+      })
+    })
+
+    it('SRTダウンロードが動作する', async () => {
+      const user = userEvent.setup()
+      renderWithRoute('test-1')
+
+      await waitFor(() => {
+        expect(screen.getByText('下载字幕(SRT)')).toBeTruthy()
+      })
+
+      const downloadButton = screen.getByText('下载字幕(SRT)')
+      await user.click(downloadButton)
+
+      await waitFor(() => {
+        expect(mockDownloadFile).toHaveBeenCalledWith('test-1', 'srt')
+      })
+    })
+  })
+
+  describe('PPTX Functionality', () => {
+    it('PPTX生成ボタンが表示される', async () => {
+      mockGetPptxStatus.mockResolvedValue({ status: 'not-started', exists: false })
+      renderWithRoute('test-1')
+
+      await waitFor(() => {
+        expect(screen.getByText('生成PPT')).toBeTruthy()
+      })
+    })
+
+    it('PPTXが準備完了の場合、ダウンロードボタンが表示される', async () => {
+      renderWithRoute('test-1')
+
+      await waitFor(() => {
+        expect(screen.getByText('下载PPT')).toBeTruthy()
+      })
+    })
+
+    it('PPTX生成中の場合、ローディング表示がされる', async () => {
+      mockGetPptxStatus.mockResolvedValue({ status: 'generating', exists: false })
+      mockGeneratePptx.mockResolvedValue({ status: 'generating', message: 'Generating' })
+      renderWithRoute('test-1')
+
+      await waitFor(() => {
+        expect(screen.getByText(/生成中/)).toBeTruthy()
+      })
+    })
+
+    it('PPTX生成をクリックするとAPIが呼ばれる', async () => {
+      mockGetPptxStatus.mockResolvedValue({ status: 'not-started', exists: false })
+      const user = userEvent.setup()
+      renderWithRoute('test-1')
+
+      await waitFor(() => {
+        expect(screen.getByText('生成PPT')).toBeTruthy()
+      })
+
+      const generateButton = screen.getByText('生成PPT')
+      await user.click(generateButton)
+
+      await waitFor(() => {
+        expect(mockGeneratePptx).toHaveBeenCalledWith('test-1')
+      })
+    })
+  })
+
+  describe('Navigation', () => {
+    it('戻るボタンをクリックするとリストに戻る', async () => {
+      const user = userEvent.setup()
+      renderWithRoute('test-1')
+
+      await waitFor(() => {
+        expect(screen.getByText('← 返回列表')).toBeTruthy()
+      })
+
+      const backButton = screen.getByText('← 返回列表')
+      await user.click(backButton)
+    })
+  })
+
+  describe('Long Text Truncation', () => {
+    it('長いテキストの場合、省略表示される', async () => {
+      const longText = 'Line\n'.repeat(300)
+      const longTranscription = { ...mockTranscription, original_text: longText }
+      mockGetTranscription.mockResolvedValue(longTranscription)
+      renderWithRoute('test-1')
+
+      await waitFor(() => {
+        expect(screen.getByText(/剩余.*行/)).toBeTruthy()
+      })
+    })
+  })
+
+  describe('Polling Behavior', () => {
+    it('処理中の転写はポーリングされる', async () => {
+      mockGetTranscription.mockResolvedValue(mockTranscriptionProcessing)
+      renderWithRoute('test-1')
+
+      await waitFor(() => {
+        expect(mockGetTranscription).toHaveBeenCalled()
+      })
+
+      // Fast forward timers to test polling
+      vi.advanceTimersByTime(3000)
+    })
+
+    it '完了した転写はポーリングされない', async () => {
+      renderWithRoute('test-1')
+
+      await waitFor(() => {
+        expect(screen.getByText('已完成')).toBeTruthy()
+      })
+
+      // No additional calls should be made after completion
+      const initialCallCount = mockGetTranscription.mock.calls.length
+      vi.advanceTimersByTime(5000)
+
+      expect(mockGetTranscription.mock.calls.length).toBe(initialCallCount)
+    })
+  })
+})
