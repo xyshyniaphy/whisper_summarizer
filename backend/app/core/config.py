@@ -24,7 +24,6 @@ class Settings(BaseSettings):
     GEMINI_API_ENDPOINT: Optional[str] = None  # カスタムエンドポイント（オプション）
     
     # Backend
-    SECRET_KEY: str = "your-secret-key-change-in-production"
     CORS_ORIGINS: str = "http://localhost:3000"
     LOG_LEVEL: str = "INFO"
     

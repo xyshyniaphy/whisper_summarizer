@@ -202,7 +202,6 @@ WHISPER_LANGUAGE=zh
 WHISPER_THREADS=4
 
 # Backend
-SECRET_KEY=your-secret
 CORS_ORIGINS=http://localhost:3000
 ```
 
