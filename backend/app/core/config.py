@@ -35,6 +35,17 @@ class Settings(BaseSettings):
     # Audio Processing
     AUDIO_PARALLELISM: int = 1  # Max concurrent audio transcriptions (default: 1)
 
+
+    # Audio Chunking (for faster transcription of long audio)
+    ENABLE_CHUNKING: bool = True  # Master toggle for chunking feature
+    CHUNK_SIZE_MINUTES: int = 10  # Target chunk length in minutes
+    CHUNK_OVERLAP_SECONDS: int = 15  # Overlap duration in seconds
+    MAX_CONCURRENT_CHUNKS: int = 2  # Max chunks to process in parallel (CPU-based)
+    USE_VAD_SPLIT: bool = True  # Use Voice Activity Detection for smart splitting
+    VAD_SILENCE_THRESHOLD: int = -30  # dB threshold for silence detection
+    VAD_MIN_SILENCE_DURATION: float = 0.5  # Minimum silence duration in seconds
+    MERGE_STRATEGY: str = "lcs"  # Merge strategy: "lcs" (text-based) or "timestamp" (simple)
+
     class Config:
         env_file = ".env"
         case_sensitive = True

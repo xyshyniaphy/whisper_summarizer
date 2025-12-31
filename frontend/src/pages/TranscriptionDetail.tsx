@@ -9,11 +9,11 @@ import { Badge } from '../components/ui/Badge'
 
 // Stage display mapping
 const STAGE_LABELS: Record<string, string> = {
-  uploading: '上传中',
-  transcribing: '转录中',
-  summarizing: '摘要生成中',
-  completed: '已完成',
-  failed: '失败'
+    uploading: '上传中',
+    transcribing: '转录中',
+    summarizing: '摘要生成中',
+    completed: '已完成',
+    failed: '失败'
 }
 
 // 表示用に最初の200行を取得
@@ -166,7 +166,7 @@ export function TranscriptionDetail() {
 
     const displayText = transcription.original_text
         ? getDisplayText(transcription.original_text, 200)
-        : '文字起こし中、または結果がありません...'
+        : '转录完成后将自动生成。'
 
     const downloadUrlTxt = api.getDownloadUrl(transcription.id, 'txt')
     const downloadUrlSrt = api.getDownloadUrl(transcription.id, 'srt')

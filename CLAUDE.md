@@ -201,6 +201,16 @@ GEMINI_API_ENDPOINT=  # Optional custom endpoint
 WHISPER_LANGUAGE=zh
 WHISPER_THREADS=4
 
+# Audio Chunking (for faster transcription of long audio)
+ENABLE_CHUNKING=true              # Master toggle for chunking
+CHUNK_SIZE_MINUTES=10             # Target chunk length in minutes
+CHUNK_OVERLAP_SECONDS=15          # Overlap duration in seconds
+MAX_CONCURRENT_CHUNKS=2           # Max parallel chunks (CPU: 2-4, GPU: 4-8)
+USE_VAD_SPLIT=true                # Use Voice Activity Detection for smart splitting
+VAD_SILENCE_THRESHOLD=-30         # Silence threshold in dB
+VAD_MIN_SILENCE_DURATION=0.5      # Minimum silence duration for split point
+MERGE_STRATEGY=lcs                # Merge strategy: lcs (text-based) or timestamp (simple)
+
 # Backend
 CORS_ORIGINS=http://localhost:3000
 ```
@@ -247,6 +257,79 @@ db.execute(text('ALTER TABLE gemini_request_logs ADD CONSTRAINT gemini_request_l
 ```
 
 **Rebuild required:** After model changes, rebuild backend container: `docker-compose -f docker-compose.dev.yml up -d --build --force-recreate backend`
+
+## Audio Chunking for Faster Transcription
+
+The application implements intelligent audio chunking to significantly speed up transcription of long audio files (10+ minutes).
+
+### Architecture
+
+```
+┌────────────────────────────────────────────────────────────────┐
+│                    transcribe_with_chunking()                  │
+├────────────────────────────────────────────────────────────────┤
+│  1. Split Audio                                                 │
+│     ├── VAD Silence Detection (FFmpeg silencedetect)           │
+│     └── Calculate optimal split points (at silence)            │
+│                                                                 │
+│  2. Extract Chunks (FFmpeg segment extraction)                 │
+│     └── Output: chunk_000.wav, chunk_001.wav, ...              │
+│                                                                 │
+│  3. Parallel Transcription (ThreadPoolExecutor)                 │
+│     ├── Worker 1: chunk_000.wav                                │
+│     ├── Worker 2: chunk_001.wav                                │
+│     └── ...                                                    │
+│                                                                 │
+│  4. Merge Results                                               │
+│     ├── LCS (text-based alignment) - removes duplicates        │
+│     └── Timestamp offset adjustment                             │
+└────────────────────────────────────────────────────────────────┘
+```
+
+### Key Methods in `whisper_service.py`
+
+| Method | Purpose |
+|--------|---------|
+| `transcribe_with_chunking()` | Main orchestrator for chunked transcription |
+| `_detect_silence_segments()` | Use FFmpeg to find silence in audio |
+| `_calculate_split_points()` | Determine optimal split points at silence |
+| `_split_audio_into_chunks()` | Split audio into chunk files |
+| `_transcribe_chunks_parallel()` | Process chunks with ThreadPoolExecutor |
+| `_transcribe_chunk()` | Transcribe single chunk with timestamp offset |
+| `_merge_chunk_results()` | Route to LCS or timestamp-based merge |
+| `_merge_with_lcs()` | Text-based deduplication using `difflib.SequenceMatcher` |
+| `_merge_with_timestamps()` | Simple timestamp filtering (may have duplicates) |
+
+### Config Settings
+
+See Environment Variables section above for all chunking-related settings.
+
+### Trade-offs
+
+| Aspect | Benefit | Consideration |
+|--------|---------|---------------|
+| **Speed** | 2-3x faster for long audio | Higher memory usage |
+| **VAD Splitting** | No words cut at boundaries | Requires silence in audio |
+| **LCS Merging** | Seamless text alignment | More complex than simple join |
+| **Parallel Processing** | Better CPU utilization | More disk I/O for temp chunks |
+
+### Recommended Settings
+
+**whisper.cpp (CPU):**
+```python
+CHUNK_SIZE_MINUTES = 10      # Larger chunks reduce overhead
+MAX_CONCURRENT_CHUNKS = 2    # Based on CPU cores
+USE_VAD_SPLIT = True         # Smart splitting at silence
+MERGE_STRATEGY = "lcs"       # Text-based merging
+```
+
+**faster-whisper (GPU):**
+```python
+CHUNK_SIZE_MINUTES = 15      # Can use larger chunks with GPU
+MAX_CONCURRENT_CHUNKS = 4    # Based on VRAM (INT8 quantization)
+USE_VAD_SPLIT = True
+MERGE_STRATEGY = "lcs"
+```
 
 ## Frontend UI Patterns
 

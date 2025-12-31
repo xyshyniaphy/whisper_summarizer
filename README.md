@@ -68,9 +68,22 @@ GEMINI_API_ENDPOINT=               # オプション: カスタムエンドポ�
 # SupabaseダッシュボードのSettings > Database > Connection Stringから取得
 DATABASE_URL=postgresql://postgres:[YOUR-PASSWORD]@db.[PROJECT-REF].supabase.co:5432/postgres
 
+# バックエンド設定
+CORS_ORIGINS=http://localhost:3000
+
 # Whisper設定
 WHISPER_LANGUAGE=zh  # 文字起こし言語 (zh, ja, en 等)
 WHISPER_THREADS=4    # Whisper処理に使用するスレッド数 (CPUコア数に合わせて調整)
+
+# Audio Chunking (長音声の高速文字起こし)
+ENABLE_CHUNKING=true              # チャンキング機能の有効化
+CHUNK_SIZE_MINUTES=10             # チャンクの長さ（分）- 推奨: CPUで5-10、GPUで10-15
+CHUNK_OVERLAP_SECONDS=15          # チャンク間のオーバーラップ（秒）- VAD有効時15秒、固定分割時30秒
+MAX_CONCURRENT_CHUNKS=2           # 並列処理するチャンク数 - CPU: 2-4、GPU(INT8): 4-8
+USE_VAD_SPLIT=true                # 無音検出によるスマート分割
+VAD_SILENCE_THRESHOLD=-30         # 無音と判定する閾値
+VAD_MIN_SILENCE_DURATION=0.5      # 分割点として判定する最小無音時間（秒）
+MERGE_STRATEGY=lcs                # マージ戦略: lcs（テキストベース）、timestamp（シンプル）
 ```
 
 ### Whisper.cppベースイメージのビルド
@@ -437,6 +450,55 @@ npm run test:headed
 | GET | `/api/transcriptions/{id}/download?format=txt` | テキストダウンロード |
 | GET | `/api/transcriptions/{id}/download?format=srt` | 字幕ダウンロード |
 | GET | `/api/transcriptions/{id}/download?format=pptx` | PowerPointダウンロード |
+
+## Audio Chunking (長音声の高速文字起こし)
+
+長音声ファイル（10分以上）の文字起こし速度を向上させるため、チャンキング機能を実装しています。
+
+### 機能概要
+
+- **並列処理**: 音声を複数のチャンクに分割して同時に処理
+- **VAD分割**: Voice Activity Detectionによる無音区間でのスマート分割
+- **LCSマージ**: Longest Common Subsequenceアルゴリズムによるオーバーラップ領域の正確な結合
+
+### パフォーマンス
+
+| ファイル長 | 従来 | チャンキング (並列数: 2) |
+|-----------|------|------------------------|
+| 10分 | ~3分 | ~1.5分 (2x) |
+| 20分 | ~6分 | ~3分 (2x) |
+| 60分 | ~18分 | ~9分 (2x) |
+
+※ 実際の速度はCPU性能、言語、音質によって変動します
+
+### 設定パラメータ
+
+| パラメータ | デフォルト | 説明 |
+|-----------|-----------|------|
+| `ENABLE_CHUNKING` | true | チャンキング機能の有効化 |
+| `CHUNK_SIZE_MINUTES` | 10 | チャンクの目標長さ（分） |
+| `CHUNK_OVERLAP_SECONDS` | 15 | チャンク間のオーバーラップ（秒） |
+| `MAX_CONCURRENT_CHUNKS` | 2 | 並列処理するチャンク数 |
+| `USE_VAD_SPLIT` | true | 無音検出によるスマート分割 |
+| `MERGE_STRATEGY` | lcs | マージ戦略 (`lcs` または `timestamp`) |
+
+### 推奨設定
+
+**whisper.cpp (CPU only):**
+```bash
+CHUNK_SIZE_MINUTES=10
+MAX_CONCURRENT_CHUNKS=2
+CHUNK_OVERLAP_SECONDS=15
+USE_VAD_SPLIT=true
+```
+
+**faster-whisper (GPU):**
+```bash
+CHUNK_SIZE_MINUTES=15
+MAX_CONCURRENT_CHUNKS=4
+CHUNK_OVERLAP_SECONDS=15
+USE_VAD_SPLIT=true
+```
 
 ## トラブルシューティング
 
