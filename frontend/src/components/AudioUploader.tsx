@@ -18,12 +18,12 @@ export function AudioUploader({}: AudioUploaderProps) {
 
     const validateFile = (file: File): boolean => {
         if (!acceptedTypes.includes(file.type)) {
-            setError('対応していないファイル形式です')
+            setError('不支持的文件格式')
             setIsRejected(true)
             return false
         }
         if (file.size > maxSize) {
-            setError('ファイルサイズが50MBを超えています')
+            setError('文件大小超过50MB')
             setIsRejected(true)
             return false
         }
@@ -61,7 +61,7 @@ export function AudioUploader({}: AudioUploaderProps) {
             navigate(`/transcriptions/${transcription.id}`)
         } catch (err: any) {
             console.error(err)
-            setError(err.response?.data?.detail || 'アップロードに失敗しました')
+            setError(err.response?.data?.detail || '上传失败')
         } finally {
             setLoading(false)
         }
@@ -113,10 +113,10 @@ export function AudioUploader({}: AudioUploaderProps) {
 
                         <div>
                             <p className="text-lg font-medium">
-                                音声ファイルをここにドラッグ&ドロップ
+                                将音频文件拖放到此处
                             </p>
                             <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
-                                またはクリックしてファイルを選択 (mp3, wav, m4a, etc)
+                                或点击选择文件 (mp3, wav, m4a 等)
                             </p>
                         </div>
 

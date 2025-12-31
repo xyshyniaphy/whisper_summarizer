@@ -1,9 +1,22 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth } from './hooks/useAuth'
+import { NavBar } from './components/NavBar'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import { TranscriptionList } from './pages/TranscriptionList'
 import { TranscriptionDetail } from './pages/TranscriptionDetail'
+
+// Layout component for protected routes with navigation
+function ProtectedLayout({ children }: { children: React.ReactNode }) {
+    return (
+        <>
+            <NavBar />
+            <main className="pt-16 min-h-screen bg-gray-50 dark:bg-gray-950">
+                {children}
+            </main>
+        </>
+    )
+}
 
 // Protected route wrapper component
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -21,7 +34,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
         return <Navigate to="/login" replace />
     }
 
-    return <>{children}</>
+    return <ProtectedLayout>{children}</ProtectedLayout>
 }
 
 function App() {

@@ -28,13 +28,13 @@ export default function Login() {
                 : await signIn(email, password)
 
             if (result.error) {
-                setError(result.error.message || 'エラーが発生しました')
+                setError(result.error.message || '发生错误')
             } else if (result.user) {
                 // 成功時にtranscriptionsへ遷移
                 navigate('/transcriptions')
             }
         } catch (err: any) {
-            setError(err.message || '予期しないエラーが発生しました')
+            setError(err.message || '予期しない发生错误')
         } finally {
             setLoading(false)
         }
@@ -47,13 +47,13 @@ export default function Login() {
         try {
             const { error } = await signInWithGoogle()
             if (error) {
-                setError(error.message || 'Googleログインに失敗しました')
+                setError(error.message || 'Google登录失败')
                 setGoogleLoading(false)
             }
             // If successful, user will be redirected to Google
             // and then back to the app, so we don't setGoogleLoading(false) here
         } catch (err: any) {
-            setError(err.message || '予期しないエラーが発生しました')
+            setError(err.message || '予期しない发生错误')
             setGoogleLoading(false)
         }
     }
@@ -65,7 +65,7 @@ export default function Login() {
                     Whisper Summarizer
                 </h1>
                 <p className="text-gray-600 dark:text-gray-400 text-center text-sm mb-8">
-                    {isSignUp ? '新規アカウント作成' : 'ログイン'}
+                    {isSignUp ? '创建新账户' : '登录'}
                 </p>
 
                 <Card>
@@ -74,7 +74,7 @@ export default function Login() {
                             {isSignUp && (
                                 <div>
                                     <label className="block text-sm font-medium mb-1">
-                                        氏名
+                                        姓名
                                     </label>
                                     <input
                                         type="text"
@@ -88,7 +88,7 @@ export default function Login() {
 
                             <div>
                                 <label className="block text-sm font-medium mb-1">
-                                    メールアドレス
+                                    电子邮箱
                                 </label>
                                 <input
                                     type="email"
@@ -102,11 +102,11 @@ export default function Login() {
 
                             <div>
                                 <label className="block text-sm font-medium mb-1">
-                                    パスワード
+                                    密码
                                 </label>
                                 <input
                                     type="password"
-                                    placeholder="パスワード"
+                                    placeholder="密码"
                                     required
                                     value={password}
                                     onChange={(e) => setPassword(e.target.value)}
@@ -121,7 +121,7 @@ export default function Login() {
                             )}
 
                             <Button type="submit" className="w-full" disabled={loading || googleLoading}>
-                                {loading ? '処理中...' : (isSignUp ? 'サインアップ' : 'ログイン')}
+                                {loading ? '处理中...' : (isSignUp ? '注册' : '登录')}
                             </Button>
                         </form>
 
@@ -132,7 +132,7 @@ export default function Login() {
                             </div>
                             <div className="relative flex justify-center text-sm">
                                 <span className="px-2 bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400">
-                                    または
+                                    或
                                 </span>
                             </div>
                         </div>
@@ -145,14 +145,14 @@ export default function Login() {
                         />
 
                         <p className="text-gray-600 dark:text-gray-400 text-sm text-center mt-5">
-                            {isSignUp ? 'アカウントをお持ちですか？' : 'アカウントをお持ちでないですか？'}
+                            {isSignUp ? '已有账户？' : '没有账户？'}
                             {' '}
                             <button
                                 type="button"
                                 className="text-primary-600 hover:underline"
                                 onClick={() => setIsSignUp(!isSignUp)}
                             >
-                                {isSignUp ? 'ログイン' : 'サインアップ'}
+                                {isSignUp ? '登录' : '注册'}
                             </button>
                         </p>
                     </CardContent>

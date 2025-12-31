@@ -33,14 +33,14 @@ export function TranscriptionList() {
 
     const handleDelete = async (e: React.MouseEvent, id: string) => {
         e.stopPropagation()
-        if (!window.confirm('本当に削除しますか？')) return
+        if (!window.confirm('确定要删除吗？')) return
 
         try {
             await api.deleteTranscription(id)
             loadTranscriptions()
         } catch (e) {
             console.error(e)
-            alert('削除に失敗しました')
+            alert('删除失败')
         }
     }
 
@@ -52,10 +52,10 @@ export function TranscriptionList() {
 
     return (
         <div className="container mx-auto px-4 py-8">
-            <h2 className="text-2xl font-bold mb-6">新しい文字起こし</h2>
+            <h2 className="text-2xl font-bold mb-6">新建转录</h2>
             <AudioUploader />
 
-            <h2 className="text-2xl font-bold mb-4 mt-8">文字起こし履歴</h2>
+            <h2 className="text-2xl font-bold mb-4 mt-8">转录历史</h2>
             <Card>
                 {transcriptions.length > 0 ? (
                     <div className="overflow-x-auto">
@@ -63,13 +63,13 @@ export function TranscriptionList() {
                             <thead className="bg-gray-50 dark:bg-gray-900">
                                 <tr>
                                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                                        ファイル名
+                                        文件名
                                     </th>
                                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                                        ステータス
+                                        状态
                                     </th>
                                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                                        作成日時
+                                        创建时间
                                     </th>
                                     <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                                         操作
@@ -98,7 +98,7 @@ export function TranscriptionList() {
                                             <button
                                                 onClick={(e) => handleDelete(e, item.id)}
                                                 className="p-2 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg"
-                                                title="削除"
+                                                title="删除"
                                             >
                                                 <Trash2 className="w-5 h-5" />
                                             </button>
@@ -110,7 +110,7 @@ export function TranscriptionList() {
                     </div>
                 ) : (
                     <p className="text-center py-12 text-gray-500 dark:text-gray-400">
-                        データがありません
+                        暂无数据
                     </p>
                 )}
             </Card>

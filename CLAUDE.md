@@ -123,7 +123,11 @@ src/
 │   │   ├── Modal.tsx
 │   │   ├── Accordion.tsx
 │   │   └── index.ts
-│   └── AudioUploader.tsx # File upload with drag & drop
+│   ├── AudioUploader.tsx # File upload with drag & drop
+│   ├── NavBar.tsx    # Top navigation bar with mobile menu
+│   ├── ThemeToggle.tsx # Sun/moon theme toggle button
+│   ├── UserMenu.tsx  # User dropdown with sign out
+│   └── GoogleButton.tsx # Google OAuth button
 ├── hooks/            # Custom React hooks
 │   └── useAuth.ts    # Supabase auth state management (Jotai-based)
 ├── atoms/            # Jotai state atoms
@@ -135,7 +139,7 @@ src/
 ├── types/            # TypeScript type definitions
 ├── utils/
 │   └── cn.ts         # Tailwind className utility (clsx + tailwind-merge)
-├── App.tsx           # React Router setup
+├── App.tsx           # React Router setup with ProtectedLayout
 └── main.tsx          # Entry point with Jotai Provider
 ```
 
@@ -148,6 +152,23 @@ src/
 - Role-based access control: `role` extracted from `user.user_metadata.role` ('user' | 'admin')
 - Dark mode via selector pattern (`.dark` class on documentElement)
 - Protected routes check `user` state from `useAuth`
+- **Navigation bar** included on all protected routes via `ProtectedLayout` component
+
+### Navigation Components
+
+The app includes a fixed top navigation bar with:
+- **Logo/Brand**: Links to `/transcriptions`
+- **Navigation Links**: 转录列表, 仪表板
+- **Theme Toggle**: Sun/moon button to switch light/dark mode
+- **User Menu**: Avatar with dropdown showing user info and sign out (退出登录)
+- **Mobile Menu**: Hamburger menu for responsive design
+
+**Component locations:**
+- `NavBar.tsx` - Main navigation container
+- `ThemeToggle.tsx` - Theme switcher (uses `themeWithPersistenceAtom`)
+- `UserMenu.tsx` - User dropdown with sign out
+
+**Integration:** Protected routes use `ProtectedLayout` which wraps content with `NavBar` and adds `pt-16` padding for fixed header.
 
 ### Authentication Flow
 

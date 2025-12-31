@@ -13,3 +13,8 @@ export type { BadgeProps } from './Badge'
 export { Modal } from './Modal'
 
 export { Accordion, AccordionItem } from './Accordion'
+
+// Navigation components
+export { ThemeToggle } from '../ThemeToggle'
+export { UserMenu } from '../UserMenu'
+export { NavBar } from '../NavBar'
