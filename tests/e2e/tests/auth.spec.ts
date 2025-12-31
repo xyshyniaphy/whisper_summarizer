@@ -22,8 +22,8 @@ test.describe('認証フロー', () => {
   })
 
   test('新規ユーザーがサインアップできる', async ({ page }) => {
-    // サインアップモードに切り替え
-    await page.click('text=サインアップ')
+    // サインアップモードに切り替え (中国語テキスト: 注册)
+    await page.click('text=注册')
 
     // フォームに入力
     const timestamp = Date.now()
