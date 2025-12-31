@@ -92,6 +92,27 @@ RUN apt-get update && apt-get install -y \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
+# Install Node.js 22 LTS for Marp CLI
+RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
+    apt-get install -y nodejs && \
+    npm install -g @marp-team/marp-cli && \
+    node --version && npm --version && marp --version
+
+# Install Chromium for Marp CLI (using direct download for Docker compatibility)
+RUN apt-get update && apt-get install -y \
+    wget gnupg \
+    && wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | gpg --dearmor -o /usr/share/keyrings/googlechrome-linux-keyring.gpg \
+    && sh -c 'echo "deb [arch=amd64 signed-by=/usr/share/keyrings/googlechrome-linux-keyring.gpg] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google.list' \
+    && apt-get update \
+    && apt-get install -y google-chrome-stable \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set Chrome path for Marp/Puppeteer
+ENV CHROME_PATH=/usr/bin/google-chrome
+ENV CHROME_BIN=/usr/bin/google-chrome
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome
+
 # Python 3.12をデフォルトに設定
 RUN update-alternatives --install /usr/bin/python python /usr/bin/python3.12 1 && \
     update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.12 1

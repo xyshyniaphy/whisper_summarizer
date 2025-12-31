@@ -10,6 +10,7 @@ from app.models.summary import Summary
 from app.schemas.transcription import Transcription as TranscriptionSchema
 from app.schemas.summary import Summary as SummarySchema
 from app.services.pptx_service import get_pptx_service
+from app.services.marp_service import get_marp_service
 
 import logging
 import asyncio
@@ -87,7 +88,9 @@ async def delete_transcription(
             
         # 出力ファイル削除 (wav, txt, srt) - 簡易的な推定
         output_dir = Path("/app/data/output")
-        for ext in [".wav", ".txt", ".srt", ".vtt", ".json"]:
+        for ext in [".wav", ".txt", ".srt", ".vtt", ".json", ".pptx", ".md"]:
+            output_file = output_dir / f"{transcription.id}{ext}"
+            converted_wav = output_dir / f"{transcription.id}_converted.wav"
             output_file = output_dir / f"{transcription.id}{ext}"
             converted_wav = output_dir / f"{transcription.id}_converted.wav"
             
@@ -157,33 +160,51 @@ async def download_transcription(
 
 async def _generate_pptx_task(transcription_id: str, db: Session) -> None:
   """
-  后台任务：生成PPTX文件
-  
+  后台任务：使用Marp生成PPTX文件
+
   Args:
     transcription_id: 转录ID
     db: 数据库会话
   """
+  # Set status to generating
+  transcription = db.query(Transcription).filter(
+    Transcription.id == transcription_id
+  ).first()
+
+  if not transcription:
+    logger.error(f"转录 {transcription_id} 未找到")
+    return
+
   try:
-    # 获取转录数据
-    transcription = db.query(Transcription).filter(
-      Transcription.id == transcription_id
-    ).first()
-    
-    if not transcription or not transcription.original_text:
-      logger.error(f"转录 {transcription_id} 未找到或没有内容")
-      return
-    
+    # Update status to generating
+    transcription.pptx_status = "generating"
+    transcription.pptx_error_message = None
+    db.commit()
+
+    if not transcription.original_text:
+      raise ValueError("转录内容为空")
+
     # 获取摘要
     summary_text = None
     if transcription.summaries and len(transcription.summaries) > 0:
       summary_text = transcription.summaries[0].summary_text
-    
-    # 生成PPTX
-    pptx_service = get_pptx_service()
-    pptx_service.generate_pptx(transcription, summary_text)
-    logger.info(f"PPTX生成成功: {transcription_id}.pptx")
-    
+
+    # 使用Marp生成PPTX
+    marp_service = get_marp_service()
+    marp_service.generate_pptx(transcription, summary_text)
+
+    # Update status to ready
+    transcription.pptx_status = "ready"
+    transcription.pptx_error_message = None
+    db.commit()
+
+    logger.info(f"PPTX生成成功 (Marp): {transcription_id}.pptx")
+
   except Exception as e:
+    # Update status to error
+    transcription.pptx_status = "error"
+    transcription.pptx_error_message = str(e)
+    db.commit()
     logger.error(f"PPTX生成失败 {transcription_id}: {e}")
 
 
@@ -195,13 +216,13 @@ async def generate_pptx(
   current_user: dict = Depends(get_current_active_user)
 ):
   """
-  生成PowerPoint演示文稿
-  
+  生成PowerPoint演示文稿 (使用Marp CLI)
+
   在后台生成包含转录内容和AI摘要的PPTX文件。
-  
+
   Args:
     transcription_id: 转录ID
-  
+
   Returns:
     JSONResponse: 生成状态
   """
@@ -210,27 +231,50 @@ async def generate_pptx(
     Transcription.id == transcription_id,
     Transcription.user_id == current_user.get("id")
   ).first()
-  
+
   if not transcription:
     raise HTTPException(status_code=404, detail="未找到转录")
-  
+
   if not transcription.original_text:
     raise HTTPException(status_code=400, detail="转录内容为空，无法生成PPT")
-  
-  # 检查文件是否已存在
-  pptx_service = get_pptx_service()
-  if pptx_service.pptx_exists(transcription_id):
+
+  # Check current status from database
+  current_status = transcription.pptx_status or "not-started"
+
+  # If already generating, return current status
+  if current_status == "generating":
     return JSONResponse(
-      status_code=200,
+      status_code=202,
       content={
-        "status": "ready",
-        "message": "PPTX文件已存在"
+        "status": "generating",
+        "message": "PPTX生成中..."
       }
     )
-  
+
+  # If already ready, verify file exists
+  if current_status == "ready":
+    marp_service = get_marp_service()
+    if marp_service.pptx_exists(transcription_id):
+      return JSONResponse(
+        status_code=200,
+        content={
+          "status": "ready",
+          "message": "PPTX文件已存在"
+        }
+      )
+    # File missing, reset status
+    transcription.pptx_status = "not-started"
+    db.commit()
+
+  # If previous error, reset to allow retry
+  if current_status == "error":
+    transcription.pptx_status = "not-started"
+    transcription.pptx_error_message = None
+    db.commit()
+
   # 添加后台任务
   background_tasks.add_task(_generate_pptx_task, transcription_id, db)
-  
+
   return JSONResponse(
     status_code=202,
     content={
@@ -247,11 +291,13 @@ async def get_pptx_status(
   current_user: dict = Depends(get_current_active_user)
 ):
   """
-  检查PPTX文件是否已生成
-  
+  检查PPTX文件生成状态
+
+  从数据库字段读取状态，而不是检查文件是否存在。
+
   Args:
     transcription_id: 转录ID
-  
+
   Returns:
     JSONResponse: PPTX状态
   """
@@ -260,16 +306,24 @@ async def get_pptx_status(
     Transcription.id == transcription_id,
     Transcription.user_id == current_user.get("id")
   ).first()
-  
+
   if not transcription:
     raise HTTPException(status_code=404, detail="未找到转录")
-  
-  pptx_service = get_pptx_service()
-  exists = pptx_service.pptx_exists(transcription_id)
-  
+
+  # Read status from database field
+  status = transcription.pptx_status or "not-started"
+
+  # Also verify file exists for 'ready' status
+  marp_service = get_marp_service()
+  exists = marp_service.pptx_exists(transcription_id)
+
+  # If status says ready but file doesn't exist, reset to not-started
+  if status == "ready" and not exists:
+    status = "not-started"
+
   return JSONResponse(
     content={
-      "status": "ready" if exists else "not_ready",
+      "status": status,
       "exists": exists
     }
   )

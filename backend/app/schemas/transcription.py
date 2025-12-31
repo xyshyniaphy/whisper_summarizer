@@ -37,6 +37,8 @@ class TranscriptionInDBBase(TranscriptionBase):
     error_message: Optional[str] = None
     retry_count: Optional[int] = 0
     completed_at: Optional[datetime] = None
+    pptx_status: Optional[str] = "not-started"
+    pptx_error_message: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 

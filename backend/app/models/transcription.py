@@ -23,6 +23,10 @@ class Transcription(Base):
     retry_count = Column(Integer, default=0, nullable=False)  # Number of retries attempted
     completed_at = Column(DateTime(timezone=True), nullable=True)  # When fully completed
 
+    # PPTX generation status
+    pptx_status = Column(String, default="not-started", nullable=False)  # not-started, generating, ready, error
+    pptx_error_message = Column(Text, nullable=True)  # PPTX generation error details
+
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now(), server_default=func.now())
 
