@@ -90,6 +90,10 @@ RUN apt-get update && apt-get install -y \
     libgomp1 \
     ca-certificates \
     curl \
+    fontconfig \
+    fonts-noto-cjk \
+    fonts-noto-cjk-extra \
+    && fc-cache -fv \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Node.js 22 LTS for Marp CLI

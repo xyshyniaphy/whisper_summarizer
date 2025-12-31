@@ -9,8 +9,40 @@ from datetime import datetime
 from pptx import Presentation
 from pptx.util import Inches, Pt
 from pptx.enum.text import PP_ALIGN
+from pptx.dml.color import RGBColor
 
 from app.models.transcription import Transcription
+
+
+# Chinese font names (fallback order)
+CHINESE_FONTS = [
+    "Microsoft YaHei",      # Windows
+    "SimHei",               # Windows
+    "PingFang SC",          # macOS
+    "Noto Sans CJK SC",     # Linux/open-source
+    "WenQuanYi Zen Hei",    # Linux
+    "Arial Unicode MS",     # Cross-platform fallback
+]
+
+def set_chinese_font(text_frame):
+    """
+    Set Chinese-compatible font for all paragraphs in a text frame.
+
+    Args:
+        text_frame: python-pptx text_frame object
+    """
+    for paragraph in text_frame.paragraphs:
+        for run in paragraph.runs:
+            # Try each font until one works
+            for font_name in CHINESE_FONTS:
+                try:
+                    run.font.name = font_name
+                    break
+                except Exception:
+                    continue
+            # Ensure font size is readable
+            if run.font.size is None:
+                run.font.size = Pt(18)
 
 
 class PPTXService:
@@ -78,6 +110,7 @@ class PPTXService:
         # Set title
         title = slide.shapes.title
         title.text = transcription.file_name
+        set_chinese_font(title.text_frame)
 
         # Set subtitle with date and duration info
         subtitle = slide.placeholders[1]
@@ -88,6 +121,7 @@ class PPTXService:
             duration_info = f" | 时长: {minutes}:{seconds:02d}"
 
         subtitle.text = f"转录文档{duration_info} | 生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M')}"
+        set_chinese_font(subtitle.text_frame)
 
     def _add_summary_slide(self, prs: Presentation, summary_text: str) -> None:
         """Add slide with AI summary."""
@@ -98,6 +132,7 @@ class PPTXService:
         shapes = slide.shapes
         title_shape = shapes.title
         title_shape.text = "AI 摘要"
+        set_chinese_font(title_shape.text_frame)
 
         # Set content
         body_shape = shapes.placeholders[1]
@@ -113,6 +148,8 @@ class PPTXService:
                 p = text_frame.add_paragraph()
                 p.text = para_text.strip()
                 p.level = 0
+
+        set_chinese_font(text_frame)
 
     def _add_content_slides(self, prs: Presentation, content: str) -> None:
         """
@@ -138,6 +175,7 @@ class PPTXService:
                 title_shape.text = f"转录内容 ({i}/{len(chunks)})"
             else:
                 title_shape.text = "转录内容"
+            set_chinese_font(title_shape.text_frame)
 
             # Set content
             body_shape = shapes.placeholders[1]
@@ -157,6 +195,8 @@ class PPTXService:
                     p = text_frame.add_paragraph()
                     p.text = para_text
                     p.level = 0
+
+            set_chinese_font(text_frame)
 
     def _chunk_content(self, content: str) -> list[str]:
         """
