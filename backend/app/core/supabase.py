@@ -32,30 +32,41 @@ async def get_current_user(
 ) -> dict:
     """
     JWTトークンから現在のユーザーを取得
-    
+
     Args:
         credentials: HTTPベアラートークン
-    
+
     Returns:
-        user: ユーザー情報
-    
+        user: ユーザー情報 (dict)
+
     Raises:
         HTTPException: 認証エラー
     """
     try:
         token = credentials.credentials
-        
+
         # Supabaseでトークンを検証
         user = supabase.auth.get_user(token)
-        
+
         if not user:
             raise HTTPException(
                 status_code=401,
                 detail="無効なトークンです"
             )
-        
-        return user.user
-    
+
+        # Convert User object to dict
+        return {
+            "id": str(user.user.id),
+            "email": user.user.email,
+            "email_confirmed_at": user.user.email_confirmed_at,
+            "phone": user.user.phone,
+            "last_sign_in_at": user.user.last_sign_in_at,
+            "created_at": user.user.created_at,
+            "updated_at": user.user.updated_at,
+            "user_metadata": user.user.user_metadata,
+            "app_metadata": user.user.app_metadata,
+        }
+
     except Exception as e:
         logger.error(f"認証エラー: {str(e)}")
         raise HTTPException(

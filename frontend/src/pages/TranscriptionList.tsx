@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Trash2 } from 'lucide-react'
 import { api } from '../services/api'
@@ -10,19 +10,26 @@ import { Badge } from '../components/ui/Badge'
 export function TranscriptionList() {
     const [transcriptions, setTranscriptions] = useState<Transcription[]>([])
     const navigate = useNavigate()
+    const isLoadingRef = useRef(false)
 
-    useEffect(() => {
-        loadTranscriptions()
-    }, [])
+    const loadTranscriptions = useCallback(async () => {
+        // Prevent duplicate calls (React 18 StrictMode)
+        if (isLoadingRef.current) return
+        isLoadingRef.current = true
 
-    const loadTranscriptions = async () => {
         try {
             const data = await api.getTranscriptions()
             setTranscriptions(data)
         } catch (e) {
             console.error(e)
+        } finally {
+            isLoadingRef.current = false
         }
-    }
+    }, [])
+
+    useEffect(() => {
+        loadTranscriptions()
+    }, [loadTranscriptions])
 
     const handleDelete = async (e: React.MouseEvent, id: string) => {
         e.stopPropagation()

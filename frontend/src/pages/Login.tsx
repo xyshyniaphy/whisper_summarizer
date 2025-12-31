@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useAuth } from '../hooks/useAuth'
 import { Button } from '../components/ui/Button'
 import { Card, CardContent } from '../components/ui/Card'
+import { GoogleButton } from '../components/GoogleButton'
 
 export default function Login() {
     const [email, setEmail] = useState('')
@@ -10,8 +11,9 @@ export default function Login() {
     const [fullName, setFullName] = useState('')
     const [error, setError] = useState('')
     const [loading, setLoading] = useState(false)
+    const [googleLoading, setGoogleLoading] = useState(false)
 
-    const [{ signIn, signUp }] = useAuth()
+    const [{ signIn, signUp }, { signInWithGoogle }] = useAuth()
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -30,6 +32,24 @@ export default function Login() {
             setError(err.message || '予期しないエラーが発生しました')
         } finally {
             setLoading(false)
+        }
+    }
+
+    const handleGoogleSignIn = async () => {
+        setError('')
+        setGoogleLoading(true)
+
+        try {
+            const { error } = await signInWithGoogle()
+            if (error) {
+                setError(error.message || 'Googleログインに失敗しました')
+                setGoogleLoading(false)
+            }
+            // If successful, user will be redirected to Google
+            // and then back to the app, so we don't setGoogleLoading(false) here
+        } catch (err: any) {
+            setError(err.message || '予期しないエラーが発生しました')
+            setGoogleLoading(false)
         }
     }
 
@@ -95,10 +115,29 @@ export default function Login() {
                                 </p>
                             )}
 
-                            <Button type="submit" className="w-full" disabled={loading}>
+                            <Button type="submit" className="w-full" disabled={loading || googleLoading}>
                                 {loading ? '処理中...' : (isSignUp ? 'サインアップ' : 'ログイン')}
                             </Button>
                         </form>
+
+                        {/* Divider */}
+                        <div className="relative my-6">
+                            <div className="absolute inset-0 flex items-center">
+                                <div className="w-full border-t border-gray-300 dark:border-gray-600"></div>
+                            </div>
+                            <div className="relative flex justify-center text-sm">
+                                <span className="px-2 bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400">
+                                    または
+                                </span>
+                            </div>
+                        </div>
+
+                        {/* Google OAuth Button */}
+                        <GoogleButton
+                            onClick={handleGoogleSignIn}
+                            disabled={loading || googleLoading}
+                            loading={googleLoading}
+                        />
 
                         <p className="text-gray-600 dark:text-gray-400 text-sm text-center mt-5">
                             {isSignUp ? 'アカウントをお持ちですか？' : 'アカウントをお持ちでないですか？'}

@@ -5,29 +5,68 @@ import Dashboard from './pages/Dashboard'
 import { TranscriptionList } from './pages/TranscriptionList'
 import { TranscriptionDetail } from './pages/TranscriptionDetail'
 
-function App() {
-    const [{ user, loading }, { signIn, signUp, signOut }] = useAuth()
+// Protected route wrapper component
+function ProtectedRoute({ children }: { children: React.ReactNode }) {
+    const [{ user, loading }] = useAuth()
 
-    // Auth loading state is less critical now as we allow anonymous access to main features
-    // but we can still keep it for the login route logic if needed.
+    if (loading) {
+        return (
+            <div className="min-h-screen flex items-center justify-center">
+                <div className="text-gray-600 dark:text-gray-400">Loading...</div>
+            </div>
+        )
+    }
+
+    if (!user) {
+        return <Navigate to="/login" replace />
+    }
+
+    return <>{children}</>
+}
+
+function App() {
+    const [{ user }] = useAuth()
 
     return (
         <Routes>
-            {/* Public Routes for Transcription Feature */}
-            <Route path="/transcriptions" element={<TranscriptionList />} />
-            <Route path="/transcriptions/:id" element={<TranscriptionDetail />} />
-
-            {/* Redirect root to transcriptions for now */}
-            <Route path="/" element={<Navigate to="/transcriptions" />} />
-
-            {/* Auth Routes (preserved) */}
+            {/* Public route - login */}
             <Route
                 path="/login"
-                element={user ? <Navigate to="/dashboard" /> : <Login />}
+                element={user ? <Navigate to="/transcriptions" /> : <Login />}
+            />
+
+            {/* Protected routes - require authentication */}
+            <Route
+                path="/"
+                element={
+                    <ProtectedRoute>
+                        <Navigate to="/transcriptions" />
+                    </ProtectedRoute>
+                }
+            />
+            <Route
+                path="/transcriptions"
+                element={
+                    <ProtectedRoute>
+                        <TranscriptionList />
+                    </ProtectedRoute>
+                }
+            />
+            <Route
+                path="/transcriptions/:id"
+                element={
+                    <ProtectedRoute>
+                        <TranscriptionDetail />
+                    </ProtectedRoute>
+                }
             />
             <Route
                 path="/dashboard"
-                element={user ? <Dashboard /> : <Navigate to="/login" />}
+                element={
+                    <ProtectedRoute>
+                        <Dashboard />
+                    </ProtectedRoute>
+                }
             />
         </Routes>
     )

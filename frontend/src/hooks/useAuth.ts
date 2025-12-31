@@ -16,6 +16,7 @@ import {
 interface AuthActions {
   signUp: (email: string, password: string, fullName?: string) => Promise<{ user: User | null; session: Session | null; error: AuthError | null }>
   signIn: (email: string, password: string) => Promise<{ user: User | null; session: Session | null; error: AuthError | null }>
+  signInWithGoogle: () => Promise<{ error: AuthError | null }>
   signOut: () => Promise<{ error: AuthError | null }>
 }
 
@@ -98,6 +99,24 @@ export function useAuth(): [
     }
   }, [setUser, setRole])
 
+  // Google OAuthサインイン
+  const signInWithGoogle = useCallback(async () => {
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        queryParams: {
+          // Request minimum user info - just email for auth
+          access_type: 'offline',
+          prompt: 'consent',
+        },
+        // Skip additional scopes to request minimum info
+        scopes: 'email',
+      },
+    })
+
+    return { error }
+  }, [])
+
   // サインアウト
   const signOut = useCallback(async () => {
     const { error } = await supabase.auth.signOut()
@@ -109,6 +128,6 @@ export function useAuth(): [
 
   return [
     { user, session, loading, role },
-    { signUp, signIn, signOut },
+    { signUp, signIn, signInWithGoogle, signOut },
   ]
 }

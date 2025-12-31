@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useState, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { Download, Sparkles } from 'lucide-react'
 import { api } from '../services/api'
@@ -24,14 +24,13 @@ export function TranscriptionDetail() {
     const [summary, setSummary] = useState<Summary | null>(null)
     const [loading, setLoading] = useState(true)
     const [loadingSummary, setLoadingSummary] = useState(false)
+    const isLoadingRef = useRef(false)
 
-    useEffect(() => {
-        if (id) {
-            loadTranscription(id)
-        }
-    }, [id])
+    const loadTranscription = useCallback(async (transcriptionId: string) => {
+        // Prevent duplicate calls (React 18 StrictMode)
+        if (isLoadingRef.current) return
+        isLoadingRef.current = true
 
-    const loadTranscription = async (transcriptionId: string) => {
         try {
             const data = await api.getTranscription(transcriptionId)
             setTranscription(data)
@@ -44,8 +43,15 @@ export function TranscriptionDetail() {
             console.error(e)
         } finally {
             setLoading(false)
+            isLoadingRef.current = false
         }
-    }
+    }, [])
+
+    useEffect(() => {
+        if (id) {
+            loadTranscription(id)
+        }
+    }, [id, loadTranscription])
 
     const handleGenerateSummary = async () => {
         if (!id) return
