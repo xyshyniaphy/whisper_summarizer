@@ -9,8 +9,8 @@ import asyncio
 import logging
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Optional
-from threading import BoundedSemaphore
+from typing import Optional, Dict, Set
+from threading import BoundedSemaphore, Lock, Event
 from sqlalchemy.orm import Session
 
 from app.models.transcription import Transcription
@@ -31,6 +31,143 @@ def get_transcription_semaphore() -> BoundedSemaphore:
         _transcription_semaphore = BoundedSemaphore(settings.AUDIO_PARALLELISM)
         logger.info(f"Initialized transcription semaphore with parallelism={settings.AUDIO_PARALLELISM}")
     return _transcription_semaphore
+
+
+# ============================================
+# Task Registry for Cancellation Support
+# ============================================
+# Tracks active transcription tasks with their cancel events and process info
+_task_registry: Dict[str, Dict] = {}  # {transcription_id: {"cancel_event": Event, "pids": Set[int], "stage": str}}
+_task_registry_lock = Lock()
+
+
+def register_transcription_task(transcription_id: str, cancel_event: Event) -> None:
+    """
+    Register a new transcription task for cancellation support.
+
+    Args:
+        transcription_id: Transcription UUID
+        cancel_event: Threading.Event to signal cancellation
+    """
+    with _task_registry_lock:
+        _task_registry[transcription_id] = {
+            "cancel_event": cancel_event,
+            "pids": set(),  # Set of subprocess PIDs to kill on cancellation
+            "stage": "registered"
+        }
+        logger.info(f"[TASK_REGISTRY] Registered task: {transcription_id}")
+
+
+def unregister_transcription_task(transcription_id: str) -> None:
+    """
+    Unregister a completed transcription task.
+
+    Args:
+        transcription_id: Transcription UUID
+    """
+    with _task_registry_lock:
+        if transcription_id in _task_registry:
+            pids = _task_registry[transcription_id].get("pids", set())
+            stage = _task_registry[transcription_id].get("stage", "unknown")
+            del _task_registry[transcription_id]
+            logger.info(
+                f"[TASK_REGISTRY] Unregistered task: {transcription_id} | "
+                f"Stage: {stage} | Tracked PIDs: {len(pids)}"
+            )
+
+
+def mark_transcription_cancelled(transcription_id: str) -> bool:
+    """
+    Mark a transcription as cancelled by setting its cancel event.
+
+    Args:
+        transcription_id: Transcription UUID
+
+    Returns:
+        bool: True if task was found and marked for cancellation
+    """
+    with _task_registry_lock:
+        if transcription_id in _task_registry:
+            _task_registry[transcription_id]["cancel_event"].set()
+            _task_registry[transcription_id]["stage"] = "cancelled"
+            logger.info(f"[TASK_REGISTRY] Marked task for cancellation: {transcription_id}")
+            return True
+        return False
+
+
+def track_transcription_pid(transcription_id: str, pid: int) -> None:
+    """
+    Track a subprocess PID associated with a transcription.
+
+    Args:
+        transcription_id: Transcription UUID
+        pid: Process ID to track
+    """
+    with _task_registry_lock:
+        if transcription_id in _task_registry:
+            _task_registry[transcription_id]["pids"].add(pid)
+            logger.debug(f"[TASK_REGISTRY] Tracked PID {pid} for task: {transcription_id}")
+
+
+def get_transcription_task_info(transcription_id: str) -> Optional[Dict]:
+    """
+    Get information about a registered transcription task.
+
+    Args:
+        transcription_id: Transcription UUID
+
+    Returns:
+        Dict with task info or None if not found
+    """
+    with _task_registry_lock:
+        return _task_registry.get(transcription_id)
+
+
+def is_transcription_active(transcription_id: str) -> bool:
+    """
+    Check if a transcription is currently active/registered.
+
+    Args:
+        transcription_id: Transcription UUID
+
+    Returns:
+        bool: True if task is registered and active
+    """
+    with _task_registry_lock:
+        return transcription_id in _task_registry
+
+
+def kill_transcription_processes(transcription_id: str) -> int:
+    """
+    Kill all tracked subprocesses for a transcription.
+
+    Args:
+        transcription_id: Transcription UUID
+
+    Returns:
+        int: Number of processes killed
+    """
+    import signal
+
+    with _task_registry_lock:
+        if transcription_id not in _task_registry:
+            return 0
+
+        pids = _task_registry[transcription_id].get("pids", set()).copy()
+
+    killed_count = 0
+    for pid in pids:
+        try:
+            os.kill(pid, signal.SIGTERM)
+            logger.info(f"[TASK_REGISTRY] Killed PID {pid} for task: {transcription_id}")
+            killed_count += 1
+        except ProcessLookupError:
+            # Process already terminated
+            logger.debug(f"[TASK_REGISTRY] PID {pid} already terminated for task: {transcription_id}")
+        except PermissionError:
+            logger.warning(f"[TASK_REGISTRY] No permission to kill PID {pid} for task: {transcription_id}")
+
+    return killed_count
 
 logger = logging.getLogger(__name__)
 
@@ -102,18 +239,25 @@ class TranscriptionProcessor:
         Returns:
             bool: True if successful, False if failed after all retries
         """
+        # Create cancellation event for this task
+        cancel_event = Event()
+        register_transcription_task(transcription_id, cancel_event)
+
         # Acquire semaphore to limit concurrent transcriptions
         semaphore = get_transcription_semaphore()
         logger.info(f"Waiting for semaphore for transcription: {transcription_id} (parallelism={settings.AUDIO_PARALLELISM})")
-        
+
         with semaphore:
             logger.info(f"Acquired semaphore, starting processing: {transcription_id}")
             try:
-                return self._process_transcription_impl(transcription_id)
+                result = self._process_transcription_impl(transcription_id, cancel_event)
+                return result
             finally:
+                # Always unregister task on completion
+                unregister_transcription_task(transcription_id)
                 logger.info(f"Released semaphore for transcription: {transcription_id}")
 
-    def _process_transcription_impl(self, transcription_id: str) -> bool:
+    def _process_transcription_impl(self, transcription_id: str, cancel_event: Event) -> bool:
         """Internal implementation of transcription processing."""
         db = self.db_session_factory()
 
@@ -130,15 +274,36 @@ class TranscriptionProcessor:
 
             # Execute workflow with retry
             for attempt in range(MAX_RETRIES):
+                # Check for cancellation before each attempt
+                if cancel_event.is_set():
+                    logger.info(f"[CANCEL] Transcription {transcription_id} cancelled before attempt {attempt + 1}")
+                    transcription.stage = STAGE_FAILED
+                    transcription.error_message = "Transcription cancelled by user"
+                    db.commit()
+                    return False
+
                 try:
                     transcription.retry_count = attempt
                     db.commit()
 
                     # Step 1: Transcribe
-                    if not self._transcribe_with_retry(transcription, db):
+                    if not self._transcribe_with_retry(transcription, db, cancel_event, transcription_id):
+                        if cancel_event.is_set():
+                            logger.info(f"[CANCEL] Transcription {transcription_id} cancelled during transcription")
+                            transcription.stage = STAGE_FAILED
+                            transcription.error_message = "Transcription cancelled by user"
+                            db.commit()
+                            return False
                         raise Exception("Transcription failed after retries")
 
-                    # Step 2: Summarize
+                    # Step 2: Summarize (check cancellation again)
+                    if cancel_event.is_set():
+                        logger.info(f"[CANCEL] Transcription {transcription_id} cancelled before summarization")
+                        transcription.stage = STAGE_FAILED
+                        transcription.error_message = "Transcription cancelled by user"
+                        db.commit()
+                        return False
+
                     if not self._summarize_with_retry(transcription, db):
                         raise Exception("Summarization failed after retries")
 
@@ -179,13 +344,21 @@ class TranscriptionProcessor:
         finally:
             db.close()
 
-    def _transcribe_with_retry(self, transcription: Transcription, db: Session) -> bool:
+    def _transcribe_with_retry(
+        self,
+        transcription: Transcription,
+        db: Session,
+        cancel_event: Event,
+        transcription_id: str
+    ) -> bool:
         """
         Transcribe audio file with retry logic
 
         Args:
             transcription: Transcription model instance
             db: Database session
+            cancel_event: Event to check for cancellation
+            transcription_id: Transcription UUID for PID tracking
 
         Returns:
             bool: True if successful
@@ -201,10 +374,12 @@ class TranscriptionProcessor:
             output_dir = Path("/app/data/output")
             output_dir.mkdir(exist_ok=True, parents=True)
 
-            # Run whisper transcription
+            # Run whisper transcription with cancellation support
             result = whisper_service.transcribe(
                 transcription.file_path,
-                output_dir=str(output_dir)
+                output_dir=str(output_dir),
+                cancel_event=cancel_event,
+                transcription_id=transcription_id
             )
 
             # Save results
@@ -327,16 +502,8 @@ def should_allow_delete(transcription: Transcription) -> bool:
 
     Returns:
         bool: True if delete button should be shown
+
+    Note: All transcriptions are now deletable, including processing ones.
+          Processing transcriptions will be cancelled and processes killed on delete.
     """
-    # Allow delete if failed
-    if transcription.stage == STAGE_FAILED:
-        return True
-
-    # Allow delete if not completed after 24 hours
-    if transcription.stage != STAGE_COMPLETED:
-        if transcription.created_at:
-            cutoff_time = datetime.utcnow() - timedelta(hours=24)
-            if transcription.created_at < cutoff_time:
-                return True
-
-    return False
+    return True

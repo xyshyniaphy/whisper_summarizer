@@ -38,12 +38,22 @@ export function TranscriptionList() {
         loadTranscriptions()
     }, [loadTranscriptions])
 
-    const handleDelete = async (e: React.MouseEvent, id: string) => {
+    const handleDelete = async (e: React.MouseEvent, id: string, stage: string) => {
         e.stopPropagation()
         e.preventDefault()
-        console.log('Delete clicked for id:', id)
+        console.log('Delete clicked for id:', id, 'stage:', stage)
 
-        if (!window.confirm('确定要删除吗？')) {
+        // Custom confirmation message based on stage
+        let confirmMessage = '确定要删除吗？'
+        if (stage === 'uploading' || stage === 'transcribing' || stage === 'summarizing') {
+            confirmMessage = '正在处理中，删除将中止转录进程。确定要删除吗？'
+        } else if (stage === 'failed') {
+            confirmMessage = '失败的转录将被删除。确定要删除吗？'
+        } else if (stage === 'completed') {
+            confirmMessage = '已完成的转录将被删除，此操作无法撤销。确定要删除吗？'
+        }
+
+        if (!window.confirm(confirmMessage)) {
             console.log('Delete cancelled')
             return
         }
@@ -60,14 +70,9 @@ export function TranscriptionList() {
         }
     }
 
-    // Check if item should show delete button (failed or > 24 hours old or completed)
-    const shouldAllowDelete = (item: Transcription): boolean => {
-        if (item.stage === 'failed') return true
-        if (item.stage === 'completed') return true
-        // For processing items, only allow delete if > 24 hours old
-        const hoursSinceCreation = (Date.now() - new Date(item.created_at).getTime()) / (1000 * 60 * 60)
-        if (hoursSinceCreation > 24) return true
-        return false
+    // Allow delete for all items (user can delete processing items to cancel them)
+    const shouldAllowDelete = (_item: Transcription): boolean => {
+        return true
     }
 
     const getBadgeVariant = (stage: string): 'success' | 'error' | 'info' | 'warning' => {
@@ -144,7 +149,7 @@ export function TranscriptionList() {
                                         <td className="px-6 py-4 whitespace-nowrap text-right">
                                             {shouldAllowDelete(item) && (
                                                 <button
-                                                    onClick={(e) => handleDelete(e, item.id)}
+                                                    onClick={(e) => handleDelete(e, item.id, item.stage)}
                                                     className="p-2 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg"
                                                     title="删除"
                                                 >

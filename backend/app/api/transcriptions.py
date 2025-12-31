@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from fastapi.responses import FileResponse, JSONResponse
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional
 from pathlib import Path
 from app.api.deps import get_db
 from app.core.supabase import get_current_active_user
@@ -14,6 +14,7 @@ from app.services.marp_service import get_marp_service
 
 import logging
 import asyncio
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -68,37 +69,69 @@ async def delete_transcription(
 ):
     """
     文字起こしを削除 (ファイルも含む)
+    処理中の場合はキャンセルしてプロセスを終了してから削除します
     """
     transcription = db.query(Transcription).filter(
         Transcription.id == transcription_id,
         Transcription.user_id == current_user.get("id")
     ).first()
-    
+
     if not transcription:
         raise HTTPException(status_code=404, detail="文字起こしが見つかりません")
+
+    # Check if transcription is currently processing and cancel if needed
+    from app.services.transcription_processor import (
+        is_transcription_active,
+        mark_transcription_cancelled,
+        kill_transcription_processes,
+        get_transcription_task_info
+    )
+
+    if is_transcription_active(transcription_id):
+        logger.info(f"[DELETE] Cancelling active transcription: {transcription_id}")
+
+        # Get task info before cancelling
+        task_info = get_transcription_task_info(transcription_id)
+        if task_info:
+            pids = task_info.get("pids", set())
+            logger.info(f"[DELETE] Task info for {transcription_id}: Stage={task_info.get('stage')}, PIDs={list(pids)}")
+
+        # Mark as cancelled (signals the transcription thread)
+        was_marked = mark_transcription_cancelled(transcription_id)
+        if was_marked:
+            logger.info(f"[DELETE] Marked transcription {transcription_id} as cancelled")
+
+        # Kill subprocesses (FFmpeg, whisper-cli)
+        killed_count = kill_transcription_processes(transcription_id)
+        logger.info(f"[DELETE] Killed {killed_count} subprocesses for transcription {transcription_id}")
+
+        # Wait a moment for processes to terminate
+        time.sleep(0.5)
 
     # ファイル削除
     try:
         import os
         from pathlib import Path
-        
+
         # アップロードファイル削除
         if transcription.file_path and os.path.exists(transcription.file_path):
             os.remove(transcription.file_path)
-            
-        # 出力ファイル削除 (wav, txt, srt) - 簡易的な推定
+            logger.info(f"[DELETE] Deleted upload file: {transcription.file_path}")
+
+        # 出力ファイル削除 (wav, txt, srt, vtt, json, pptx, md)
         output_dir = Path("/app/data/output")
         for ext in [".wav", ".txt", ".srt", ".vtt", ".json", ".pptx", ".md"]:
             output_file = output_dir / f"{transcription.id}{ext}"
-            converted_wav = output_dir / f"{transcription.id}_converted.wav"
-            output_file = output_dir / f"{transcription.id}{ext}"
-            converted_wav = output_dir / f"{transcription.id}_converted.wav"
-            
             if output_file.exists():
                 output_file.unlink()
+                logger.info(f"[DELETE] Deleted output file: {output_file}")
+
+            # Also check for converted wav
+            converted_wav = output_dir / f"{transcription.id}_converted.wav"
             if converted_wav.exists():
                 converted_wav.unlink()
-                
+                logger.info(f"[DELETE] Deleted converted wav: {converted_wav}")
+
     except Exception as e:
         logger.error(f"ファイル削除エラー: {e}")
         # DB削除は続行する
@@ -106,6 +139,7 @@ async def delete_transcription(
 
     db.delete(transcription)
     db.commit()
+    logger.info(f"[DELETE] Deleted transcription {transcription_id} from database")
     return None
 
 

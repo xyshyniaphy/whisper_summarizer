@@ -11,6 +11,7 @@ import difflib
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Optional, Dict, List, Tuple
+from threading import Event
 import logging
 
 logger = logging.getLogger(__name__)
@@ -107,15 +108,19 @@ class WhisperService:
     def transcribe(
         self,
         audio_file_path: str,
-        output_dir: Optional[str] = None
+        output_dir: Optional[str] = None,
+        cancel_event: Optional[Event] = None,
+        transcription_id: Optional[str] = None
     ) -> Dict[str, any]:
         """
         音声ファイルを文字起こし
-        
+
         Args:
             audio_file_path: 音声ファイルのパス
             output_dir: 出力ディレクトリ (省略時は一時ディレクトリ)
-        
+            cancel_event: キャンセルシグナル (Event)
+            transcription_id: 転写ID (PID追跡用)
+
         Returns:
             transcription: {
                 "text": "全文",
@@ -123,71 +128,97 @@ class WhisperService:
                 "language": "ja"
             }
         """
+        # Check for cancellation immediately
+        if cancel_event and cancel_event.is_set():
+            logger.info("[CANCEL] Transcription cancelled before starting")
+            raise Exception("Transcription cancelled")
+
         # Get audio duration first
         duration = self._get_audio_duration(audio_file_path)
         chunk_size_seconds = settings.CHUNK_SIZE_MINUTES * 60
-        
+
         # Decide whether to use chunking
         use_chunking = (
             settings.ENABLE_CHUNKING and
             duration > chunk_size_seconds
         )
-        
+
         if use_chunking:
             logger.info(f"Using chunked transcription for {duration}s audio (chunk size: {chunk_size_seconds}s)")
-            return self.transcribe_with_chunking(audio_file_path, output_dir)
+            return self.transcribe_with_chunking(audio_file_path, output_dir, cancel_event, transcription_id)
         else:
             logger.info(f"Using standard transcription for {duration}s audio")
-            return self._transcribe_standard(audio_file_path, output_dir)
+            return self._transcribe_standard(audio_file_path, output_dir, cancel_event, transcription_id)
     
     def _transcribe_standard(
         self,
         audio_file_path: str,
-        output_dir: Optional[str] = None
+        output_dir: Optional[str] = None,
+        cancel_event: Optional[Event] = None,
+        transcription_id: Optional[str] = None
     ) -> Dict[str, any]:
         """
         Standard transcription without chunking (original implementation).
-        
+
         Args:
             audio_file_path: 音声ファイルのパス
             output_dir: 出力ディレクトリ (省略時は一時ディレクトリ)
-        
+            cancel_event: キャンセルシグナル (Event)
+            transcription_id: 転写ID (PID追跡用)
+
         Returns:
             transcription: 文字起こし結果
         """
+        # Check for cancellation
+        if cancel_event and cancel_event.is_set():
+            logger.info("[CANCEL] Standard transcription cancelled before starting")
+            raise Exception("Transcription cancelled")
+
         # 出力ディレクトリの設定
         if output_dir is None:
             output_dir = tempfile.mkdtemp()
-        
+
         output_path = Path(output_dir)
         output_path.mkdir(exist_ok=True, parents=True)
-        
+
         # 出力ファイル名 (拡張子なし)
         audio_filename = Path(audio_file_path).stem
         output_prefix = output_path / audio_filename
-        
+
         # Get audio duration and calculate dynamic timeout
         duration = self._get_audio_duration(audio_file_path)
         timeout = self._calculate_timeout(duration)
 
         # 音声ファイルをモノラル・16kHzに変換
-        wav_path = self._convert_to_wav(audio_file_path, output_dir, timeout=min(timeout, 3600))
+        wav_path = self._convert_to_wav(audio_file_path, output_dir, timeout=min(timeout, 3600), cancel_event=cancel_event, transcription_id=transcription_id)
 
         try:
+            # Check for cancellation before whisper
+            if cancel_event and cancel_event.is_set():
+                logger.info("[CANCEL] Standard transcription cancelled before whisper")
+                raise Exception("Transcription cancelled")
+
             # Whisper.cppを実行
-            result = self._run_whisper(wav_path, str(output_prefix), timeout)
-            
+            result = self._run_whisper(wav_path, str(output_prefix), timeout, cancel_event, transcription_id)
+
             # 結果ファイルを解析
             transcription = self._parse_output(str(output_prefix))
-            
+
             return transcription
-        
+
         finally:
             # 一時ファイルをクリーンアップ
             if wav_path.exists():
                 wav_path.unlink()
     
-    def _convert_to_wav(self, input_path: str, output_dir: str, timeout: int = 300) -> Path:
+    def _convert_to_wav(
+        self,
+        input_path: str,
+        output_dir: str,
+        timeout: int = 300,
+        cancel_event: Optional[Event] = None,
+        transcription_id: Optional[str] = None
+    ) -> Path:
         """
         音声ファイルをモノラル・16kHz WAVに変換
 
@@ -195,13 +226,15 @@ class WhisperService:
             input_path: 入力ファイルパス
             output_dir: 出力ディレクトリ
             timeout: Conversion timeout in seconds (default: 300)
+            cancel_event: キャンセルシグナル (Event)
+            transcription_id: 転写ID (PID追跡用)
 
         Returns:
             wav_path: 変換後のWAVファイルパス
         """
         wav_filename = Path(input_path).stem + "_converted.wav"
         wav_path = Path(output_dir) / wav_filename
-        
+
         ffmpeg_cmd = [
             "ffmpeg",
             "-i", input_path,
@@ -211,36 +244,55 @@ class WhisperService:
             "-y",
             str(wav_path)
         ]
-        
+
         print(f"DEBUG: Running ffmpeg command: {ffmpeg_cmd}", flush=True)
 
-        
         try:
             logger.info(f"Converting audio: {input_path} -> {wav_path}")
             cmd_str = ' '.join(str(x) for x in ffmpeg_cmd)
             logger.info(f"Running FFmpeg command: {cmd_str}")
-            
-            result = subprocess.run(
-                ffmpeg_cmd,
-                capture_output=True,
-                text=True,
-                timeout=timeout,
-                check=False
-            )
-            
-            if result.returncode != 0:
-                logger.error(f"FFmpeg failed with code {result.returncode}")
-                logger.error(f"FFmpeg STDERR:\n{result.stderr}")
-                result.check_returncode()
 
-            logger.info(f"音声変換完了: {wav_path}")
-            return wav_path
-        
+            # Use Popen for PID tracking and cancellation support
+            process = subprocess.Popen(
+                ffmpeg_cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True
+            )
+
+            # Track PID if transcription_id is provided
+            if transcription_id:
+                from app.services.transcription_processor import track_transcription_pid
+                track_transcription_pid(transcription_id, process.pid)
+                logger.info(f"[WHISPER] FFmpeg PID tracked: {process.pid} for transcription: {transcription_id}")
+
+            try:
+                stdout, stderr = process.communicate(timeout=timeout)
+
+                if process.returncode != 0:
+                    logger.error(f"FFmpeg failed with code {process.returncode}")
+                    logger.error(f"FFmpeg STDERR:\n{stderr}")
+                    raise subprocess.CalledProcessError(process.returncode, ffmpeg_cmd, stderr)
+
+                logger.info(f"音声変換完了: {wav_path}")
+                return wav_path
+
+            except subprocess.TimeoutExpired:
+                process.kill()
+                raise Exception(f"FFmpeg conversion timeout after {timeout}s")
+
         except subprocess.CalledProcessError as e:
             logger.error(f"FFmpeg変換エラー: {e.stderr}")
             raise Exception(f"音声変換エラー: {e.stderr}")
     
-    def _run_whisper(self, wav_path: str, output_prefix: str, timeout: int = 600) -> subprocess.CompletedProcess:
+    def _run_whisper(
+        self,
+        wav_path: str,
+        output_prefix: str,
+        timeout: int = 600,
+        cancel_event: Optional[Event] = None,
+        transcription_id: Optional[str] = None
+    ) -> subprocess.CompletedProcess:
         """
         Whisper.cppバイナリを実行
 
@@ -248,13 +300,20 @@ class WhisperService:
             wav_path: WAVファイルパス
             output_prefix: 出力ファイルプレフィックス
             timeout: Transcription timeout in seconds (default: 600)
+            cancel_event: キャンセルシグナル (Event)
+            transcription_id: 転写ID (PID追跡用)
 
         Returns:
             result: subprocess実行結果
         """
+        # Check for cancellation
+        if cancel_event and cancel_event.is_set():
+            logger.info("[CANCEL] Whisper cancelled before starting")
+            raise Exception("Transcription cancelled")
+
         # Get file size for logging
         wav_size_mb = Path(wav_path).stat().st_size / (1024 * 1024)
-        
+
         whisper_cmd = [
             self.binary,
             "-m", self.model,
@@ -265,9 +324,9 @@ class WhisperService:
             "-otxt",  # テキスト出力
             "-osrt",  # SRT出力 (タイムスタンプ)
         ]
-        
+
         cmd_str = ' '.join(str(x) for x in whisper_cmd)
-        
+
         # Prominent logging before execution
         logger("=" * 80)
         logger.info(f"[WHISPER START] Starting transcription")
@@ -278,85 +337,103 @@ class WhisperService:
         logger.info(f"[WHISPER] Threads: {self.threads}")
         logger.info(f"[WHISPER] Timeout: {timeout}s")
         logger.info(f"[WHISPER] Command: {cmd_str}")
+        logger.info(f"[WHISPER] Transcription ID: {transcription_id}")
         logger("=" * 80)
-        
+
         # Also print to stdout for immediate visibility
         print(f"\n{'='*80}", flush=True)
         print(f"[WHISPER] Starting transcription...", flush=True)
         print(f"[WHISPER] Input: {wav_path} ({wav_size_mb:.2f} MB)", flush=True)
         print(f"{'='*80}\n", flush=True)
-        
+
         try:
-            result = subprocess.run(
+            # Use Popen for PID tracking and cancellation support
+            process = subprocess.Popen(
                 whisper_cmd,
-                capture_output=True,
-                text=True,
-                timeout=timeout,
-                check=False  # Do not raise immediately to capture output
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True
             )
-            
-            # Log completion status
-            logger.info(f"[WHISPER] Process finished with return code: {result.returncode}")
-            
-            # Log stdout (whisper progress and results)
-            if result.stdout:
-                logger.info(f"[WHISPER STDOUT]\n{result.stdout}")
-                # Also print progress to console
-                for line in result.stdout.split('\n'):
-                    if line.strip():
-                        print(f"[WHISPER] {line}", flush=True)
-            
-            # Log stderr (whisper warnings and errors)
-            if result.stderr:
-                logger.info(f"[WHISPER STDERR]\n{result.stderr}")
-                # Also print to console
-                for line in result.stderr.split('\n'):
-                    if line.strip():
-                        print(f"[WHISPER] {line}", flush=True)
-            
-            # Check output files
-            txt_file = Path(f"{output_prefix}.txt")
-            srt_file = Path(f"{output_prefix}.srt")
-            
-            logger.info(f"[WHISPER] Output files check:")
-            if txt_file.exists():
-                txt_size_kb = txt_file.stat().st_size / 1024
-                with open(txt_file, 'r') as f:
-                    txt_preview = f.read(200)
-                logger.info(f"[WHISPER]   ✓ TXT: {txt_file.name} ({txt_size_kb:.2f} KB)")
-                logger.info(f"[WHISPER]   Preview: {txt_preview[:100]}...")
-            else:
-                logger.warning(f"[WHISPER]   ✗ TXT not found: {txt_file}")
-            
-            if srt_file.exists():
-                srt_size_kb = srt_file.stat().st_size / 1024
-                logger.info(f"[WHISPER]   ✓ SRT: {srt_file.name} ({srt_size_kb:.2f} KB)")
-            else:
-                logger.warning(f"[WHISPER]   ✗ SRT not found: {srt_file}")
-            
-            # Check if command succeeded
-            if result.returncode != 0:
-                logger.error(f"[WHISPER ERROR] Command failed with exit code {result.returncode}")
-                logger.error(f"[WHISPER ERROR] Full stderr: {result.stderr}")
-                raise Exception(
-                    f"Whisper transcription failed (exit code {result.returncode}): {result.stderr}"
-                )
-            
-            logger("=" * 80)
-            logger.info(f"[WHISPER SUCCESS] Transcription completed successfully")
-            logger("=" * 80)
-            print(f"\n{'='*80}", flush=True)
-            print(f"[WHISPER] Transcription completed successfully!", flush=True)
-            print(f"{'='*80}\n", flush=True)
-            
-            return result
-            
-        except subprocess.TimeoutExpired as e:
-            logger.error(f"[WHISPER TIMEOUT] Process timed out after {timeout}s")
-            logger.error(f"[WHISPER TIMEOUT] Partial stdout: {e.stdout if e.stdout else 'N/A'}")
-            logger.error(f"[WHISPER TIMEOUT] Partial stderr: {e.stderr if e.stderr else 'N/A'}")
-            print(f"\n[WHISPER ERROR] Transcription timed out after {timeout}s\n", flush=True)
-            raise Exception(f"Whisper transcription timed out after {timeout} seconds")
+
+            # Track PID if transcription_id is provided
+            if transcription_id:
+                from app.services.transcription_processor import track_transcription_pid
+                track_transcription_pid(transcription_id, process.pid)
+                logger.info(f"[WHISPER] Whisper PID tracked: {process.pid} for transcription: {transcription_id}")
+
+            try:
+                stdout, stderr = process.communicate(timeout=timeout)
+
+                # Create a CompletedProcess-like result
+                class CompletedProcess:
+                    def __init__(self, returncode, stdout, stderr):
+                        self.returncode = returncode
+                        self.stdout = stdout
+                        self.stderr = stderr
+
+                result = CompletedProcess(process.returncode, stdout, stderr)
+
+                # Log completion status
+                logger.info(f"[WHISPER] Process finished with return code: {result.returncode}")
+
+                # Log stdout (whisper progress and results)
+                if result.stdout:
+                    logger.info(f"[WHISPER STDOUT]\n{result.stdout}")
+                    # Also print progress to console
+                    for line in result.stdout.split('\n'):
+                        if line.strip():
+                            print(f"[WHISPER] {line}", flush=True)
+
+                # Log stderr (whisper warnings and errors)
+                if result.stderr:
+                    logger.info(f"[WHISPER STDERR]\n{result.stderr}")
+                    # Also print to console
+                    for line in result.stderr.split('\n'):
+                        if line.strip():
+                            print(f"[WHISPER] {line}", flush=True)
+
+                # Check output files
+                txt_file = Path(f"{output_prefix}.txt")
+                srt_file = Path(f"{output_prefix}.srt")
+
+                logger.info(f"[WHISPER] Output files check:")
+                if txt_file.exists():
+                    txt_size_kb = txt_file.stat().st_size / 1024
+                    with open(txt_file, 'r') as f:
+                        txt_preview = f.read(200)
+                    logger.info(f"[WHISPER]   ✓ TXT: {txt_file.name} ({txt_size_kb:.2f} KB)")
+                    logger.info(f"[WHISPER]   Preview: {txt_preview[:100]}...")
+                else:
+                    logger.warning(f"[WHISPER]   ✗ TXT not found: {txt_file}")
+
+                if srt_file.exists():
+                    srt_size_kb = srt_file.stat().st_size / 1024
+                    logger.info(f"[WHISPER]   ✓ SRT: {srt_file.name} ({srt_size_kb:.2f} KB)")
+                else:
+                    logger.warning(f"[WHISPER]   ✗ SRT not found: {srt_file}")
+
+                # Check if command succeeded
+                if result.returncode != 0:
+                    logger.error(f"[WHISPER ERROR] Command failed with exit code {result.returncode}")
+                    logger.error(f"[WHISPER ERROR] Full stderr: {result.stderr}")
+                    raise Exception(
+                        f"Whisper transcription failed (exit code {result.returncode}): {result.stderr}"
+                    )
+
+                logger("=" * 80)
+                logger.info(f"[WHISPER SUCCESS] Transcription completed successfully")
+                logger("=" * 80)
+                print(f"\n{'='*80}", flush=True)
+                print(f"[WHISPER] Transcription completed successfully!", flush=True)
+                print(f"{'='*80}\n", flush=True)
+
+                return result
+
+            except subprocess.TimeoutExpired:
+                process.kill()
+                logger.error(f"[WHISPER TIMEOUT] Process timed out after {timeout}s")
+                print(f"\n[WHISPER ERROR] Transcription timed out after {timeout}s\n", flush=True)
+                raise Exception(f"Whisper transcription timed out after {timeout} seconds")
         
         except Exception as e:
             logger.error(f"[WHISPER ERROR] Unexpected error: {type(e).__name__}: {e}")
@@ -449,62 +526,76 @@ class WhisperService:
     def transcribe_with_chunking(
         self,
         audio_file_path: str,
-        output_dir: Optional[str] = None
+        output_dir: Optional[str] = None,
+        cancel_event: Optional[Event] = None,
+        transcription_id: Optional[str] = None
     ) -> Dict[str, any]:
         """
         Transcribe audio using chunking strategy for faster processing.
-        
+
         Splits audio into chunks, processes them in parallel, and merges results.
-        
+
         Args:
             audio_file_path: 音声ファイルのパス
             output_dir: 出力ディレクトリ
-        
+            cancel_event: キャンセルシグナル (Event)
+            transcription_id: 転写ID (PID追跡用)
+
         Returns:
             transcription: Merged transcription result
         """
+        # Check for cancellation immediately
+        if cancel_event and cancel_event.is_set():
+            logger.info("[CANCEL][CHUNKING] Chunked transcription cancelled before starting")
+            raise Exception("Transcription cancelled")
+
         logger.info(f"[CHUNKING] Starting chunked transcription for: {audio_file_path}")
         print(f"\n[CHUNKING] Starting chunked transcription...", flush=True)
-        
+
         if output_dir is None:
             output_dir = tempfile.mkdtemp()
-        
+
         output_path = Path(output_dir)
         output_path.mkdir(exist_ok=True, parents=True)
-        
+
         # Convert to WAV first
         try:
-            wav_path = self._convert_to_wav(audio_file_path, output_dir)
+            wav_path = self._convert_to_wav(audio_file_path, output_dir, cancel_event=cancel_event, transcription_id=transcription_id)
         except Exception as e:
             logger.error(f"[CHUNKING] Failed to convert to WAV: {e}")
             raise Exception(f"Audio conversion failed: {e}") from e
-        
+
         try:
+            # Check for cancellation after conversion
+            if cancel_event and cancel_event.is_set():
+                logger.info("[CANCEL][CHUNKING] Cancelled after conversion")
+                raise Exception("Transcription cancelled")
+
             # Get audio duration
             duration = self._get_audio_duration(str(wav_path))
-            
+
             logger.info(f"[CHUNKING] Audio duration: {duration}s ({duration/60:.1f} minutes)")
             print(f"[CHUNKING] Audio duration: {duration}s ({duration/60:.1f} minutes)", flush=True)
-            
+
             # Split audio into chunks
             logger.info(f"[CHUNKING] Splitting audio into chunks...")
             print(f"[CHUNKING] Splitting audio into chunks...", flush=True)
-            
+
             chunks_info = self._split_audio_into_chunks(
                 str(wav_path),
                 output_dir,
                 duration
             )
-            
+
             logger.info(f"[CHUNKING] Created {len(chunks_info)} chunks")
             print(f"[CHUNKING] Created {len(chunks_info)} chunks", flush=True)
-            
+
             # Log chunk info
             for i, chunk in enumerate(chunks_info):
                 logger.info(f"[CHUNKING]   Chunk {i}: {chunk['start_time']:.1f}s - {chunk['end_time']:.1f}s ({chunk['duration']:.1f}s)")
-            
+
             # Transcribe chunks in parallel
-            chunks_results = self._transcribe_chunks_parallel(chunks_info, output_dir)
+            chunks_results = self._transcribe_chunks_parallel(chunks_info, output_dir, cancel_event, transcription_id)
             
             # Check for failed chunks
             failed_chunks = [i for i, r in enumerate(chunks_results) if "error" in r]
@@ -765,41 +856,47 @@ class WhisperService:
     def _transcribe_chunks_parallel(
         self,
         chunks_info: List[Dict[str, any]],
-        output_dir: str
+        output_dir: str,
+        cancel_event: Optional[Event] = None,
+        transcription_id: Optional[str] = None
     ) -> List[Dict[str, any]]:
         """
         Transcribe multiple chunks in parallel using ThreadPoolExecutor.
-        
+
         Args:
             chunks_info: List of chunk info dicts
             output_dir: Output directory
-        
+            cancel_event: キャンセルシグナル (Event)
+            transcription_id: 転写ID (PID追跡用)
+
         Returns:
             List of transcription results (in chunk order)
         """
         max_workers = settings.MAX_CONCURRENT_CHUNKS
         total_chunks = len(chunks_info)
-        
+
         results = [None] * total_chunks
         completed_count = 0
         failed_count = 0
-        
+
         logger("=" * 80)
         logger.info(f"[PARALLEL TRANSCRIPTION] Starting {total_chunks} chunks with {max_workers} workers")
         print(f"\n{'='*80}", flush=True)
         print(f"[PARALLEL] Transcribing {total_chunks} chunks with {max_workers} workers...", flush=True)
         print(f"{'='*80}\n", flush=True)
-        
+
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             # Submit all tasks
             future_to_chunk = {
                 executor.submit(
                     self._transcribe_chunk,
                     chunk_info,
-                    output_dir
+                    output_dir,
+                    cancel_event,
+                    transcription_id
                 ): chunk_info for chunk_info in chunks_info
             }
-            
+
             # Collect results as they complete
             for future in as_completed(future_to_chunk):
                 chunk_info = future_to_chunk[future]
@@ -841,38 +938,47 @@ class WhisperService:
     def _transcribe_chunk(
         self,
         chunk_info: Dict[str, any],
-        output_dir: str
+        output_dir: str,
+        cancel_event: Optional[Event] = None,
+        transcription_id: Optional[str] = None
     ) -> Dict[str, any]:
         """
         Transcribe a single audio chunk.
-        
+
         Args:
             chunk_info: Chunk info dict with path, start_time, etc.
             output_dir: Output directory
-        
+            cancel_event: キャンセルシグナル (Event)
+            transcription_id: 転写ID (PID追跡用)
+
         Returns:
             Transcription result
         """
+        # Check for cancellation before starting
+        if cancel_event and cancel_event.is_set():
+            logger.info(f"[CANCEL] Chunk {chunk_info['index']} cancelled before starting")
+            return {"error": "Cancelled", "chunk_index": chunk_info["index"]}
+
         chunk_index = chunk_info["index"]
         chunk_path = chunk_info["path"]
         start_time = chunk_info["start_time"]
-        
+
         logger.info(f"[CHUNK {chunk_index}] Starting transcription")
         logger.info(f"[CHUNK {chunk_index}]   Path: {chunk_path}")
         logger.info(f"[CHUNK {chunk_index}]   Start time: {start_time:.2f}s")
         logger.info(f"[CHUNK {chunk_index}]   Duration: {chunk_info['duration']:.2f}s")
         print(f"[CHUNK {chunk_index}] Transcribing... (start: {start_time:.1f}s)", flush=True)
-        
+
         # Create output prefix for this chunk
         output_prefix = Path(output_dir) / f"chunk_{chunk_index:03d}"
-        
+
         # Calculate timeout for this chunk
         chunk_duration = int(chunk_info["duration"])
         timeout = self._calculate_timeout(chunk_duration)
-        
+
         try:
             # Run whisper on this chunk
-            result = self._run_whisper(chunk_path, str(output_prefix), timeout)
+            result = self._run_whisper(chunk_path, str(output_prefix), timeout, cancel_event, transcription_id)
             
             # Parse output
             transcription = self._parse_output(str(output_prefix))
