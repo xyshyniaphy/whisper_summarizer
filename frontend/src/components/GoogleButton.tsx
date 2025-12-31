@@ -45,7 +45,7 @@ export function GoogleButton({ onClick, disabled = false, loading = false }: Goo
       </svg>
 
       <span className="text-sm font-medium text-gray-700 dark:text-gray-200">
-        {loading ? '接続中...' : 'Googleで続ける'}
+        {loading ? '连接中...' : '使用 Google 继续'}
       </span>
     </button>
   )

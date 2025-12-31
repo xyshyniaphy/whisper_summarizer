@@ -23,7 +23,7 @@ const getDisplayText = (text: string, maxLines: number = 200): string => {
         return text
     }
     return lines.slice(0, maxLines).join('\n') +
-        `\n\n... (残り ${lines.length - maxLines} 行。完全版はダウンロードしてください)`
+        `\n\n... (剩余 ${lines.length - maxLines} 行。请下载完整版本)`
 }
 
 export function TranscriptionDetail() {
@@ -43,7 +43,7 @@ export function TranscriptionDetail() {
             const data = await api.getTranscription(transcriptionId)
             setTranscription(data)
 
-            // 既存の要約があれば取得
+            // 获取现有摘要（如果有）
             if (data.summaries && data.summaries.length > 0) {
                 setSummary(data.summaries[0])
             }
@@ -87,7 +87,7 @@ export function TranscriptionDetail() {
     if (!transcription) {
         return (
             <div className="container mx-auto px-4 py-8">
-                <p>見つかりませんでした</p>
+                <p>未找到</p>
             </div>
         )
     }
@@ -113,7 +113,7 @@ export function TranscriptionDetail() {
                 className="mb-4"
                 onClick={() => navigate('/transcriptions')}
             >
-                ← 一覧に戻る
+                ← 返回列表
             </Button>
 
             <div className="flex justify-between items-center mb-6">
@@ -137,7 +137,7 @@ export function TranscriptionDetail() {
                 <Card>
                     <CardContent className="pt-6">
                         <div className="flex justify-between items-center mb-4">
-                            <h3 className="text-lg font-semibold">文字起こし結果</h3>
+                            <h3 className="text-lg font-semibold">转录结果</h3>
                             {transcription.stage === 'completed' && (
                                 <div className="flex gap-2">
                                     <a
@@ -146,7 +146,7 @@ export function TranscriptionDetail() {
                                         className="inline-flex items-center gap-1 px-3 py-1.5 text-sm bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
                                     >
                                         <Download className="w-4 h-4" />
-                                        テキストをダウンロード
+                                        下载文本
                                     </a>
                                     <a
                                         href={downloadUrlSrt}
@@ -154,7 +154,7 @@ export function TranscriptionDetail() {
                                         className="inline-flex items-center gap-1 px-3 py-1.5 text-sm bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
                                     >
                                         <Download className="w-4 h-4" />
-                                        字幕（SRT）をダウンロード
+                                        下载字幕(SRT)
                                     </a>
                                 </div>
                             )}
@@ -167,7 +167,7 @@ export function TranscriptionDetail() {
 
                 <Card>
                     <CardContent className="pt-6">
-                        <h3 className="text-lg font-semibold mb-4">AI要約</h3>
+                        <h3 className="text-lg font-semibold mb-4">AI摘要</h3>
                         {summary ? (
                             <pre className="whitespace-pre-wrap font-sans text-sm">
                                 {summary.summary_text}
@@ -175,10 +175,10 @@ export function TranscriptionDetail() {
                         ) : (
                             <p className="text-gray-500 dark:text-gray-400 text-sm">
                                 {transcription.stage === 'completed'
-                                    ? '要約データが見つかりません。'
+                                    ? '未找到摘要数据。'
                                     : transcription.stage === 'summarizing'
-                                        ? '要約を生成中...'
-                                        : '文字起こしが完了すると自動的に要約を生成します。'}
+                                        ? '正在生成摘要...'
+                                        : '转录完成后将自动生成摘要。'}
                             </p>
                         )}
                     </CardContent>

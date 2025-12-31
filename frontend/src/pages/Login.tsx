@@ -30,11 +30,11 @@ export default function Login() {
             if (result.error) {
                 setError(result.error.message || '发生错误')
             } else if (result.user) {
-                // 成功時にtranscriptionsへ遷移
+                // 成功后导航到转录列表
                 navigate('/transcriptions')
             }
         } catch (err: any) {
-            setError(err.message || '予期しない发生错误')
+            setError(err.message || '发生意外错误')
         } finally {
             setLoading(false)
         }
@@ -53,7 +53,7 @@ export default function Login() {
             // If successful, user will be redirected to Google
             // and then back to the app, so we don't setGoogleLoading(false) here
         } catch (err: any) {
-            setError(err.message || '予期しない发生错误')
+            setError(err.message || '发生意外错误')
             setGoogleLoading(false)
         }
     }
@@ -78,7 +78,7 @@ export default function Login() {
                                     </label>
                                     <input
                                         type="text"
-                                        placeholder="山田 太郎"
+                                        placeholder="张三"
                                         value={fullName}
                                         onChange={(e) => setFullName(e.target.value)}
                                         className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
