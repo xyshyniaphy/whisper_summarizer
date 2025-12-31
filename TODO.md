@@ -29,11 +29,12 @@
 ## 🧪 Testing (Completed)
 - [x] **Unit Tests**
     - [x] Add Backend tests (FastAPI + Pytest) - 73.37% coverage achieved.
-    - [ ] Add Frontend tests (React Testing Library + Vitest) - Environment setup, currently fixing `useAuth` mock issues.
+    - [x] Add Frontend tests (React Testing Library + Vitest) - 10 tests passing.
 - [x] **E2E Tests**
-    - [x] Automate the "Upload -> Transcribe -> Verify" flow with Playwright (Tests running, fixing timeouts/mocking).
+    - [x] Automate the "Upload -> Transcribe -> Verify" flow with Playwright - 7/7 tests passing.
     - [x] Fix E2E Screenshot Output Path (`data/screenshots/`).
-- [ ] **Test Infrastructure**
+    - [x] Implement E2E test mode for reliable auth testing.
+- [x] **Test Infrastructure**
     - [x] Docker-based test environment (`tests/run.sh`).
     - [x] Automated test execution for CI/CD readiness.
     - [x] Update `clear_cache.sh` to include E2E artifacts.
