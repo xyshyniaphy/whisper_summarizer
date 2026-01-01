@@ -1,6 +1,6 @@
-from pydantic import BaseModel, UUID4, ConfigDict
+from pydantic import BaseModel, UUID4, ConfigDict, field_serializer
 from typing import Optional, List
-from datetime import datetime
+from datetime import datetime, timedelta
 
 class SummaryBase(BaseModel):
     summary_text: str
@@ -46,3 +46,9 @@ class TranscriptionInDBBase(TranscriptionBase):
 class Transcription(TranscriptionInDBBase):
     summaries: List[Summary] = []
     text: str = ""  # Transcription text (decompressed from storage)
+    time_remaining: Optional[timedelta] = None  # Time until auto-deletion (calculated)
+
+    @field_serializer('time_remaining')
+    def serialize_time_remaining(self, td: Optional[timedelta]) -> Optional[float]:
+        """Serialize timedelta to total seconds remaining."""
+        return td.total_seconds() if td else None

@@ -12,6 +12,7 @@ export interface Transcription {
   completed_at?: string;
   created_at: string;
   updated_at: string;
+  time_remaining?: number;  // Seconds remaining before auto-delete (negative if expired)
   summaries?: Summary[];
 }
 

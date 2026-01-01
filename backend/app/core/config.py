@@ -48,6 +48,10 @@ class Settings(BaseSettings):
     MERGE_STRATEGY: str = "lcs"  # Merge strategy: "lcs" (text-based) or "timestamp" (simple)
     LCS_CHUNK_THRESHOLD: int = 10  # Use timestamp merge for >= N chunks (optimization for large files)
 
+    # Data Retention
+    MAX_KEEP_DAYS: int = 30  # Maximum days to keep transcriptions before auto-delete
+    CLEANUP_HOUR: int = 9  # Hour to run daily cleanup (24-hour format, default: 9 AM)
+
     class Config:
         env_file = ".env"
         case_sensitive = True

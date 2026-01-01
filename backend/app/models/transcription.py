@@ -3,6 +3,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 import uuid
+from datetime import datetime, timezone, timedelta
 from app.db.base_class import Base
 
 class Transcription(Base):
@@ -55,3 +56,22 @@ class Transcription(Base):
             import logging
             logging.getLogger(__name__).error(f"Failed to load transcription text from storage: {e}")
             return ""
+
+    @property
+    def time_remaining(self) -> timedelta:
+        """
+        Calculate remaining time before auto-deletion.
+
+        Returns a timedelta showing how long until this transcription
+        will be automatically deleted based on MAX_KEEP_DAYS setting.
+        Negative value means the item is past its retention period.
+        """
+        from app.core.config import settings
+        max_age = timedelta(days=settings.MAX_KEEP_DAYS)
+        age = datetime.now(timezone.utc) - self.created_at
+        return max_age - age
+
+    @property
+    def is_expired(self) -> bool:
+        """Check if this transcription has exceeded its retention period."""
+        return self.time_remaining.total_seconds() <= 0

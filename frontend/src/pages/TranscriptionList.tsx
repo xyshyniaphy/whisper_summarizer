@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Trash2, AlertCircle, Loader2 } from 'lucide-react'
+import { Trash2, AlertCircle, Loader2, Clock } from 'lucide-react'
 import { api } from '../services/api'
 import { Transcription } from '../types'
 import { AudioUploader } from '../components/AudioUploader'
@@ -149,6 +149,37 @@ export function TranscriptionList() {
         }
     }
 
+    const formatTimeRemaining = (seconds?: number): { text: string; className: string } => {
+        if (seconds === undefined || seconds === null) {
+            return { text: '-', className: 'text-gray-500 dark:text-gray-400' }
+        }
+
+        // Expired or will expire soon
+        if (seconds <= 0) {
+            return { text: '已过期', className: 'text-red-600 dark:text-red-400 font-medium' }
+        }
+
+        // Less than 1 day
+        if (seconds < 86400) {
+            if (seconds < 3600) {
+                const mins = Math.ceil(seconds / 60)
+                return { text: `${mins}分钟`, className: 'text-orange-600 dark:text-orange-400' }
+            }
+            const hours = Math.ceil(seconds / 3600)
+            return { text: `${hours}小时`, className: 'text-orange-600 dark:text-orange-400' }
+        }
+
+        // 1-7 days
+        if (seconds < 604800) {
+            const days = Math.ceil(seconds / 86400)
+            return { text: `${days}天`, className: 'text-yellow-600 dark:text-yellow-400' }
+        }
+
+        // More than 7 days
+        const days = Math.ceil(seconds / 86400)
+        return { text: `${days}天`, className: 'text-green-600 dark:text-green-400' }
+    }
+
     const { title, message } = getConfirmMessage(deleteConfirm.stage)
 
     return (
@@ -182,6 +213,12 @@ export function TranscriptionList() {
                                     </th>
                                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                                         处理时间
+                                    </th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                                        <div className="flex items-center gap-1">
+                                            <Clock className="w-3 h-3" />
+                                            保留时间
+                                        </div>
                                     </th>
                                     <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                                         操作
@@ -226,6 +263,11 @@ export function TranscriptionList() {
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
                                             {formatUsedTime(item)}
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm">
+                                            <span className={formatTimeRemaining(item.time_remaining).className}>
+                                                {formatTimeRemaining(item.time_remaining).text}
+                                            </span>
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-right">
                                             {shouldAllowDelete(item) && (

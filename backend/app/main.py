@@ -7,6 +7,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app import models  # Ensure models are registered
 from app.api import auth, audio, transcriptions, users
+from app.tasks import start_scheduler, stop_scheduler
+import logging
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title="Whisper Summarizer API",
@@ -47,3 +51,23 @@ async def health_check():
         "status": "healthy",
         "service": "whisper-summarizer-backend"
     }
+
+
+@app.on_event("startup")
+async def startup_event():
+    """Initialize scheduled tasks on startup."""
+    try:
+        start_scheduler()
+        logger.info("Application started successfully")
+    except Exception as e:
+        logger.error(f"Failed to start scheduler: {e}", exc_info=True)
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Cleanup scheduler on shutdown."""
+    try:
+        stop_scheduler()
+        logger.info("Application shutdown complete")
+    except Exception as e:
+        logger.error(f"Error during shutdown: {e}", exc_info=True)

@@ -21,6 +21,9 @@ faster-whisper>=1.0.0
 # Audio processing
 pydub>=0.25.0
 
+# Scheduled tasks
+APScheduler>=3.10.0
+
 # Development dependencies
 ruff>=0.8.0
 pytest>=8.3.0
