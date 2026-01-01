@@ -32,6 +32,7 @@ class TranscriptionInDBBase(TranscriptionBase):
     id: UUID4
     user_id: Optional[UUID4] = None
     file_path: Optional[str] = None
+    storage_path: Optional[str] = None
     error_message: Optional[str] = None
     retry_count: Optional[int] = 0
     completed_at: Optional[datetime] = None

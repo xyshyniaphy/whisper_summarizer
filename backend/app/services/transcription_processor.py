@@ -385,31 +385,39 @@ class TranscriptionProcessor:
             logger.info(f"[TRANSCRIPTION PROCESSOR] Received result from whisper_service")
             print(f"[TRANSCRIPTION PROCESSOR] Received result from whisper_service", flush=True)
 
-            # Compress text using gzip to avoid SSL connection issues with large text
-            try:
-                text = result.get("text", "")
-                logger.info(f"[TRANSCRIPTION PROCESSOR] Got text from result: {len(text)} chars")
-                print(f"[TRANSCRIPTION PROCESSOR] Got text from result: {len(text)} chars", flush=True)
+            # Get text from result
+            text = result.get("text", "")
+            logger.info(f"[TRANSCRIPTION PROCESSOR] Got text from result: {len(text)} chars")
+            print(f"[TRANSCRIPTION PROCESSOR] Got text from result: {len(text)} chars", flush=True)
 
-                text_bytes = text.encode('utf-8')
-                logger.info(f"[TRANSCRIPTION PROCESSOR] Text encoded: {len(text_bytes)} bytes")
-                print(f"[TRANSCRIPTION PROCESSOR] Text encoded: {len(text_bytes)} bytes", flush=True)
+            # Save to Supabase Storage
+            from app.services.storage_service import get_storage_service
+            storage_service = get_storage_service()
 
-                compressed_text = gzip.compress(text_bytes, compresslevel=6)
-                logger.info(f"[TRANSCRIPTION PROCESSOR] Text compressed: {len(compressed_text)} bytes")
-                print(f"[TRANSCRIPTION PROCESSOR] Text compressed: {len(compressed_text)} bytes", flush=True)
-            except Exception as e:
-                logger.error(f"[TRANSCRIPTION PROCESSOR] Error during compression: {e}")
-                print(f"[TRANSCRIPTION PROCESSOR] Error during compression: {e}", flush=True)
-                raise
+            logger.info(f"[TRANSCRIPTION PROCESSOR] Uploading to Supabase Storage...")
+            print(f"[TRANSCRIPTION PROCESSOR] Uploading to Supabase Storage...", flush=True)
 
-            # Save results - ONLY save to compressed field to avoid SSL errors
-            # DO NOT save to original_text as it causes SSL connection issues with large text
-            transcription.original_text_compressed = compressed_text
+            storage_path = storage_service.save_transcription_text(
+                transcription_id=str(transcription.id),
+                text=text
+            )
+
+            logger.info(f"[TRANSCRIPTION PROCESSOR] Uploaded to storage: {storage_path}")
+            print(f"[TRANSCRIPTION PROCESSOR] Uploaded to storage: {storage_path}", flush=True)
+
+            # Update database with storage path and metadata
+            transcription.storage_path = storage_path
             transcription.language = result["language"]
             transcription.duration_seconds = result.get("duration")
             transcription.error_message = None
+
+            logger.info(f"[TRANSCRIPTION PROCESSOR] Committing to database...")
+            print(f"[TRANSCRIPTION PROCESSOR] Committing to database...", flush=True)
+
             db.commit()
+
+            logger.info(f"[TRANSCRIPTION PROCESSOR] Database commit successful")
+            print(f"[TRANSCRIPTION PROCESSOR] Database commit successful", flush=True)
 
             logger.debug(
                 f"Transcription successful: {transcription.id} | "

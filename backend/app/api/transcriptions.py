@@ -101,6 +101,17 @@ async def delete_all_transcriptions(
         # Delete files
         try:
             import os
+            from app.services.storage_service import get_storage_service
+
+            # Delete from Supabase Storage
+            if transcription.storage_path:
+                try:
+                    storage_service = get_storage_service()
+                    storage_service.delete_transcription_text(str(transcription.id))
+                    logger.info(f"[DELETE ALL] Deleted from Supabase Storage: {transcription.storage_path}")
+                except Exception as e:
+                    logger.warning(f"[DELETE ALL] Failed to delete from storage: {e}")
+
             if transcription.file_path and os.path.exists(transcription.file_path):
                 os.remove(transcription.file_path)
 
@@ -178,6 +189,16 @@ async def delete_transcription(
     try:
         import os
         from pathlib import Path
+        from app.services.storage_service import get_storage_service
+
+        # Delete from Supabase Storage
+        if transcription.storage_path:
+            try:
+                storage_service = get_storage_service()
+                storage_service.delete_transcription_text(str(transcription.id))
+                logger.info(f"[DELETE] Deleted from Supabase Storage: {transcription.storage_path}")
+            except Exception as e:
+                logger.warning(f"[DELETE] Failed to delete from storage: {e}")
 
         # アップロードファイル削除
         if transcription.file_path and os.path.exists(transcription.file_path):

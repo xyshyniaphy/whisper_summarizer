@@ -1,9 +1,8 @@
-from sqlalchemy import Column, String, Text, Float, DateTime, ForeignKey, Integer, LargeBinary
+from sqlalchemy import Column, String, Text, Float, DateTime, ForeignKey, Integer
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 import uuid
-import gzip
 from app.db.base_class import Base
 
 class Transcription(Base):
@@ -13,8 +12,8 @@ class Transcription(Base):
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
     file_name = Column(String, nullable=False)
     file_path = Column(Text, nullable=True)
-    # original_text = Column(Text, nullable=True)  # REMOVED: Use original_text_compressed instead to avoid SSL errors
-    original_text_compressed = Column(LargeBinary, nullable=True)  # Gzip-compressed binary data
+    # Path to compressed text file in Supabase Storage (format: {uuid}.txt.gz)
+    storage_path = Column(String, nullable=True)
     status = Column(String, default="processing")  # Legacy, use stage instead
     language = Column(String, nullable=True)
     duration_seconds = Column(Float, nullable=True)
@@ -40,15 +39,19 @@ class Transcription(Base):
     @property
     def text(self) -> str:
         """
-        Get the decompressed transcription text from original_text_compressed.
-        Uses gzip compression to avoid SSL connection errors with large text.
+        Get the decompressed transcription text from Supabase Storage.
+
+        The text is stored as a gzip-compressed file in Supabase Storage.
+        This property downloads and decompresses it on demand.
         """
-        if self.original_text_compressed:
-            try:
-                return gzip.decompress(self.original_text_compressed).decode('utf-8')
-            except Exception as e:
-                # Log error but don't fail - return empty string
-                import logging
-                logging.getLogger(__name__).error(f"Failed to decompress text: {e}")
-                return ""
-        return ""
+        if not self.storage_path:
+            return ""
+
+        try:
+            from app.services.storage_service import get_storage_service
+            storage_service = get_storage_service()
+            return storage_service.get_transcription_text(str(self.id))
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).error(f"Failed to load transcription text from storage: {e}")
+            return ""
