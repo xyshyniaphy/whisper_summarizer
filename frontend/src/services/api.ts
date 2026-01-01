@@ -85,6 +85,11 @@ export const api = {
     await apiClient.delete(`/transcriptions/${id}`);
   },
 
+  deleteAllTranscriptions: async (): Promise<{ deleted_count: number; message: string }> => {
+    const response = await apiClient.delete<{ deleted_count: number; message: string }>('/transcriptions/all');
+    return response.data;
+  },
+
   getDownloadUrl: (transcriptionId: string, format: 'txt' | 'srt'): string => {
     return `${API_URL}/transcriptions/${transcriptionId}/download?format=${format}`;
   },

@@ -208,7 +208,8 @@ class TranscribeService:
             transcription = {
                 "text": " ".join(seg.text for seg in segments),
                 "segments": self._segments_to_dict(segments),
-                "language": info.language
+                "language": info.language,
+                "duration": info.duration
             }
 
             # Log results
@@ -402,6 +403,9 @@ class TranscribeService:
             print(f"[CHUNKING] Merging results...", flush=True)
 
             merged = self._merge_chunk_results(chunks_results)
+
+            # Add duration to merged result
+            merged["duration"] = duration
 
             # Log final result
             final_text_length = len(merged.get("text", ""))

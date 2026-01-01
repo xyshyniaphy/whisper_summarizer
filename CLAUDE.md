@@ -417,7 +417,89 @@ debug_output = str(some_large_object)[:MAX_DEBUG_BYTES]
 logger.debug(f"Data: {debug_output}")
 ```
 
+### Reading Backend Logs
+
+**IMPORTANT:** Backend logs can grow extremely large (10,000+ lines) during hot reload or transcription processing. **NEVER read the full TaskOutput at once** - this will consume excessive tokens.
+
+**When checking task output:**
+- Use `timeout` parameter to limit output size
+- Look for specific patterns using grep/filter instead of reading all lines
+- For chrome-devtools MCP tasks, use `list_console_messages` or `list_network_requests` with pagination instead of reading raw output
+
+```python
+# GOOD - Limit output size
+TaskOutput(task_id="xxx", block=True, timeout=5000)
+
+# GOOD - Use specific tools
+mcp__chrome-devtools__list_console_messages(pageSize=20, pageIdx=0)
+
+# BAD - Reading all logs at once
+TaskOutput(task_id="xxx", block=True)  # Could return 18,000+ lines
+```
+
 ## Frontend UI Patterns
+
+### Confirmation Dialogs (NEVER use window.confirm)
+
+**CRITICAL:** Never use `window.confirm()`, `window.alert()`, or `window.prompt()` in the frontend codebase. These browser native dialogs:
+- **Block the JavaScript thread** - prevents test frameworks from working properly
+- **Cannot be customized** - poor UX
+- **Cannot be tested** - test frameworks cannot interact with them
+
+**Instead, always use the `ConfirmDialog` component:**
+
+```tsx
+import { ConfirmDialog } from '../components/ui/ConfirmDialog'
+import { useState } from 'react'
+
+function MyComponent() {
+  const [confirmState, setConfirmState] = useState({
+    isOpen: false,
+    id: null
+  })
+
+  const handleActionClick = (id: string) => {
+    setConfirmState({ isOpen: true, id })
+  }
+
+  const handleConfirm = async () => {
+    // Perform the action
+    await doSomething(confirmState.id)
+    setConfirmState({ isOpen: false, id: null })
+  }
+
+  const handleCancel = () => {
+    setConfirmState({ isOpen: false, id: null })
+  }
+
+  return (
+    <>
+      <button onClick={() => handleActionClick('123')}>Delete</button>
+
+      <ConfirmDialog
+        isOpen={confirmState.isOpen}
+        onClose={handleCancel}
+        onConfirm={handleConfirm}
+        title="确认删除"
+        message="确定要删除吗？"
+        confirmLabel="删除"
+        cancelLabel="取消"
+        variant="danger"  // 'default' or 'danger'
+      />
+    </>
+  )
+}
+```
+
+**ConfirmDialog props:**
+- `isOpen`: boolean - Controls visibility
+- `onClose`: () => void - Called when user cancels or closes modal
+- `onConfirm`: () => void | Promise<void> - Called when user clicks confirm button
+- `title`: string - Dialog title
+- `message`: string | ReactNode - Dialog message content
+- `confirmLabel`: string - Text for confirm button (default: "确定")
+- `cancelLabel`: string - Text for cancel button (default: "取消")
+- `variant`: 'default' | 'danger' - Style variant (danger shows red warning icon)
 
 ### Loading States
 

@@ -12,6 +12,8 @@ export type { BadgeProps } from './Badge'
 
 export { Modal } from './Modal'
 
+export { ConfirmDialog } from './ConfirmDialog'
+
 export { Accordion, AccordionItem } from './Accordion'
 
 // Navigation components

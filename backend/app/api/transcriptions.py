@@ -61,6 +61,72 @@ async def get_transcription(
     return transcription
 
 
+@router.delete("/all", status_code=200)
+async def delete_all_transcriptions(
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_active_user)
+):
+    """
+    すべての文字起こしを削除 (ファイルも含む)
+    処理中の場合はキャンセルしてプロセスを終了してから削除します
+    """
+    from app.services.transcription_processor import (
+        is_transcription_active,
+        mark_transcription_cancelled,
+        kill_transcription_processes,
+        get_transcription_task_info
+    )
+
+    # Get all user's transcriptions
+    transcriptions = db.query(Transcription).filter(
+        Transcription.user_id == current_user.get("id")
+    ).all()
+
+    if not transcriptions:
+        return {"deleted_count": 0, "message": "削除する項目がありません"}
+
+    deleted_count = 0
+    output_dir = Path("/app/data/output")
+
+    for transcription in transcriptions:
+        transcription_id = str(transcription.id)
+
+        # Cancel active transcriptions
+        if is_transcription_active(transcription_id):
+            logger.info(f"[DELETE ALL] Cancelling active transcription: {transcription_id}")
+            mark_transcription_cancelled(transcription_id)
+            kill_transcription_processes(transcription_id)
+            time.sleep(0.1)  # Brief pause between cancellations
+
+        # Delete files
+        try:
+            import os
+            if transcription.file_path and os.path.exists(transcription.file_path):
+                os.remove(transcription.file_path)
+
+            for ext in [".wav", ".txt", ".srt", ".vtt", ".json", ".pptx", ".md"]:
+                output_file = output_dir / f"{transcription.id}{ext}"
+                if output_file.exists():
+                    output_file.unlink()
+
+                converted_wav = output_dir / f"{transcription.id}_converted.wav"
+                if converted_wav.exists():
+                    converted_wav.unlink()
+        except Exception as e:
+            logger.error(f"[DELETE ALL] File deletion error for {transcription_id}: {e}")
+
+        db.delete(transcription)
+        deleted_count += 1
+
+    db.commit()
+    logger.info(f"[DELETE ALL] Deleted {deleted_count} transcriptions for user {current_user.get('id')}")
+
+    return {
+        "deleted_count": deleted_count,
+        "message": f"{deleted_count}件の転写を削除しました"
+    }
+
+
 @router.delete("/{transcription_id}", status_code=204)
 async def delete_transcription(
     transcription_id: str,

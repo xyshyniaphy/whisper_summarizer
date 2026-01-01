@@ -385,13 +385,15 @@ class TranscriptionProcessor:
             # Save results
             transcription.original_text = result["text"]
             transcription.language = result["language"]
+            transcription.duration_seconds = result.get("duration")
             transcription.error_message = None
             db.commit()
 
             logger.debug(
                 f"Transcription successful: {transcription.id} | "
                 f"Language: {result['language']} | "
-                f"Text length: {len(result['text'])}"
+                f"Text length: {len(result['text'])} | "
+                f"Duration: {result.get('duration')}s"
             )
             return True
 
