@@ -7,7 +7,7 @@ transcriptions older than MAX_KEEP_DAYS.
 
 import logging
 from datetime import datetime, timezone, timedelta
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 
 from app.core.config import settings
@@ -18,7 +18,7 @@ from app.services.storage_service import get_storage_service
 logger = logging.getLogger(__name__)
 
 # Global scheduler instance
-scheduler = AsyncIOScheduler()
+scheduler = BackgroundScheduler()
 
 
 async def cleanup_expired_transcriptions() -> dict:
@@ -113,7 +113,7 @@ def start_scheduler() -> None:
 
     scheduler.start()
     logger.info(
-        f"Scheduler started: cleanup task runs daily at {settings.CLEANUP_HOUR}:00 UTC"
+        f"Scheduler started: cleanup task runs daily at {settings.CLEANUP_HOUR}:00"
     )
 
 

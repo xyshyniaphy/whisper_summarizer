@@ -4,6 +4,7 @@ FastAPI メインアプリケーション
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from contextlib import asynccontextmanager
 from app.core.config import settings
 from app import models  # Ensure models are registered
 from app.api import auth, audio, transcriptions, users
@@ -12,10 +13,31 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Lifespan context manager for startup and shutdown events."""
+    # Startup
+    try:
+        start_scheduler()
+        logger.info("Scheduler started successfully")
+    except Exception as e:
+        logger.error(f"Failed to start scheduler: {e}", exc_info=True)
+
+    yield
+
+    # Shutdown
+    try:
+        stop_scheduler()
+        logger.info("Scheduler stopped successfully")
+    except Exception as e:
+        logger.error(f"Error stopping scheduler: {e}", exc_info=True)
+
 app = FastAPI(
     title="Whisper Summarizer API",
     description="音声文字起こし・要約システムのバックエンドAPI",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan
 )
 
 # CORS設定
@@ -51,23 +73,3 @@ async def health_check():
         "status": "healthy",
         "service": "whisper-summarizer-backend"
     }
-
-
-@app.on_event("startup")
-async def startup_event():
-    """Initialize scheduled tasks on startup."""
-    try:
-        start_scheduler()
-        logger.info("Application started successfully")
-    except Exception as e:
-        logger.error(f"Failed to start scheduler: {e}", exc_info=True)
-
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Cleanup scheduler on shutdown."""
-    try:
-        stop_scheduler()
-        logger.info("Application shutdown complete")
-    except Exception as e:
-        logger.error(f"Error during shutdown: {e}", exc_info=True)

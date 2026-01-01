@@ -41,6 +41,7 @@ COPY pyproject.toml .
 # Note: faster-whisper is in base image, but we include it here for consistency
 RUN uv venv /opt/venv && \
     . /opt/venv/bin/activate && \
+    uv pip install APScheduler>=3.10.0 && \
     uv pip install -r requirements.txt
 
 # ========================================
