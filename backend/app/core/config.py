@@ -46,6 +46,7 @@ class Settings(BaseSettings):
     VAD_SILENCE_THRESHOLD: int = -30  # dB threshold for silence detection
     VAD_MIN_SILENCE_DURATION: float = 0.5  # Minimum silence duration in seconds
     MERGE_STRATEGY: str = "lcs"  # Merge strategy: "lcs" (text-based) or "timestamp" (simple)
+    LCS_CHUNK_THRESHOLD: int = 10  # Use timestamp merge for >= N chunks (optimization for large files)
 
     class Config:
         env_file = ".env"

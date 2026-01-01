@@ -842,8 +842,9 @@ class TranscribeService:
         """
         Merge transcription results from multiple chunks.
 
-        Uses LCS (Longest Common Subsequence) or timestamp-based strategy
-        depending on MERGE_STRATEGY setting.
+        Uses hybrid strategy: LCS for small files, timestamp-based for large files.
+        - LCS (<10 chunks): Better deduplication but O(n²) complexity
+        - Timestamp (>=10 chunks): Faster O(n) merge with minor overlap duplicates
 
         Args:
             chunks_results: List of transcription results from chunks
@@ -857,10 +858,18 @@ class TranscribeService:
         if len(chunks_results) == 1:
             return chunks_results[0]
 
-        if settings.MERGE_STRATEGY == "lcs":
-            return self._merge_with_lcs(chunks_results)
-        else:
+        # Choose merge strategy based on chunk count
+        chunk_count = len(chunks_results)
+        lcs_threshold = settings.LCS_CHUNK_THRESHOLD
+
+        if chunk_count >= lcs_threshold:
+            logger.info(f"[CHUNKING] Using timestamp-based merge for {chunk_count} chunks (threshold: {lcs_threshold})")
+            print(f"[CHUNKING] Using timestamp-based merge for {chunk_count} chunks", flush=True)
             return self._merge_with_timestamps(chunks_results)
+        else:
+            logger.info(f"[CHUNKING] Using LCS merge for {chunk_count} chunks")
+            print(f"[CHUNKING] Using LCS merge for {chunk_count} chunks", flush=True)
+            return self._merge_with_lcs(chunks_results)
 
     def _merge_with_timestamps(
         self,
