@@ -385,25 +385,57 @@ class TranscriptionProcessor:
             logger.info(f"[TRANSCRIPTION PROCESSOR] Received result from whisper_service")
             print(f"[TRANSCRIPTION PROCESSOR] Received result from whisper_service", flush=True)
 
-            # Get text from result
+            # Extract all data from result
             text = result.get("text", "")
-            logger.info(f"[TRANSCRIPTION PROCESSOR] Got text from result: {len(text)} chars")
-            print(f"[TRANSCRIPTION PROCESSOR] Got text from result: {len(text)} chars", flush=True)
+            segments = result.get("segments", [])
+            logger.info(f"[TRANSCRIPTION PROCESSOR] Got text: {len(text)} chars, segments: {len(segments)}")
+            print(f"[TRANSCRIPTION PROCESSOR] Got text: {len(text)} chars, segments: {len(segments)}", flush=True)
 
-            # Save to local filesystem
+            # Prepare original output for debugging
+            original_output = {
+                "text": text,
+                "segments": segments,
+                "language": result.get("language"),
+                "duration": result.get("duration"),
+                "model": "faster-whisper",
+                "model_size": whisper_service.model_size,
+                "device": whisper_service.device,
+                "compute_type": whisper_service.compute_type,
+                "num_workers": whisper_service.num_workers
+            }
+
+            # Save to local filesystem (all three data types)
             from app.services.storage_service import get_storage_service
             storage_service = get_storage_service()
 
             logger.info(f"[TRANSCRIPTION PROCESSOR] Saving to local storage...")
             print(f"[TRANSCRIPTION PROCESSOR] Saving to local storage...", flush=True)
 
+            # Save plain text
             storage_path = storage_service.save_transcription_text(
                 transcription_id=str(transcription.id),
                 text=text
             )
+            logger.info(f"[TRANSCRIPTION PROCESSOR] Saved text: {storage_path}")
 
-            logger.info(f"[TRANSCRIPTION PROCESSOR] Uploaded to storage: {storage_path}")
-            print(f"[TRANSCRIPTION PROCESSOR] Uploaded to storage: {storage_path}", flush=True)
+            # Save segments (for proper SRT generation)
+            if segments:
+                segments_path = storage_service.save_transcription_segments(
+                    transcription_id=str(transcription.id),
+                    segments=segments
+                )
+                logger.info(f"[TRANSCRIPTION PROCESSOR] Saved segments: {segments_path}")
+            else:
+                logger.warning(f"[TRANSCRIPTION PROCESSOR] No segments to save (chunked transcription?)")
+
+            # Save original output (for debugging)
+            original_path = storage_service.save_original_output(
+                transcription_id=str(transcription.id),
+                original=original_output
+            )
+            logger.info(f"[TRANSCRIPTION PROCESSOR] Saved original output: {original_path}")
+
+            print(f"[TRANSCRIPTION PROCESSOR] Saved all data to storage", flush=True)
 
             # Update database with storage path and metadata
             transcription.storage_path = storage_path

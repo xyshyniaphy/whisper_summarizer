@@ -3,13 +3,15 @@ Local File Storage Service
 
 Handles file storage operations for transcriptions using local filesystem.
 Transcription text is stored as gzip-compressed files to reduce size.
+Segments and original output are also saved for proper SRT generation and debugging.
 """
 
 import os
 import gzip
+import json
 import logging
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List, Dict, Any
 
 logger = logging.getLogger(__name__)
 
@@ -151,6 +153,234 @@ class StorageService:
             file_path = TRANSCRIPTIONS_DIR / storage_path
             return file_path.exists()
         except Exception:
+            return False
+
+    # ========================================================================
+    # Segment Storage (for proper SRT subtitles)
+    # ========================================================================
+
+    def save_transcription_segments(
+        self,
+        transcription_id: str,
+        segments: List[Dict[str, Any]],
+        compression_level: int = 6
+    ) -> str:
+        """
+        Save transcription segments with timestamps to gzip-compressed JSON file.
+
+        Args:
+            transcription_id: Transcription UUID
+            segments: List of segment dicts with start, end, text
+            compression_level: Gzip compression level (1-9, default 6)
+
+        Returns:
+            str: Relative storage path (e.g., "{transcription_id}.segments.json.gz")
+
+        Raises:
+            Exception: If save fails
+        """
+        try:
+            # Convert to JSON and compress
+            json_str = json.dumps(segments, ensure_ascii=False)
+            compressed_bytes = gzip.compress(
+                json_str.encode('utf-8'),
+                compresslevel=compression_level
+            )
+
+            # Create storage path
+            storage_path = f"{transcription_id}.segments.json.gz"
+            file_path = TRANSCRIPTIONS_DIR / storage_path
+
+            # Write to local filesystem
+            logger.info(
+                f"Saving segments: {storage_path} "
+                f"({len(segments)} segments, {len(compressed_bytes)} bytes compressed)"
+            )
+            file_path.write_bytes(compressed_bytes)
+            logger.info(f"Successfully saved segments: {storage_path}")
+            return storage_path
+
+        except Exception as e:
+            logger.error(f"Failed to save segments: {e}")
+            raise
+
+    def get_transcription_segments(self, transcription_id: str) -> List[Dict[str, Any]]:
+        """
+        Read and decompress transcription segments from local filesystem.
+
+        Args:
+            transcription_id: Transcription UUID
+
+        Returns:
+            List[Dict]: List of segment dicts with start, end, text
+            Returns empty list if file doesn't exist
+
+        Raises:
+            Exception: If read or decompression fails
+        """
+        try:
+            storage_path = f"{transcription_id}.segments.json.gz"
+            file_path = TRANSCRIPTIONS_DIR / storage_path
+
+            logger.debug(f"Reading segments from local storage: {storage_path}")
+
+            # Read and decompress
+            compressed_bytes = file_path.read_bytes()
+            decompressed_bytes = gzip.decompress(compressed_bytes)
+            segments = json.loads(decompressed_bytes.decode('utf-8'))
+
+            logger.debug(f"Read {len(segments)} segments from {storage_path}")
+            return segments
+
+        except FileNotFoundError:
+            logger.debug(f"Segments file not found: {storage_path}")
+            return []
+        except Exception as e:
+            logger.error(f"Failed to read segments: {e}")
+            raise
+
+    def delete_transcription_segments(self, transcription_id: str) -> bool:
+        """
+        Delete transcription segments from local filesystem.
+
+        Args:
+            transcription_id: Transcription UUID
+
+        Returns:
+            bool: True if deleted, False if not found
+        """
+        try:
+            storage_path = f"{transcription_id}.segments.json.gz"
+            file_path = TRANSCRIPTIONS_DIR / storage_path
+            file_path.unlink()
+            logger.info(f"Deleted segments: {storage_path}")
+            return True
+        except FileNotFoundError:
+            return False
+        except Exception as e:
+            logger.warning(f"Failed to delete segments: {e}")
+            return False
+
+    def segments_exist(self, transcription_id: str) -> bool:
+        """
+        Check if transcription segments exist in local filesystem.
+
+        Args:
+            transcription_id: Transcription UUID
+
+        Returns:
+            bool: True if segments file exists
+        """
+        try:
+            storage_path = f"{transcription_id}.segments.json.gz"
+            file_path = TRANSCRIPTIONS_DIR / storage_path
+            return file_path.exists()
+        except Exception:
+            return False
+
+    # ========================================================================
+    # Original Output Storage (for debugging)
+    # ========================================================================
+
+    def save_original_output(
+        self,
+        transcription_id: str,
+        original: Dict[str, Any],
+        compression_level: int = 6
+    ) -> str:
+        """
+        Save original faster-whisper output to gzip-compressed JSON file.
+
+        Args:
+            transcription_id: Transcription UUID
+            original: Full faster-whisper output dict
+            compression_level: Gzip compression level (1-9, default 6)
+
+        Returns:
+            str: Relative storage path (e.g., "{transcription_id}.original.json.gz")
+
+        Raises:
+            Exception: If save fails
+        """
+        try:
+            # Convert to JSON with default=str for non-serializable types
+            json_str = json.dumps(original, ensure_ascii=False, default=str)
+            compressed_bytes = gzip.compress(
+                json_str.encode('utf-8'),
+                compresslevel=compression_level
+            )
+
+            # Create storage path
+            storage_path = f"{transcription_id}.original.json.gz"
+            file_path = TRANSCRIPTIONS_DIR / storage_path
+
+            # Write to local filesystem
+            logger.info(
+                f"Saving original output: {storage_path} "
+                f"({len(compressed_bytes)} bytes compressed)"
+            )
+            file_path.write_bytes(compressed_bytes)
+            logger.info(f"Successfully saved original output: {storage_path}")
+            return storage_path
+
+        except Exception as e:
+            logger.error(f"Failed to save original output: {e}")
+            raise
+
+    def get_original_output(self, transcription_id: str) -> Optional[Dict[str, Any]]:
+        """
+        Read and decompress original faster-whisper output from local filesystem.
+
+        Args:
+            transcription_id: Transcription UUID
+
+        Returns:
+            Optional[Dict]: Original output dict, or None if not found
+
+        Raises:
+            Exception: If read or decompression fails
+        """
+        try:
+            storage_path = f"{transcription_id}.original.json.gz"
+            file_path = TRANSCRIPTIONS_DIR / storage_path
+
+            logger.debug(f"Reading original output from local storage: {storage_path}")
+
+            # Read and decompress
+            compressed_bytes = file_path.read_bytes()
+            decompressed_bytes = gzip.decompress(compressed_bytes)
+            original = json.loads(decompressed_bytes.decode('utf-8'))
+
+            logger.debug(f"Read original output from {storage_path}")
+            return original
+
+        except FileNotFoundError:
+            logger.debug(f"Original output file not found: {storage_path}")
+            return None
+        except Exception as e:
+            logger.error(f"Failed to read original output: {e}")
+            raise
+
+    def delete_original_output(self, transcription_id: str) -> bool:
+        """
+        Delete original faster-whisper output from local filesystem.
+
+        Args:
+            transcription_id: Transcription UUID
+
+        Returns:
+            bool: True if deleted, False if not found
+        """
+        try:
+            storage_path = f"{transcription_id}.original.json.gz"
+            file_path = TRANSCRIPTIONS_DIR / storage_path
+            file_path.unlink()
+            logger.info(f"Deleted original output: {storage_path}")
+            return True
+        except FileNotFoundError:
+            return False
+        except Exception as e:
+            logger.warning(f"Failed to delete original output: {e}")
             return False
 
 

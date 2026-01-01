@@ -28,6 +28,37 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+# ============================================================================
+# Helper Functions
+# ============================================================================
+
+def _format_fake_srt(text: str) -> str:
+  """
+  Generate fake SRT format from plain text (fallback for old transcriptions).
+
+  Splits text by newlines and assigns sequential fake timestamps.
+
+  Args:
+    text: Plain transcription text
+
+  Returns:
+    SRT-formatted string with fake timestamps
+  """
+  lines = text.strip().split("\n")
+  srt_lines = []
+  for i, line in enumerate(lines, 1):
+    if line.strip():
+      # Fake timestamp: each line gets 1 second
+      start_time = f"{i:02d}:00:00,000"
+      end_time = f"{i:02d}:00:01,000"
+      srt_lines.append(f"{i}\n{start_time} --> {end_time}\n{line}\n")
+  return "\n".join(srt_lines)
+
+
+# ============================================================================
+# API Endpoints
+# ============================================================================
+
 @router.get("", response_model=List[TranscriptionSchema])
 async def list_transcriptions(
     limit: int = Query(10, ge=1, le=100),
@@ -120,7 +151,9 @@ async def delete_all_transcriptions(
                 try:
                     storage_service = get_storage_service()
                     storage_service.delete_transcription_text(str(transcription.id))
-                    logger.info(f"[DELETE ALL] Deleted from Supabase Storage: {transcription.storage_path}")
+                    storage_service.delete_transcription_segments(str(transcription.id))
+                    storage_service.delete_original_output(str(transcription.id))
+                    logger.info(f"[DELETE ALL] Deleted from storage: {transcription.storage_path}")
                 except Exception as e:
                     logger.warning(f"[DELETE ALL] Failed to delete from storage: {e}")
 
@@ -213,7 +246,9 @@ async def delete_transcription(
             try:
                 storage_service = get_storage_service()
                 storage_service.delete_transcription_text(str(transcription.id))
-                logger.info(f"[DELETE] Deleted from Supabase Storage: {transcription.storage_path}")
+                storage_service.delete_transcription_segments(str(transcription.id))
+                storage_service.delete_original_output(str(transcription.id))
+                logger.info(f"[DELETE] Deleted from storage: {transcription.storage_path}")
             except Exception as e:
                 logger.warning(f"[DELETE] Failed to delete from storage: {e}")
 
@@ -305,18 +340,33 @@ async def download_transcription(
   content = transcription.text
   original_filename = Path(transcription.file_name).stem
 
-  # SRT 格式 - 生成基本字幕格式
+  # SRT 格式 - 使用实际时间戳（如果可用）
   if format == "srt":
-    # 简单的 SRT 格式: 每行作为一个字幕段
-    lines = content.strip().split("\n")
-    srt_lines = []
-    for i, line in enumerate(lines, 1):
-      if line.strip():
-        # 每行分配1秒时间 (简化版，因为没有时间戳信息)
-        start_time = f"{i:02d}:00:00,000"
-        end_time = f"{i:02d}:00:01,000"
-        srt_lines.append(f"{i}\n{start_time} --> {end_time}\n{line}\n")
-    content = "\n".join(srt_lines)
+    from app.services.storage_service import get_storage_service
+    storage_service = get_storage_service()
+
+    # Check if segments file exists (new transcriptions)
+    if storage_service.segments_exist(transcription_id):
+      segments = storage_service.get_transcription_segments(transcription_id)
+      if segments:
+        # Use real timestamps from segments
+        srt_lines = []
+        for i, segment in enumerate(segments, 1):
+          srt_lines.append(f"{i}")
+          srt_lines.append(f"{segment['start']} --> {segment['end']}")
+          srt_lines.append(segment['text'])
+          srt_lines.append("")  # Empty line between entries
+        content = "\n".join(srt_lines)
+        logger.info(f"Generated SRT with {len(segments)} segments from stored data")
+      else:
+        # Fallback to fake timestamps
+        content = _format_fake_srt(content)
+        logger.warning("Segments file was empty, using fake timestamps")
+    else:
+      # Old transcription without segments - use fake timestamps
+      content = _format_fake_srt(content)
+      logger.info(f"No segments file, using fake timestamps for backward compatibility")
+
     download_filename = f"{original_filename}.srt"
   else:
     download_filename = f"{original_filename}.txt"

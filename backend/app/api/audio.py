@@ -93,7 +93,6 @@ def upload_audio(
     new_transcription = Transcription(
         file_name=file.filename,
         stage="uploading",
-        status="processing",  # Legacy field
         user_id=user_id
     )
     db.add(new_transcription)
