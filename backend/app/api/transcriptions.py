@@ -239,43 +239,79 @@ async def download_transcription(
 ):
   """
   下载转录文件
-  
+
+  文件按需生成:
+  - txt/srt: 从存储的转录文本生成
+  - pptx: 检查现有文件
+
   Args:
     transcription_id: 转录ID
     format: 文件格式 (txt, srt 或 pptx)
-  
+
   Returns:
-    FileResponse: 下载文件
+    StreamingResponse: 下载文件
   """
   # 认证确认
   transcription = db.query(Transcription).filter(
     Transcription.id == transcription_id,
     Transcription.user_id == current_user.get("id")
   ).first()
-  
+
   if not transcription:
     raise HTTPException(status_code=404, detail="未找到转录")
-  
-  # 构建文件路径
-  output_dir = Path("/app/data/output")
-  file_path = output_dir / f"{transcription_id}.{format}"
-  
-  if not file_path.exists():
-    raise HTTPException(status_code=404, detail="文件未找到")
-  
-  # 设置文件名（使用原始文件名）
-  original_filename = Path(transcription.file_name).stem
-  download_filename = f"{original_filename}.{format}"
-  
-  # 设置媒体类型
-  media_type = "text/plain"
+
+  # PPTX 特殊处理 - 检查现有文件
   if format == "pptx":
-    media_type = "application/vnd.openxmlformats-officedocument.presentationml.presentation"
-  
-  return FileResponse(
-    path=file_path,
-    filename=download_filename,
-    media_type=media_type
+    output_dir = Path("/app/data/output")
+    file_path = output_dir / f"{transcription_id}.{format}"
+
+    if not file_path.exists():
+      raise HTTPException(status_code=404, detail="PPTX文件未找到，请先生成")
+
+    original_filename = Path(transcription.file_name).stem
+    download_filename = f"{original_filename}.{format}"
+
+    return FileResponse(
+      path=str(file_path),
+      filename=download_filename,
+      media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation"
+    )
+
+  # TXT/SRT - 从存储的转录文本按需生成
+  if not transcription.text:
+    raise HTTPException(status_code=400, detail="转录内容为空")
+
+  content = transcription.text
+  original_filename = Path(transcription.file_name).stem
+
+  # SRT 格式 - 生成基本字幕格式
+  if format == "srt":
+    # 简单的 SRT 格式: 每行作为一个字幕段
+    lines = content.strip().split("\n")
+    srt_lines = []
+    for i, line in enumerate(lines, 1):
+      if line.strip():
+        # 每行分配1秒时间 (简化版，因为没有时间戳信息)
+        start_time = f"{i:02d}:00:00,000"
+        end_time = f"{i:02d}:00:01,000"
+        srt_lines.append(f"{i}\n{start_time} --> {end_time}\n{line}\n")
+    content = "\n".join(srt_lines)
+    download_filename = f"{original_filename}.srt"
+  else:
+    download_filename = f"{original_filename}.txt"
+
+  # 使用 StreamingResponse 返回内存内容
+  from fastapi.responses import StreamingResponse
+  from io import StringIO
+
+  buffer = StringIO(content)
+
+  return StreamingResponse(
+    buffer,
+    media_type="text/plain; charset=utf-8",
+    headers={
+      "Content-Disposition": f'attachment; filename="{download_filename}"'
+    }
   )
 
 
