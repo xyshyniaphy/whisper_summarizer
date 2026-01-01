@@ -297,7 +297,17 @@ class TranscriptionProcessor:
                             return False
                         raise Exception("Transcription failed after retries")
 
-                    # Step 2: Summarize (check cancellation again)
+                    # Step 2: Format text with LLM (check cancellation again)
+                    if cancel_event.is_set():
+                        logger.info(f"[CANCEL] Transcription {transcription_id} cancelled before formatting")
+                        transcription.stage = STAGE_FAILED
+                        transcription.error_message = "Transcription cancelled by user"
+                        db.commit()
+                        return False
+
+                    self._format_text(transcription, db)
+
+                    # Step 3: Summarize (check cancellation again)
                     if cancel_event.is_set():
                         logger.info(f"[CANCEL] Transcription {transcription_id} cancelled before summarization")
                         transcription.stage = STAGE_FAILED
@@ -464,6 +474,56 @@ class TranscriptionProcessor:
             transcription.error_message = f"Transcription failed: {str(e)}"
             db.commit()
             raise
+
+    def _format_text(self, transcription: Transcription, db: Session) -> None:
+        """
+        Format transcribed text using GLM-4.5-Air.
+
+        Adds punctuation, fixes capitalization, and improves readability
+        without changing meaning or summarizing content.
+
+        Args:
+            transcription: Transcription model instance
+            db: Database session
+        """
+        from app.services.storage_service import get_storage_service
+        from app.services.formatting_service import get_formatting_service
+
+        # Get original text
+        text = transcription.text
+        if not text or len(text.strip()) < 50:
+            logger.info(f"Text too short to format ({len(text)} chars), skipping")
+            return
+
+        # Check if already formatted
+        storage_service = get_storage_service()
+        if storage_service.formatted_text_exists(str(transcription.id)):
+            logger.info(f"Formatted text already exists for: {transcription.id}")
+            return
+
+        logger.info(f"Starting text formatting for: {transcription.id}")
+
+        try:
+            # Format using LLM
+            formatting_service = get_formatting_service()
+            formatted_text = formatting_service.format_transcription_text(text)
+
+            # Save formatted text
+            formatted_path = storage_service.save_formatted_text(
+                transcription_id=str(transcription.id),
+                text=formatted_text
+            )
+
+            logger.info(
+                f"Text formatting completed: {transcription.id} | "
+                f"Original: {len(text)} chars -> Formatted: {len(formatted_text)} chars | "
+                f"Saved: {formatted_path}"
+            )
+
+        except Exception as e:
+            # Don't fail the entire workflow if formatting fails
+            logger.error(f"Text formatting failed (non-critical): {e}")
+            logger.info("Continuing with original unformatted text")
 
     def _summarize_with_retry(self, transcription: Transcription, db: Session) -> bool:
         """

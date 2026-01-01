@@ -153,6 +153,7 @@ async def delete_all_transcriptions(
                     storage_service.delete_transcription_text(str(transcription.id))
                     storage_service.delete_transcription_segments(str(transcription.id))
                     storage_service.delete_original_output(str(transcription.id))
+                    storage_service.delete_formatted_text(str(transcription.id))
                     logger.info(f"[DELETE ALL] Deleted from storage: {transcription.storage_path}")
                 except Exception as e:
                     logger.warning(f"[DELETE ALL] Failed to delete from storage: {e}")
@@ -248,6 +249,7 @@ async def delete_transcription(
                 storage_service.delete_transcription_text(str(transcription.id))
                 storage_service.delete_transcription_segments(str(transcription.id))
                 storage_service.delete_original_output(str(transcription.id))
+                storage_service.delete_formatted_text(str(transcription.id))
                 logger.info(f"[DELETE] Deleted from storage: {transcription.storage_path}")
             except Exception as e:
                 logger.warning(f"[DELETE] Failed to delete from storage: {e}")
@@ -285,7 +287,7 @@ async def delete_transcription(
 @router.get("/{transcription_id}/download")
 async def download_transcription(
   transcription_id: str,
-  format: str = Query("txt", pattern="^(txt|srt|pptx)$"),
+  format: str = Query("txt", pattern="^(txt|srt|formatted|pptx)$"),
   db: Session = Depends(get_db),
   current_user: dict = Depends(get_current_active_user)
 ):
@@ -293,12 +295,14 @@ async def download_transcription(
   下载转录文件
 
   文件按需生成:
-  - txt/srt: 从存储的转录文本生成
+  - txt: 原始转录文本
+  - formatted: LLM格式化后的文本（带标点符号和段落）
+  - srt: 从存储的转录文本生成（带时间戳）
   - pptx: 检查现有文件
 
   Args:
     transcription_id: 转录ID
-    format: 文件格式 (txt, srt 或 pptx)
+    format: 文件格式 (txt, formatted, srt 或 pptx)
 
   Returns:
     StreamingResponse: 下载文件
@@ -331,6 +335,33 @@ async def download_transcription(
       path=str(file_path),
       filename=download_filename,
       media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation"
+    )
+
+  # Formatted text - LLM formatted with punctuation and paragraphs
+  if format == "formatted":
+    from app.services.storage_service import get_storage_service
+    storage_service = get_storage_service()
+
+    if storage_service.formatted_text_exists(transcription_id):
+      content = storage_service.get_formatted_text(transcription_id)
+      logger.info(f"Retrieved formatted text for: {transcription_id}")
+    else:
+      # Formatted text not available, return original text
+      content = transcription.text
+      logger.info(f"Formatted text not available, returning original for: {transcription_id}")
+
+    download_filename = f"{original_filename}_formatted.txt"
+
+    from fastapi.responses import StreamingResponse
+    from io import StringIO
+
+    buffer = StringIO(content)
+    return StreamingResponse(
+      buffer,
+      media_type="text/plain; charset=utf-8",
+      headers={
+        "Content-Disposition": f'attachment; filename="{download_filename}"'
+      }
     )
 
   # TXT/SRT - 从存储的转录文本按需生成
