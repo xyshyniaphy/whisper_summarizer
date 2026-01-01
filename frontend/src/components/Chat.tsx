@@ -143,6 +143,8 @@ export function Chat({ transcriptionId, disabled = false }: ChatProps) {
       <form onSubmit={handleSubmit} className="flex gap-2">
         <input
           type="text"
+          id="chat-input"
+          name="chat-input"
           value={input}
           onChange={(e) => setInput(e.target.value)}
           placeholder="输入问题..."
