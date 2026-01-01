@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Whisper Summarizer is a web application for audio transcription and AI-powered summarization. It uses:
 - **faster-whisper** (CTranslate2 + cuDNN) for GPU-accelerated audio transcription
-- **Google Gemini 2.0 Flash** API for summarization
+- **GLM-4.5-Air API** (OpenAI-compatible) for summarization
 - **PostgreSQL 18 Alpine** for local development database
 - **Supabase** for authentication and cloud database (production)
 - **Docker Compose** for orchestration
@@ -162,7 +162,7 @@ app/
 ├── core/
 │   ├── config.py     # Settings (Pydantic BaseSettings)
 │   ├── supabase.py   # Supabase client initialization
-│   └── gemini.py     # Gemini API integration
+│   └── glm.py        # GLM API integration (OpenAI-compatible)
 ├── services/         # Business logic services
 │   ├── storage_service.py      # Local filesystem storage (gzip)
 │   ├── whisper_service.py      # faster-whisper wrapper
@@ -180,7 +180,7 @@ app/
 - FastAPI with dependency injection for auth
 - SQLAlchemy ORM with UUID primary keys
 - Pydantic schemas for validation
-- Service layer pattern for external API calls (Gemini, Storage)
+- Service layer pattern for external API calls (GLM, Storage)
 - Background tasks for async transcription processing
 
 ### Frontend Structure (`frontend/src/`)
@@ -281,11 +281,11 @@ POSTGRES_PASSWORD=postgres
 # Database (Production - Supabase PostgreSQL)
 # DATABASE_URL=postgresql://postgres:pass@db.project.supabase.co:5432/postgres
 
-# Gemini API
-GEMINI_API_KEY=your-key
-GEMINI_MODEL=gemini-2.0-flash-exp
+# GLM API (OpenAI-compatible)
+GLM_API_KEY=your-key
+GLM_MODEL=GLM-4.5-Air
+GLM_BASE_URL=https://open.bigmodel.cn/api/paas/v4
 REVIEW_LANGUAGE=zh    # zh, ja, en
-GEMINI_API_ENDPOINT=  # Optional custom endpoint
 
 # faster-whisper Configuration
 FASTER_WHISPER_DEVICE=cuda              # cuda (GPU) or cpu

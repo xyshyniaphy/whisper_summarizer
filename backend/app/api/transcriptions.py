@@ -340,7 +340,7 @@ async def _generate_pptx_task(transcription_id: str, db: Session) -> None:
   """
   后台任务：使用Marp生成PPTX文件（AI驱动结构化）
 
-  使用Gemini AI智能提取主题、生成目录、总结和后续安排。
+  使用GLM AI智能提取主题、生成目录、总结和后续安排。
 
   Args:
     transcription_id: 转录ID
@@ -910,24 +910,24 @@ async def send_chat_message(
     transcription_text = transcription.text
     logger.info(f"[Chat] Transcription text length: {len(transcription_text)} chars")
 
-    # Call Gemini API for response
+    # Call GLM API for response
     try:
-        from app.core.gemini import get_gemini_client
-        gemini_client = get_gemini_client()
+        from app.core.glm import get_glm_client
+        glm_client = get_glm_client()
 
-        print(f"[Chat] Calling Gemini API for transcription: {transcription_uuid}")
-        logger.info("[Chat] Calling Gemini API...")
-        response = await gemini_client.chat(
+        print(f"[Chat] Calling GLM API for transcription: {transcription_uuid}")
+        logger.info("[Chat] Calling GLM API...")
+        response = await glm_client.chat(
             question=user_content,
             transcription_context=transcription_text,
             chat_history=chat_history
         )
 
         assistant_content = response.get("response", "")
-        logger.info(f"[Chat] Gemini response received, length: {len(assistant_content)} chars")
+        logger.info(f"[Chat] GLM response received, length: {len(assistant_content)} chars")
 
     except Exception as e:
-        logger.error(f"[Chat] Gemini chat error: {e}", exc_info=True)
+        logger.error(f"[Chat] GLM chat error: {e}", exc_info=True)
         assistant_content = "抱歉，AI回复失败，请稍后再试。"
 
     # Save assistant message

@@ -15,10 +15,10 @@ services:
       SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
       SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
 
-      # Gemini API
-      GEMINI_API_KEY: ${GEMINI_API_KEY}
-      GEMINI_API_ENDPOINT: ${GEMINI_API_ENDPOINT}
-      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.0-flash-exp}
+      # GLM API (OpenAI-compatible)
+      GLM_API_KEY: ${GLM_API_KEY}
+      GLM_MODEL: ${GLM_MODEL:-GLM-4.5-Air}
+      GLM_BASE_URL: ${GLM_BASE_URL:-https://open.bigmodel.cn/api/paas/v4}
       REVIEW_LANGUAGE: ${REVIEW_LANGUAGE:-zh}
 
       # Backend Config

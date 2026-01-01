@@ -18,7 +18,7 @@ from app.models.transcription import Transcription
 from app.models.summary import Summary
 from app.models.gemini_request_log import GeminiRequestLog
 from app.services.whisper_service import whisper_service
-from app.core.gemini import get_gemini_client
+from app.core.glm import get_glm_client
 from app.core.config import settings
 
 # Class-level semaphore for limiting concurrent transcriptions
@@ -466,13 +466,13 @@ class TranscriptionProcessor:
         logger.debug(f"Starting summarization for: {transcription.id}")
 
         try:
-            gemini_client = get_gemini_client()
+            glm_client = get_glm_client()
             # Run async function in event loop
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             try:
-                gemini_response = loop.run_until_complete(
-                    gemini_client.generate_summary(
+                glm_response = loop.run_until_complete(
+                    glm_client.generate_summary(
                         text,  # Use decompressed text from .text property
                         file_name=transcription.file_name
                     )
@@ -481,14 +481,14 @@ class TranscriptionProcessor:
                 loop.close()
 
             # Check for errors
-            if gemini_response.status == "error":
-                raise Exception(gemini_response.error_message)
+            if glm_response.status == "error":
+                raise Exception(glm_response.error_message)
 
             # Create summary record
             new_summary = Summary(
                 transcription_id=transcription.id,
-                summary_text=gemini_response.summary,
-                model_name=gemini_response.model_name
+                summary_text=glm_response.summary,
+                model_name=glm_response.model_name
             )
             db.add(new_summary)
 
@@ -496,17 +496,17 @@ class TranscriptionProcessor:
             request_log = GeminiRequestLog(
                 transcription_id=transcription.id,
                 file_name=transcription.file_name,
-                model_name=gemini_response.model_name,
-                prompt=gemini_response.prompt,
+                model_name=glm_response.model_name,
+                prompt=glm_response.prompt,
                 input_text=transcription.text[:5000],
-                input_text_length=gemini_response.input_text_length,
-                output_text=gemini_response.summary,
-                output_text_length=gemini_response.output_text_length,
-                input_tokens=gemini_response.input_tokens,
-                output_tokens=gemini_response.output_tokens,
-                total_tokens=gemini_response.total_tokens,
-                response_time_ms=gemini_response.response_time_ms,
-                temperature=gemini_response.temperature,
+                input_text_length=glm_response.input_text_length,
+                output_text=glm_response.summary,
+                output_text_length=glm_response.output_text_length,
+                input_tokens=glm_response.input_tokens,
+                output_tokens=glm_response.output_tokens,
+                total_tokens=glm_response.total_tokens,
+                response_time_ms=glm_response.response_time_ms,
+                temperature=glm_response.temperature,
                 status="success"
             )
             db.add(request_log)
@@ -515,8 +515,8 @@ class TranscriptionProcessor:
 
             logger.debug(
                 f"Summarization successful: {transcription.id} | "
-                f"Tokens: {gemini_response.total_tokens} | "
-                f"Time: {gemini_response.response_time_ms:.0f}ms"
+                f"Tokens: {glm_response.total_tokens} | "
+                f"Time: {glm_response.response_time_ms:.0f}ms"
             )
             return True
 

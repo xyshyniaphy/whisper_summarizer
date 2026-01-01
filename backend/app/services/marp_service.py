@@ -2,7 +2,7 @@
 Marp Markdown Generation Service
 
 Generates Marp-compatible markdown from transcriptions for presentation creation.
-Uses Gemini AI to intelligently structure content into topics.
+Uses GLM AI to intelligently structure content into topics.
 """
 
 import json
@@ -13,7 +13,7 @@ from typing import Any
 import asyncio
 
 from app.models.transcription import Transcription
-from app.core.gemini import get_gemini_client
+from app.core.glm import get_glm_client
 
 logger = logging.getLogger(__name__)
 
@@ -66,7 +66,7 @@ class MarpService:
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.theme = theme
         self.size = size
-        self.gemini_client = get_gemini_client()
+        self.glm_client = get_glm_client()
 
     async def generate_markdown(
         self,
@@ -100,7 +100,7 @@ class MarpService:
 
     async def _create_structure_from_ai(self, transcription: Transcription) -> dict[str, Any]:
         """
-        Use Gemini AI to structure transcription into presentation format.
+        Use GLM AI to structure transcription into presentation format.
 
         Args:
             transcription: Transcription model instance
@@ -116,8 +116,8 @@ class MarpService:
             transcription_text=transcription.text[:15000]  # Limit length
         )
 
-        # Call Gemini API - use generate_summary with custom prompt
-        response = await self.gemini_client.generate_summary(
+        # Call GLM API - use generate_summary with custom prompt
+        response = await self.glm_client.generate_summary(
             transcription=transcription.text[:15000],
             file_name=transcription.file_name,
             system_prompt=prompt
