@@ -77,14 +77,18 @@ def authenticated_client(client: TestClient) -> Generator[TestClient, None, None
     from app.core.supabase import get_current_active_user
     from datetime import datetime
 
-    # Mock authenticated user
+    # Mock authenticated user - Return UUID object directly, not string
     test_user_id = uuid4()
     mock_user = {
-        "id": str(test_user_id),
+        "id": test_user_id,  # UUID object (SQLAlchemy needs it), converted to string in users.py
         "email": "test@example.com",
         "user_metadata": {"role": "user", "full_name": "Test User"},
-        "email_confirmed_at": datetime.utcnow().isoformat(),
-        "created_at": datetime.utcnow().isoformat(),
+        "email_confirmed_at": datetime.utcnow(),
+        "created_at": datetime.utcnow(),
+        "phone": None,
+        "last_sign_in_at": None,
+        "updated_at": datetime.utcnow(),
+        "app_metadata": {},
     }
 
     def _get_current_user():
@@ -108,7 +112,8 @@ def mock_transcription():
             self.user_id = uuid4()
             self.file_name = "test_audio.mp3"
             self.file_path = "/tmp/uploads/test_audio.mp3"
-            self.original_text = "This is a test transcription.\\n\\nIt has multiple paragraphs."
+            self.storage_path = None
+            self.text = "This is a test transcription.\\n\\nIt has multiple paragraphs."
             self.language = "en"
             self.duration_seconds = 300.0
             self.stage = "completed"
@@ -137,7 +142,8 @@ def mock_transcription_with_summary():
             self.user_id = uuid4()
             self.file_name = "test_audio.mp3"
             self.file_path = "/tmp/uploads/test_audio.mp3"
-            self.original_text = "This is a test transcription.\\n\\nIt has multiple paragraphs."
+            self.storage_path = None
+            self.text = "This is a test transcription.\\n\\nIt has multiple paragraphs."
             self.language = "en"
             self.duration_seconds = 300.0
             self.stage = "completed"
@@ -168,7 +174,8 @@ def mock_long_transcription():
             self.user_id = uuid4()
             self.file_name = "long_audio.mp3"
             self.file_path = "/tmp/uploads/long_audio.mp3"
-            self.original_text = long_text
+            self.storage_path = None
+            self.text = long_text
             self.language = "en"
             self.duration_seconds = 3600.0
             self.stage = "completed"
@@ -230,7 +237,7 @@ def assert_valid_markdown(markdown: str) -> None:
 def count_slides(markdown: str) -> int:
     """Count the number of slides in Marp markdown."""
     # Slide separators are "---" that are not in the frontmatter
-    lines = markdown.split("\n")
+    lines = markdown.split("\\n")
     in_frontmatter = False
     frontmatter_end = False
     count = 1  # Always at least one slide

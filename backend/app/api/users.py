@@ -24,7 +24,7 @@ async def get_me(current_user: dict = Depends(get_current_active_user)):
         UserResponse: ユーザー情報
     """
     return UserResponse(
-        id=current_user["id"],
+        id=str(current_user["id"]),
         email=current_user["email"],
         full_name=current_user.get("user_metadata", {}).get("full_name"),
         email_confirmed_at=current_user.get("email_confirmed_at"),

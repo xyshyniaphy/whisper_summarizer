@@ -3,6 +3,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from pathlib import Path
+from uuid import UUID
 from app.api.deps import get_db
 from app.core.supabase import get_current_active_user
 from app.models.transcription import Transcription
@@ -50,8 +51,13 @@ async def get_transcription(
     """
     文字起こし詳細を取得
     """
+    # Convert string ID to UUID for database query
+    try:
+        transcription_uuid = UUID(transcription_id)
+    except ValueError:
+        raise HTTPException(status_code=422, detail="Invalid transcription ID format")
     transcription = db.query(Transcription).filter(
-        Transcription.id == transcription_id,
+        Transcription.id == transcription_uuid,
         Transcription.user_id == current_user.get("id")
     ).first()
     
@@ -148,8 +154,13 @@ async def delete_transcription(
     文字起こしを削除 (ファイルも含む)
     処理中の場合はキャンセルしてプロセスを終了してから削除します
     """
+    # Convert string ID to UUID for database query
+    try:
+        transcription_uuid = UUID(transcription_id)
+    except ValueError:
+        raise HTTPException(status_code=422, detail="Invalid transcription ID format")
     transcription = db.query(Transcription).filter(
-        Transcription.id == transcription_id,
+        Transcription.id == transcription_uuid,
         Transcription.user_id == current_user.get("id")
     ).first()
 
@@ -251,9 +262,13 @@ async def download_transcription(
   Returns:
     StreamingResponse: 下载文件
   """
-  # 认证确认
+  # 认证确认 - Convert string ID to UUID for database query
+  try:
+    transcription_uuid = UUID(transcription_id)
+  except ValueError:
+    raise HTTPException(status_code=422, detail="Invalid transcription ID format")
   transcription = db.query(Transcription).filter(
-    Transcription.id == transcription_id,
+    Transcription.id == transcription_uuid,
     Transcription.user_id == current_user.get("id")
   ).first()
 
@@ -325,9 +340,14 @@ async def _generate_pptx_task(transcription_id: str, db: Session) -> None:
     transcription_id: 转录ID
     db: 数据库会话
   """
-  # Set status to generating
+  # Set status to generating - Convert string ID to UUID for database query
+  try:
+    transcription_uuid = UUID(transcription_id)
+  except ValueError:
+    logger.error(f"Invalid transcription ID format: {transcription_id}")
+    return
   transcription = db.query(Transcription).filter(
-    Transcription.id == transcription_id
+    Transcription.id == transcription_uuid
   ).first()
 
   if not transcription:
@@ -393,9 +413,13 @@ async def generate_pptx(
   Returns:
     JSONResponse: 生成状态
   """
-  # 验证转录所有权
+  # 验证转录所有权 - Convert string ID to UUID for database query
+  try:
+    transcription_uuid = UUID(transcription_id)
+  except ValueError:
+    raise HTTPException(status_code=422, detail="Invalid transcription ID format")
   transcription = db.query(Transcription).filter(
-    Transcription.id == transcription_id,
+    Transcription.id == transcription_uuid,
     Transcription.user_id == current_user.get("id")
   ).first()
 
@@ -468,9 +492,13 @@ async def get_pptx_status(
   Returns:
     JSONResponse: PPTX状态
   """
-  # 验证转录所有权
+  # 验证转录所有权 - Convert string ID to UUID for database query
+  try:
+    transcription_uuid = UUID(transcription_id)
+  except ValueError:
+    raise HTTPException(status_code=422, detail="Invalid transcription ID format")
   transcription = db.query(Transcription).filter(
-    Transcription.id == transcription_id,
+    Transcription.id == transcription_uuid,
     Transcription.user_id == current_user.get("id")
   ).first()
 
@@ -514,9 +542,13 @@ async def get_markdown(
   Returns:
     JSONResponse: Markdown内容
   """
-  # 验证转录所有权
+  # 验证转录所有权 - Convert string ID to UUID for database query
+  try:
+    transcription_uuid = UUID(transcription_id)
+  except ValueError:
+    raise HTTPException(status_code=422, detail="Invalid transcription ID format")
   transcription = db.query(Transcription).filter(
-    Transcription.id == transcription_id,
+    Transcription.id == transcription_uuid,
     Transcription.user_id == current_user.get("id")
   ).first()
 
@@ -578,9 +610,13 @@ async def download_markdown(
   Returns:
     FileResponse: Markdown文件下载
   """
-  # 验证转录所有权
+  # 验证转录所有权 - Convert string ID to UUID for database query
+  try:
+    transcription_uuid = UUID(transcription_id)
+  except ValueError:
+    raise HTTPException(status_code=422, detail="Invalid transcription ID format")
   transcription = db.query(Transcription).filter(
-    Transcription.id == transcription_id,
+    Transcription.id == transcription_uuid,
     Transcription.user_id == current_user.get("id")
   ).first()
 

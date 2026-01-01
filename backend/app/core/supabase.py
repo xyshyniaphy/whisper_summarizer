@@ -9,6 +9,8 @@ from app.core.config import settings
 from fastapi import HTTPException, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from typing import Optional
+from uuid import UUID
+from datetime import datetime
 import logging
 
 logger = logging.getLogger(__name__)
@@ -47,9 +49,13 @@ async def get_current_user(
     # Bypass auth if DISABLE_AUTH is set (for testing)
     if settings.DISABLE_AUTH:
         return {
-            "id": "123e4567-e89b-42d3-a456-426614174000",
+            "id": UUID("123e4567-e89b-42d3-a456-426614174000"),  # UUID object for SQLAlchemy
             "email": "test@example.com",
-            "email_confirmed_at": "2024-01-01T00:00:00Z",
+            "email_confirmed_at": datetime.utcnow(),
+            "phone": None,
+            "last_sign_in_at": None,
+            "created_at": datetime.utcnow(),
+            "updated_at": datetime.utcnow(),
             "user_metadata": {"role": "admin"},
             "app_metadata": {},
         }
