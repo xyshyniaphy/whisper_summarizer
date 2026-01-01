@@ -164,8 +164,8 @@ export function TranscriptionDetail() {
         )
     }
 
-    const displayText = transcription.original_text
-        ? getDisplayText(transcription.original_text, 200)
+    const displayText = transcription.text
+        ? getDisplayText(transcription.text, 200)
         : '转录完成后将自动生成。'
 
     const downloadUrlTxt = api.getDownloadUrl(transcription.id, 'txt')

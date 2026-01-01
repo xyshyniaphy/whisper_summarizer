@@ -15,7 +15,6 @@ class Transcription(Base):
     file_path = Column(Text, nullable=True)
     # Path to compressed text file in local filesystem (format: {uuid}.txt.gz)
     storage_path = Column(String, nullable=True)
-    status = Column(String, default="processing")  # Legacy, use stage instead
     language = Column(String, nullable=True)
     duration_seconds = Column(Float, nullable=True)
 

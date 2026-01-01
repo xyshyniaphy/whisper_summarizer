@@ -2,8 +2,8 @@ export interface Transcription {
   id: string;
   file_name: string;
   file_path?: string;
-  original_text?: string;
-  status: 'processing' | 'completed' | 'failed';  // Legacy, use stage instead
+  // text is a @property that reads from local filesystem, not a database column
+  text: string;
   stage: 'uploading' | 'transcribing' | 'summarizing' | 'completed' | 'failed';
   language?: string;
   duration_seconds?: number;
@@ -14,6 +14,8 @@ export interface Transcription {
   updated_at: string;
   time_remaining?: number;  // Seconds remaining before auto-delete (negative if expired)
   summaries?: Summary[];
+  pptx_status?: 'not-started' | 'generating' | 'ready' | 'error';
+  pptx_error_message?: string;
 }
 
 export interface Summary {

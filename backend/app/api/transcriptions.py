@@ -25,7 +25,7 @@ router = APIRouter()
 async def list_transcriptions(
     limit: int = Query(10, ge=1, le=100),
     offset: int = Query(0, ge=0),
-    status: str = Query(None),
+    stage: str = Query(None, description="Filter by stage: uploading, transcribing, summarizing, completed, failed"),
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_active_user)
 ):
@@ -33,9 +33,9 @@ async def list_transcriptions(
     文字起こしリストを取得 (現在のユーザーのもののみ)
     """
     query = db.query(Transcription).filter(Transcription.user_id == current_user.get("id"))
-    
-    if status:
-        query = query.filter(Transcription.status == status)
+
+    if stage:
+        query = query.filter(Transcription.stage == stage)
     
     transcriptions = query.order_by(Transcription.created_at.desc()).offset(offset).limit(limit).all()
     return transcriptions
