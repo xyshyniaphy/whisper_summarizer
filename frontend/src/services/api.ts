@@ -117,5 +117,56 @@ export const api = {
   getPptxStatus: async (transcriptionId: string): Promise<{ status: string; exists: boolean }> => {
     const response = await apiClient.get(`/transcriptions/${transcriptionId}/pptx-status`);
     return response.data;
+  },
+
+  // Chat endpoints
+  getChatHistory: async (transcriptionId: string): Promise<{ messages: Array<{
+    id: string;
+    role: 'user' | 'assistant';
+    content: string;
+    created_at: string;
+  }> }> => {
+    console.log('[API] Fetching chat history for:', transcriptionId);
+    const response = await apiClient.get(`/transcriptions/${transcriptionId}/chat`);
+    console.log('[API] Chat history response:', response.status, response.data);
+    return response.data;
+  },
+
+  sendChatMessage: async (transcriptionId: string, content: string): Promise<{
+    id: string;
+    role: 'user' | 'assistant';
+    content: string;
+    created_at: string;
+  }> => {
+    console.log('[API] Sending chat message:', { transcriptionId, content });
+    const response = await apiClient.post(`/transcriptions/${transcriptionId}/chat`, { content });
+    console.log('[API] Chat message response:', response.status, response.data);
+    return response.data;
+  },
+
+  // Share endpoints
+  createShareLink: async (transcriptionId: string): Promise<{
+    id: string;
+    transcription_id: string;
+    share_token: string;
+    share_url: string;
+    created_at: string;
+    access_count: number;
+  }> => {
+    const response = await apiClient.post(`/transcriptions/${transcriptionId}/share`);
+    return response.data;
+  },
+
+  getSharedTranscription: async (shareToken: string): Promise<{
+    id: string;
+    file_name: string;
+    text: string;
+    summary: string | null;
+    language: string | null;
+    duration_seconds: number | null;
+    created_at: string;
+  }> => {
+    const response = await axios.get(`${API_URL}/shared/${shareToken}`);
+    return response.data;
   }
 };

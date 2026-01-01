@@ -341,6 +341,245 @@ Please use concise and easy-to-understand language, and make good use of bullet 
       logger.error(f"Custom Endpoint エラー: {str(e)}")
       raise Exception(f"要約生成エラー: {str(e)}")
 
+  async def chat(
+    self,
+    question: str,
+    transcription_context: str,
+    chat_history: list[dict] = None
+  ) -> dict:
+    """
+    Chat with AI about the transcription.
+
+    Args:
+      question: User's question
+      transcription_context: The transcription text to use as context
+      chat_history: Previous chat messages [{"role": "user", "content": "..."}, ...]
+
+    Returns:
+      dict: {"response": str, "input_tokens": int, "output_tokens": int, ...}
+    """
+    import time
+
+    print(f"[Gemini.chat] Starting chat with question: {question[:50]}...")
+    # Build system prompt for chat
+    system_prompt = self._get_chat_system_prompt()
+    print(f"[Gemini.chat] System prompt length: {len(system_prompt)}")
+
+    start_time = time.time()
+
+    try:
+      # Use custom endpoint if configured, otherwise use SDK
+      if self.api_endpoint:
+        print(f"[Gemini.chat] Using custom endpoint")
+        return await self._chat_with_custom_endpoint(question, transcription_context, chat_history, system_prompt, start_time)
+      else:
+        print(f"[Gemini.chat] Using SDK")
+        return await self._chat_with_sdk(question, transcription_context, chat_history, system_prompt, start_time)
+
+    except Exception as e:
+      import traceback
+      logger.error(f"[Chat] API error: {str(e)}\n{traceback.format_exc()}")
+      raise Exception(f"Chat error: {str(e)}")
+
+  async def _chat_with_custom_endpoint(
+    self,
+    question: str,
+    transcription_context: str,
+    chat_history: list[dict],
+    system_prompt: str,
+    start_time: float
+  ) -> dict:
+    """Use custom endpoint via httpx for chat."""
+    # Build contents for API
+    contents = []
+
+    # Add chat history if available
+    if chat_history:
+      for msg in chat_history[-10:]:  # Last 10 messages for context
+        if msg["role"] in ["user", "assistant"]:
+          contents.append({
+            "role": msg["role"],
+            "parts": [{"text": msg["content"]}]
+          })
+
+    # Add current question with context
+    context_message = f"""以下の文字起こしテキストを参照して、質問に答えてください:
+
+---
+文字起こし:
+{transcription_context}
+---
+
+質問: {question}"""
+
+    contents.append({
+      "role": "user",
+      "parts": [{"text": context_message}]
+    })
+
+    # Build payload
+    payload = {
+      "contents": contents,
+      "systemInstruction": {
+        "parts": [{"text": system_prompt}]
+      },
+      "generationConfig": {
+        "temperature": 0.7,
+        "maxOutputTokens": 2000
+      }
+    }
+
+    url = f"{self.api_endpoint}/models/{self.model}:generateContent"
+    headers = {
+      "Content-Type": "application/json",
+      "x-goog-api-key": self.api_key
+    }
+
+    print(f"[Chat] Calling custom endpoint: {url}")
+    async with httpx.AsyncClient(timeout=120.0) as client:
+      print(f"[Chat] About to POST to endpoint...")
+      response = await client.post(url, json=payload, headers=headers)
+      print(f"[Chat] Got response, status: {response.status_code}")
+      response.raise_for_status()
+      print(f"[Chat] Parsing JSON response...")
+      result = response.json()
+      print(f"[Chat] Response parsed, keys: {result.keys()}")
+
+    # Extract response text
+    answer = ""
+    if "candidates" in result and len(result["candidates"]) > 0:
+      candidate = result["candidates"][0]
+      if "content" in candidate and "parts" in candidate["content"]:
+        parts = candidate["content"]["parts"]
+        if len(parts) > 0 and "text" in parts[0]:
+          answer = parts[0]["text"]
+
+    response_time_ms = (time.time() - start_time) * 1000
+    print(f"[Chat] Custom endpoint response length: {len(answer)} chars")
+
+    return {
+      "response": answer,
+      "input_tokens": None,
+      "output_tokens": None,
+      "total_tokens": None,
+      "response_time_ms": response_time_ms,
+    }
+
+  async def _chat_with_sdk(
+    self,
+    question: str,
+    transcription_context: str,
+    chat_history: list[dict],
+    system_prompt: str,
+    start_time: float
+  ) -> dict:
+    """Use Google GenAI SDK for chat."""
+    # Build chat contents with history
+    contents = []
+
+    # Add chat history if available
+    if chat_history:
+      for msg in chat_history[-10:]:  # Last 10 messages for context
+        if msg["role"] in ["user", "assistant"]:
+          contents.append(types.Content(
+            role=msg["role"],
+            parts=[types.Part.from_text(text=msg["content"])]
+          ))
+
+    # Add current question with context
+    context_message = f"""以下の文字起こしテキストを参照して、質問に答えてください:
+
+---
+文字起こし:
+{transcription_context}
+---
+
+質問: {question}"""
+
+    contents.append(types.Content(
+      role="user",
+      parts=[types.Part.from_text(text=context_message)]
+    ))
+
+    # Use SDK for chat
+    generate_content_config = types.GenerateContentConfig(
+      system_instruction=system_prompt,
+      temperature=0.7,
+      max_output_tokens=2000,
+    )
+
+    logger.info(f"[Chat] Calling Gemini API with model: {self.model}, contents count: {len(contents)}")
+    print(f"[Chat] Calling Gemini API with model: {self.model}, contents count: {len(contents)}")
+    response = self.client.models.generate_content(
+      model=self.model,
+      contents=contents,
+      config=generate_content_config,
+    )
+    print(f"[Chat] After generate_content, response type: {type(response)}")
+
+    logger.info(f"[Chat] Response received, type: {type(response)}, has text: {hasattr(response, 'text')}")
+    print(f"[Chat] Response received, has text: {hasattr(response, 'text')}")
+    answer = response.text if hasattr(response, 'text') and response.text else ""
+    print(f"[Chat] Answer length: {len(answer)}")
+    if not answer:
+      logger.error(f"[Chat] Empty response! Response: {response}")
+    response_time_ms = (time.time() - start_time) * 1000
+
+    # Extract token usage
+    input_tokens = None
+    output_tokens = None
+    total_tokens = None
+
+    if hasattr(response, 'usage_metadata') and response.usage_metadata:
+      input_tokens = response.usage_metadata.prompt_token_count
+      output_tokens = response.usage_metadata.candidates_token_count
+      total_tokens = response.usage_metadata.total_token_count
+
+    logger.info(f"Chat response generated (length: {len(answer)} chars, time: {response_time_ms:.0f}ms)")
+
+    return {
+      "response": answer,
+      "input_tokens": input_tokens,
+      "output_tokens": output_tokens,
+      "total_tokens": total_tokens,
+      "response_time_ms": response_time_ms,
+    }
+
+  def _get_chat_system_prompt(self) -> str:
+    """Get system prompt for chat Q&A."""
+    if self.review_language == "zh":
+      return """你是一个专业的问答助手。
+你的任务是基于提供的文字起こしテキスト（转录文本）来回答用户的问题。
+
+请注意：
+1. 仅根据提供的转录文本回答问题，不要添加外部信息
+2. 如果转录文本中没有相关信息，请明确告知
+3. 使用简洁明了的语言
+4. 如果是中文问题，用中文回答；如果是日文问题，用日文回答；如果是英文问题，用英文回答
+"""
+
+    elif self.review_language == "ja":
+      return """あなたは専門的なQ&Aアシスタントです。
+あなたのタスクは、提供された文字起こしテキストに基づいてユーザーの質問に回答することです。
+
+注意点：
+1. 提供された文字起こしテキストのみに基づいて回答し、外部情報を追加しないでください
+2. 文字起こしテキストに関連する情報がない場合は、明確にお知らせください
+3. 簡潔明瞭な言葉を使用してください
+4. 中国語の質問には中国語で、日本語の質問には日本語で、英語の質問には英語で回答してください
+"""
+
+    else:  # en
+      return """You are a professional Q&A assistant.
+Your task is to answer user questions based on the provided transcription text.
+
+Please note:
+1. Answer only based on the provided transcription text, do not add external information
+2. If there is no relevant information in the transcription text, clearly inform the user
+3. Use concise and clear language
+4. Answer in the same language as the question (Chinese -> Chinese, Japanese -> Japanese, English -> English)
+"""
+
 
 # シングルトンインスタンス（環境変数から初期化）
 gemini_client = None

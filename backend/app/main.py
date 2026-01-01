@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from app.core.config import settings
 from app import models  # Ensure models are registered
-from app.api import auth, audio, transcriptions, users
+from app.api import auth, audio, transcriptions, users, shared
 from app.tasks import start_scheduler, stop_scheduler
 import logging
 
@@ -54,6 +54,7 @@ app.include_router(auth.router, prefix="/api/auth", tags=["認証"])
 app.include_router(users.router, prefix="/api/users", tags=["ユーザー"])
 app.include_router(audio.router, prefix="/api/audio", tags=["音声"])
 app.include_router(transcriptions.router, prefix="/api/transcriptions", tags=["文字起こし"])
+app.include_router(shared.router, prefix="/api/shared", tags=["共有"])  # Public access, no auth
 
 
 @app.get("/")

@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { Download, AlertCircle, FileText, Loader2, File } from 'lucide-react'
+import { Download, AlertCircle, FileText, Loader2, File, Share2, Check } from 'lucide-react'
 import { api } from '../services/api'
 import { Transcription, Summary } from '../types'
 import { Button } from '../components/ui/Button'
 import { Card, CardContent } from '../components/ui/Card'
 import { Badge } from '../components/ui/Badge'
+import { Chat } from '../components/Chat'
 
 // Stage display mapping
 const STAGE_LABELS: Record<string, string> = {
@@ -33,6 +34,11 @@ export function TranscriptionDetail() {
     const [summary, setSummary] = useState<Summary | null>(null)
     const [loading, setLoading] = useState(true)
     const isLoadingRef = useRef(false)
+
+    // Share link state
+    const [shareUrl, setShareUrl] = useState<string>('')
+    const [shareCopied, setShareCopied] = useState(false)
+    const [shareLoading, setShareLoading] = useState(false)
 
     // PPTX generation state
     type PptxStatus = 'not-started' | 'generating' | 'ready' | 'error'
@@ -207,6 +213,33 @@ export function TranscriptionDetail() {
         }
     }
 
+    const handleShare = async () => {
+        if (!id) return
+
+        try {
+            setShareLoading(true)
+            const result = await api.createShareLink(id)
+            // Construct full URL for sharing
+            const fullUrl = `${window.location.origin}${result.share_url}`
+            setShareUrl(fullUrl)
+        } catch (error) {
+            console.error('Failed to create share link:', error)
+            alert('生成分享链接失败')
+        } finally {
+            setShareLoading(false)
+        }
+    }
+
+    const handleCopyShareLink = async () => {
+        try {
+            await navigator.clipboard.writeText(shareUrl)
+            setShareCopied(true)
+            setTimeout(() => setShareCopied(false), 2000)
+        } catch (error) {
+            console.error('Failed to copy:', error)
+        }
+    }
+
     const getBadgeVariant = (stage: string): 'success' | 'error' | 'info' | 'warning' => {
         if (stage === 'completed') return 'success'
         if (stage === 'failed') return 'error'
@@ -226,10 +259,45 @@ export function TranscriptionDetail() {
 
             <div className="flex justify-between items-center mb-6">
                 <h2 className="text-2xl font-bold">{transcription.file_name}</h2>
-                <Badge variant={getBadgeVariant(transcription.stage)}>
-                    {STAGE_LABELS[transcription.stage] || transcription.stage}
-                </Badge>
+                <div className="flex gap-2 items-center">
+                    <Badge variant={getBadgeVariant(transcription.stage)}>
+                        {STAGE_LABELS[transcription.stage] || transcription.stage}
+                    </Badge>
+                    <button
+                        onClick={handleShare}
+                        disabled={shareLoading}
+                        className="inline-flex items-center gap-1 px-3 py-1.5 text-sm bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 rounded-lg hover:bg-purple-200 dark:hover:bg-purple-900/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        title="生成分享链接"
+                    >
+                        <Share2 className="w-4 h-4" />
+                        {shareLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : '分享'}
+                    </button>
+                </div>
             </div>
+
+            {/* Share Link Modal */}
+            {shareUrl && (
+                <div className="mb-6 p-4 bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 rounded-lg">
+                    <p className="text-sm font-medium text-purple-900 dark:text-purple-100 mb-2">分享链接已生成</p>
+                    <div className="flex gap-2">
+                        <input
+                            type="text"
+                            readOnly
+                            value={shareUrl}
+                            className="flex-1 px-3 py-2 bg-white dark:bg-gray-800 border border-purple-300 dark:border-purple-700 rounded-lg text-sm"
+                        />
+                        <button
+                            onClick={handleCopyShareLink}
+                            className="px-4 py-2 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors flex items-center gap-2"
+                        >
+                            {shareCopied ? <Check className="w-4 h-4" /> : '复制'}
+                        </button>
+                    </div>
+                    <p className="text-xs text-purple-700 dark:text-purple-300 mt-2">
+                        任何人都可以通过此链接查看转录内容，无需登录。
+                    </p>
+                </div>
+            )}
 
             {transcription.error_message && (
                 <div className="mb-4 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg flex items-start gap-2">
@@ -341,6 +409,19 @@ export function TranscriptionDetail() {
                         )}
                     </CardContent>
                 </Card>
+
+                {/* AI Chat Section */}
+                {transcription.stage === 'completed' && id && (
+                    <Card>
+                        <CardContent className="pt-6">
+                            <h3 className="text-lg font-semibold mb-4">AI 问答</h3>
+                            <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+                                基于转录内容向AI提问，获取更详细的信息。
+                            </p>
+                            <Chat transcriptionId={id} />
+                        </CardContent>
+                    </Card>
+                )}
             </div>
         </div>
     )

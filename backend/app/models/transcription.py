@@ -35,6 +35,8 @@ class Transcription(Base):
     # user = relationship("User", back_populates="transcriptions") # User model reference if needed
     summaries = relationship("Summary", back_populates="transcription", passive_deletes=True)
     gemini_logs = relationship("GeminiRequestLog", back_populates="transcription", passive_deletes=True)
+    chat_messages = relationship("ChatMessage", back_populates="transcription", passive_deletes=True, order_by="ChatMessage.created_at")
+    share_links = relationship("ShareLink", back_populates="transcription", passive_deletes=True)
 
     @property
     def text(self) -> str:

@@ -5,6 +5,7 @@ import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import { TranscriptionList } from './pages/TranscriptionList'
 import { TranscriptionDetail } from './pages/TranscriptionDetail'
+import { SharedTranscription } from './pages/SharedTranscription'
 
 // Layout component for protected routes with navigation
 function ProtectedLayout({ children }: { children: React.ReactNode }) {
@@ -47,6 +48,9 @@ function App() {
                 path="/login"
                 element={user ? <Navigate to="/transcriptions" /> : <Login />}
             />
+
+            {/* Public route - shared transcription (no auth required) */}
+            <Route path="/shared/:shareToken" element={<SharedTranscription />} />
 
             {/* Protected routes - require authentication */}
             <Route

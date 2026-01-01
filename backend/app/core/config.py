@@ -17,11 +17,11 @@ class Settings(BaseSettings):
     SUPABASE_ANON_KEY: str
     SUPABASE_SERVICE_ROLE_KEY: str
 
-    # Gemini API
-    GEMINI_API_KEY: str
-    GEMINI_MODEL: str = "gemini-2.0-flash-exp"
+    # GLM API (OpenAI-compatible)
+    GLM_API_KEY: str
+    GLM_MODEL: str = "GLM-4.5-Air"
+    GLM_BASE_URL: Optional[str] = "https://open.bigmodel.cn/api/paas/v4"  # GLM API endpoint
     REVIEW_LANGUAGE: str = "zh"  # zh (中国語), ja (日本語), en (英語)
-    GEMINI_API_ENDPOINT: Optional[str] = None  # カスタムエンドポイント（オプション）
     
     # Backend
     CORS_ORIGINS: str = "http://localhost:3000"

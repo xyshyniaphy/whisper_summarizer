@@ -4,12 +4,18 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 from pathlib import Path
 from uuid import UUID
+import secrets
+import base64
 from app.api.deps import get_db
 from app.core.supabase import get_current_active_user
 from app.models.transcription import Transcription
 from app.models.summary import Summary
+from app.models.chat_message import ChatMessage
+from app.models.share_link import ShareLink
 from app.schemas.transcription import Transcription as TranscriptionSchema
 from app.schemas.summary import Summary as SummarySchema
+from app.schemas.chat import ChatMessage as ChatMessageSchema, ChatHistoryResponse
+from app.schemas.share import ShareLink as ShareLinkSchema
 from app.services.pptx_service import get_pptx_service
 from app.services.marp_service import get_marp_service
 
@@ -653,6 +659,7 @@ async def download_markdown(
 @router.get("/{transcription_id}/download-docx")
 async def download_summary_docx(
     transcription_id: str,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_active_user)
 ):
@@ -700,100 +707,103 @@ async def download_summary_docx(
         temp_dir = tempfile.mkdtemp()
         docx_path = tempfile.mktemp(suffix=".docx", dir=temp_dir)
 
-        try:
-            # 创建Document对象
-            doc = Document()
+        # 创建Document对象
+        doc = Document()
 
-            # 设置默认字体（支持中文）
-            doc.styles['Normal'].font.name = 'Microsoft YaHei'
-            doc.styles['Normal']._element.rPr.rFonts.set(qn('w:eastAsia'), 'Microsoft YaHei')
-            doc.styles['Normal'].font.size = Pt(11)
+        # 设置默认字体（支持中文）
+        doc.styles['Normal'].font.name = 'Microsoft YaHei'
+        doc.styles['Normal']._element.rPr.rFonts.set(qn('w:eastAsia'), 'Microsoft YaHei')
+        doc.styles['Normal'].font.size = Pt(11)
 
-            # 简单的Markdown解析
-            lines = summary_text.split('\n')
-            in_list = False
+        # 简单的Markdown解析
+        lines = summary_text.split('\n')
+        in_list = False
 
-            for line in lines:
-                line = line.rstrip()
+        for line in lines:
+            line = line.rstrip()
 
-                # 空行
-                if not line:
-                    if in_list:
-                        in_list = False
-                    doc.add_paragraph()
-                    continue
+            # 空行
+            if not line:
+                if in_list:
+                    in_list = False
+                doc.add_paragraph()
+                continue
 
-                # 标题
-                if line.startswith('#'):
-                    level = len(line) - len(line.lstrip('#'))
-                    if level <= 6:
-                        heading_text = line.lstrip('#').strip()
-                        heading = doc.add_heading(heading_text, level=min(level, 9))
-                        # 设置中文字体
-                        for run in heading.runs:
-                            run.font.name = 'Microsoft YaHei'
-                            run._element.rPr.rFonts.set(qn('w:eastAsia'), 'Microsoft YaHei')
-                        continue
-
-                # 列表项
-                if line.startswith(('- ', '* ', '+ ')) or re.match(r'^\d+\. ', line):
-                    if not in_list:
-                        in_list = True
-                    list_text = line.lstrip('-*+').lstrip('0123456789.')
-                    p = doc.add_paragraph(list_text, style='List Bullet')
+            # 标题
+            if line.startswith('#'):
+                level = len(line) - len(line.lstrip('#'))
+                if level <= 6:
+                    heading_text = line.lstrip('#').strip()
+                    heading = doc.add_heading(heading_text, level=min(level, 9))
                     # 设置中文字体
-                    for run in p.runs:
+                    for run in heading.runs:
                         run.font.name = 'Microsoft YaHei'
                         run._element.rPr.rFonts.set(qn('w:eastAsia'), 'Microsoft YaHei')
                     continue
 
-                # 代码块（简单处理）
-                if line.startswith('```'):
-                    continue
-
-                # 普通段落 - 处理内联格式
-                in_list = False
-                p = doc.add_paragraph()
-
-                # 处理粗体和斜体
-                parts = re.split(r'(\*\*.*?\*\*|_.*?_)', line)
-                for part in parts:
-                    if not part:
-                        continue
-
-                    run = p.add_run(part)
-
-                    # 设置中文字体
+            # 列表项
+            if line.startswith(('- ', '* ', '+ ')) or re.match(r'^\d+\. ', line):
+                if not in_list:
+                    in_list = True
+                list_text = line.lstrip('-*+').lstrip('0123456789.')
+                p = doc.add_paragraph(list_text, style='List Bullet')
+                # 设置中文字体
+                for run in p.runs:
                     run.font.name = 'Microsoft YaHei'
                     run._element.rPr.rFonts.set(qn('w:eastAsia'), 'Microsoft YaHei')
+                continue
 
-                    if part.startswith('**') and part.endswith('**'):
-                        run.bold = True
-                        run.text = part[2:-2]
-                    elif part.startswith('_') and part.endswith('_'):
-                        run.italic = True
-                        run.text = part[1:-1]
+            # 代码块（简单处理）
+            if line.startswith('```'):
+                continue
 
-            # 保存文档
-            doc.save(docx_path)
+            # 普通段落 - 处理内联格式
+            in_list = False
+            p = doc.add_paragraph()
 
-            # 设置文件名
-            original_filename = Path(transcription.file_name).stem
-            download_filename = f"{original_filename}-摘要.docx"
+            # 处理粗体和斜体
+            parts = re.split(r'(\*\*.*?\*\*|_.*?_)', line)
+            for part in parts:
+                if not part:
+                    continue
 
-            return FileResponse(
-                path=docx_path,
-                filename=download_filename,
-                media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-            )
+                run = p.add_run(part)
 
-        finally:
-            # 清理临时文件
+                # 设置中文字体
+                run.font.name = 'Microsoft YaHei'
+                run._element.rPr.rFonts.set(qn('w:eastAsia'), 'Microsoft YaHei')
+
+                if part.startswith('**') and part.endswith('**'):
+                    run.bold = True
+                    run.text = part[2:-2]
+                elif part.startswith('_') and part.endswith('_'):
+                    run.italic = True
+                    run.text = part[1:-1]
+
+        # 保存文档
+        doc.save(docx_path)
+
+        # 设置文件名
+        original_filename = Path(transcription.file_name).stem
+        download_filename = f"{original_filename}-摘要.docx"
+
+        # 定义清理函数（在响应发送后执行）
+        def cleanup_temp_files():
             import shutil
             try:
                 shutil.rmtree(temp_dir, ignore_errors=True)
+                logger.debug(f"Cleaned up temp directory: {temp_dir}")
             except Exception as e:
                 logger.warning(f"Failed to cleanup temp directory: {e}")
+
+        # 添加后台任务在响应完成后清理
+        background_tasks.add_task(cleanup_temp_files)
+
+        return FileResponse(
+            path=docx_path,
+            filename=download_filename,
+            media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        )
 
     except ImportError:
         raise HTTPException(
@@ -803,3 +813,192 @@ async def download_summary_docx(
     except Exception as e:
         logger.error(f"DOCX生成失败 {transcription_id}: {e}")
         raise HTTPException(status_code=500, detail=f"DOCX生成失败: {str(e)}")
+
+
+# ==================== Chat Endpoints ====================
+
+@router.get("/{transcription_id}/chat", response_model=ChatHistoryResponse)
+async def get_chat_history(
+    transcription_id: str,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_active_user)
+):
+    """
+    获取转录的聊天历史记录
+    """
+    try:
+        transcription_uuid = UUID(transcription_id)
+    except ValueError:
+        raise HTTPException(status_code=422, detail="Invalid transcription ID format")
+
+    # Verify ownership
+    transcription = db.query(Transcription).filter(
+        Transcription.id == transcription_uuid,
+        Transcription.user_id == current_user.get("id")
+    ).first()
+
+    if not transcription:
+        raise HTTPException(status_code=404, detail="未找到转录")
+
+    # Get chat history
+    messages = db.query(ChatMessage).filter(
+        ChatMessage.transcription_id == transcription_uuid
+    ).order_by(ChatMessage.created_at).all()
+
+    return ChatHistoryResponse(messages=messages)
+
+
+@router.post("/{transcription_id}/chat", response_model=ChatMessageSchema)
+async def send_chat_message(
+    transcription_id: str,
+    message: dict,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_active_user)
+):
+    """
+    发送聊天消息并获取AI回复
+    """
+    logger.info(f"[Chat] Received message for transcription {transcription_id}: {message}")
+
+    try:
+        transcription_uuid = UUID(transcription_id)
+    except ValueError:
+        logger.error(f"[Chat] Invalid UUID format: {transcription_id}")
+        raise HTTPException(status_code=422, detail="Invalid transcription ID format")
+
+    # Verify ownership
+    transcription = db.query(Transcription).filter(
+        Transcription.id == transcription_uuid,
+        Transcription.user_id == current_user.get("id")
+    ).first()
+
+    if not transcription:
+        logger.warning(f"[Chat] Transcription not found or access denied: {transcription_uuid}")
+        raise HTTPException(status_code=404, detail="未找到转录")
+
+    user_content = message.get("content")
+    if not user_content:
+        logger.warning("[Chat] Empty content received")
+        raise HTTPException(status_code=400, detail="消息内容不能为空")
+
+    logger.info(f"[Chat] Processing user message: {user_content[:100]}...")
+
+    # Save user message
+    user_message = ChatMessage(
+        transcription_id=transcription_uuid,
+        user_id=current_user.get("id"),
+        role="user",
+        content=user_content
+    )
+    db.add(user_message)
+    db.commit()
+    db.refresh(user_message)
+    logger.info(f"[Chat] Saved user message: {user_message.id}")
+
+    # Get chat history for context
+    history = db.query(ChatMessage).filter(
+        ChatMessage.transcription_id == transcription_uuid
+    ).order_by(ChatMessage.created_at).all()
+
+    chat_history = [
+        {"role": msg.role, "content": msg.content}
+        for msg in history[:-1]  # Exclude the message we just added
+    ]
+    logger.info(f"[Chat] Chat history length: {len(chat_history)}")
+
+    # Get transcription text for context
+    transcription_text = transcription.text
+    logger.info(f"[Chat] Transcription text length: {len(transcription_text)} chars")
+
+    # Call Gemini API for response
+    try:
+        from app.core.gemini import get_gemini_client
+        gemini_client = get_gemini_client()
+
+        print(f"[Chat] Calling Gemini API for transcription: {transcription_uuid}")
+        logger.info("[Chat] Calling Gemini API...")
+        response = await gemini_client.chat(
+            question=user_content,
+            transcription_context=transcription_text,
+            chat_history=chat_history
+        )
+
+        assistant_content = response.get("response", "")
+        logger.info(f"[Chat] Gemini response received, length: {len(assistant_content)} chars")
+
+    except Exception as e:
+        logger.error(f"[Chat] Gemini chat error: {e}", exc_info=True)
+        assistant_content = "抱歉，AI回复失败，请稍后再试。"
+
+    # Save assistant message
+    assistant_message = ChatMessage(
+        transcription_id=transcription_uuid,
+        user_id=current_user.get("id"),
+        role="assistant",
+        content=assistant_content
+    )
+    db.add(assistant_message)
+    db.commit()
+    db.refresh(assistant_message)
+    logger.info(f"[Chat] Saved assistant message: {assistant_message.id}")
+
+    return assistant_message
+
+
+# ==================== Share Link Endpoints ====================
+
+def _generate_share_token() -> str:
+    """Generate a secure URL-safe token for share links."""
+    # Generate 16 random bytes and encode as URL-safe base64
+    token_bytes = secrets.token_bytes(16)
+    token = base64.urlsafe_b64encode(token_bytes).decode('utf-8').rstrip('=')
+    return token
+
+
+@router.post("/{transcription_id}/share", response_model=ShareLinkSchema)
+async def create_share_link(
+    transcription_id: str,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_active_user)
+):
+    """
+    创建转录的公开分享链接
+    """
+    try:
+        transcription_uuid = UUID(transcription_id)
+    except ValueError:
+        raise HTTPException(status_code=422, detail="Invalid transcription ID format")
+
+    # Verify ownership
+    transcription = db.query(Transcription).filter(
+        Transcription.id == transcription_uuid,
+        Transcription.user_id == current_user.get("id")
+    ).first()
+
+    if not transcription:
+        raise HTTPException(status_code=404, detail="未找到转录")
+
+    # Check if share link already exists
+    existing_link = db.query(ShareLink).filter(
+        ShareLink.transcription_id == transcription_uuid
+    ).first()
+
+    if existing_link:
+        # Return existing link with updated URL
+        existing_link.share_url = f"/shared/{existing_link.share_token}"
+        return existing_link
+
+    # Create new share link
+    share_token = _generate_share_token()
+    share_link = ShareLink(
+        transcription_id=transcription_uuid,
+        share_token=share_token
+    )
+    db.add(share_link)
+    db.commit()
+    db.refresh(share_link)
+
+    # Add the share_url
+    share_link.share_url = f"/shared/{share_token}"
+
+    return share_link
