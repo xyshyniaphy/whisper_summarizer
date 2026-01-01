@@ -24,7 +24,6 @@ class TranscriptionCreate(TranscriptionBase):
     pass
 
 class TranscriptionUpdate(TranscriptionBase):
-    original_text: Optional[str] = None
     status: Optional[str] = None
     stage: Optional[str] = None
     error_message: Optional[str] = None
@@ -32,7 +31,6 @@ class TranscriptionUpdate(TranscriptionBase):
 class TranscriptionInDBBase(TranscriptionBase):
     id: UUID4
     user_id: Optional[UUID4] = None
-    original_text: Optional[str] = None
     file_path: Optional[str] = None
     error_message: Optional[str] = None
     retry_count: Optional[int] = 0

@@ -81,7 +81,7 @@ class PPTXService:
         Raises:
             ValueError: If transcription has no content
         """
-        if not transcription.original_text:
+        if not transcription.text:
             raise ValueError("Cannot generate PPTX: transcription has no content")
 
         prs = Presentation()
@@ -94,7 +94,7 @@ class PPTXService:
             self._add_summary_slide(prs, summary_text)
 
         # Content slides: Transcription text
-        self._add_content_slides(prs, transcription.original_text)
+        self._add_content_slides(prs, transcription.text)
 
         # Save the presentation
         output_path = self.output_dir / f"{transcription.id}.pptx"

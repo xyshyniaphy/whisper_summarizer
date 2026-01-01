@@ -37,8 +37,6 @@ services:
 
       # Logging
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
-    ports:
-      - "${BACKEND_PORT:-8000}:8000"
     volumes:
       - backend_data:/app/data
       - backend_output:/app/output

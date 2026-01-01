@@ -45,7 +45,6 @@ services:
       # Audio Processing
       AUDIO_PARALLELISM: ${AUDIO_PARALLELISM:-1}
     ports:
-      - "${BACKEND_PORT:-8000}:8000"
       - "5678:5678"  # デバッグポート
     volumes:
       # ソースコードをマウント (ホットリロード用)
@@ -81,7 +80,7 @@ services:
     environment:
       VITE_SUPABASE_URL: ${SUPABASE_URL}
       VITE_SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
-      VITE_BACKEND_URL: ${VITE_BACKEND_URL:-http://localhost:8000}
+      VITE_BACKEND_URL: ${VITE_BACKEND_URL:-http://localhost:3080}
     ports:
       - "3000:3000"
     volumes:

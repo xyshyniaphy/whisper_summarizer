@@ -414,6 +414,10 @@ class TranscribeService:
             logger.info(f"[CHUNKING] ✓ Merge complete: {final_text_length} chars, {final_segment_count} segments")
             print(f"[CHUNKING] ✓ Done: {final_text_length} characters transcribed", flush=True)
 
+            # Debug: log before returning
+            logger.info(f"[CHUNKING] Returning merged result with {len(merged.get('text', ''))} chars")
+            print(f"[CHUNKING] Returning merged result...", flush=True)
+
             return merged
 
         except Exception as e:

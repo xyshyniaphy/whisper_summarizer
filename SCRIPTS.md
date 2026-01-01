@@ -55,8 +55,8 @@ Whisper.cppベースイメージをビルドします。
 
 **起動後のアクセスURL:**
 - フロントエンド: http://localhost:3000
-- バックエンドAPI: http://localhost:8000
-- API Docs: http://localhost:8000/docs
+- バックエンドAPI: http://localhost:3080
+- API Docs: http://localhost:3080/docs
 - Whisper.cpp: http://localhost:8001
 
 ---

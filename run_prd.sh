@@ -102,7 +102,7 @@ echo "Waiting for services to be ready..."
 sleep 5
 
 # Check backend health
-BACKEND_URL="http://localhost:${BACKEND_PORT:-8000}"
+BACKEND_URL="http://localhost:${BACKEND_PORT:-3080}"
 FRONTEND_URL="http://localhost:${FRONTEND_PORT:-80}"
 
 # Try up to 30 times (1 minute total)
@@ -143,8 +143,8 @@ echo -e "${GREEN}========================================${NC}"
 echo ""
 echo "Services running:"
 echo "  - Frontend:  http://localhost:${FRONTEND_PORT:-80}"
-echo "  - Backend:   http://localhost:${BACKEND_PORT:-8000}"
-echo "  - API Docs:  http://localhost:${BACKEND_PORT:-8000}/docs"
+echo "  - Backend:   http://localhost:${BACKEND_PORT:-3080}"
+echo "  - API Docs:  http://localhost:${BACKEND_PORT:-3080}/docs"
 echo ""
 echo "Useful commands:"
 echo "  docker compose logs -f          # View all logs"

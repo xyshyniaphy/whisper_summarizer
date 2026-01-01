@@ -316,7 +316,7 @@ class TranscriptionProcessor:
 
                     logger.info(
                         f"Processing completed successfully: {transcription_id} | "
-                        f"Text length: {len(transcription.original_text or '')} | "
+                        f"Text length: {len(transcription.text)} | "
                         f"Summary: {'Yes' if transcription.summaries else 'No'}"
                     )
                     return True
@@ -382,14 +382,30 @@ class TranscriptionProcessor:
                 cancel_event=cancel_event,
                 transcription_id=transcription_id
             )
+            logger.info(f"[TRANSCRIPTION PROCESSOR] Received result from whisper_service")
+            print(f"[TRANSCRIPTION PROCESSOR] Received result from whisper_service", flush=True)
 
             # Compress text using gzip to avoid SSL connection issues with large text
-            text_bytes = result["text"].encode('utf-8')
-            compressed_text = gzip.compress(text_bytes, compresslevel=6)
+            try:
+                text = result.get("text", "")
+                logger.info(f"[TRANSCRIPTION PROCESSOR] Got text from result: {len(text)} chars")
+                print(f"[TRANSCRIPTION PROCESSOR] Got text from result: {len(text)} chars", flush=True)
 
-            # Save results
-            transcription.original_text = result["text"]  # Keep for backward compatibility
-            transcription.original_text_compressed = compressed_text  # New compressed field
+                text_bytes = text.encode('utf-8')
+                logger.info(f"[TRANSCRIPTION PROCESSOR] Text encoded: {len(text_bytes)} bytes")
+                print(f"[TRANSCRIPTION PROCESSOR] Text encoded: {len(text_bytes)} bytes", flush=True)
+
+                compressed_text = gzip.compress(text_bytes, compresslevel=6)
+                logger.info(f"[TRANSCRIPTION PROCESSOR] Text compressed: {len(compressed_text)} bytes")
+                print(f"[TRANSCRIPTION PROCESSOR] Text compressed: {len(compressed_text)} bytes", flush=True)
+            except Exception as e:
+                logger.error(f"[TRANSCRIPTION PROCESSOR] Error during compression: {e}")
+                print(f"[TRANSCRIPTION PROCESSOR] Error during compression: {e}", flush=True)
+                raise
+
+            # Save results - ONLY save to compressed field to avoid SSL errors
+            # DO NOT save to original_text as it causes SSL connection issues with large text
+            transcription.original_text_compressed = compressed_text
             transcription.language = result["language"]
             transcription.duration_seconds = result.get("duration")
             transcription.error_message = None
@@ -420,7 +436,9 @@ class TranscriptionProcessor:
         Returns:
             bool: True if successful
         """
-        if not transcription.original_text:
+        # Use the .text property which decompresses original_text_compressed
+        text = transcription.text
+        if not text:
             logger.warning(f"No text to summarize for: {transcription.id}")
             return True  # Not an error, just nothing to summarize
 
@@ -447,7 +465,7 @@ class TranscriptionProcessor:
             try:
                 gemini_response = loop.run_until_complete(
                     gemini_client.generate_summary(
-                        transcription.original_text,
+                        text,  # Use decompressed text from .text property
                         file_name=transcription.file_name
                     )
                 )
@@ -472,7 +490,7 @@ class TranscriptionProcessor:
                 file_name=transcription.file_name,
                 model_name=gemini_response.model_name,
                 prompt=gemini_response.prompt,
-                input_text=transcription.original_text[:5000],
+                input_text=transcription.text[:5000],
                 input_text_length=gemini_response.input_text_length,
                 output_text=gemini_response.summary,
                 output_text_length=gemini_response.output_text_length,

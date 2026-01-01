@@ -283,7 +283,7 @@ async def _generate_pptx_task(transcription_id: str, db: Session) -> None:
     transcription.pptx_error_message = None
     db.commit()
 
-    if not transcription.original_text:
+    if not transcription.text:
       raise ValueError("转录内容为空")
 
     # 获取摘要
@@ -345,7 +345,7 @@ async def generate_pptx(
   if not transcription:
     raise HTTPException(status_code=404, detail="未找到转录")
 
-  if not transcription.original_text:
+  if not transcription.text:
     raise HTTPException(status_code=400, detail="转录内容为空，无法生成PPT")
 
   # Check current status from database
@@ -466,7 +466,7 @@ async def get_markdown(
   if not transcription:
     raise HTTPException(status_code=404, detail="未找到转录")
 
-  if not transcription.original_text:
+  if not transcription.text:
     raise HTTPException(status_code=400, detail="转录内容为空")
 
   marp_service = get_marp_service()

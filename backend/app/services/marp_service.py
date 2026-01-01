@@ -87,7 +87,7 @@ class MarpService:
             ValueError: If transcription has no content
             Exception: If AI generation fails
         """
-        if not transcription.original_text:
+        if not transcription.text:
             raise ValueError("Cannot generate markdown: transcription has no content")
 
         # Step 1: Use AI to structure the content
@@ -113,12 +113,12 @@ class MarpService:
         """
         # Create prompt for AI
         prompt = STRUCTURE_PROMPT.format(
-            transcription_text=transcription.original_text[:15000]  # Limit length
+            transcription_text=transcription.text[:15000]  # Limit length
         )
 
         # Call Gemini API - use generate_summary with custom prompt
         response = await self.gemini_client.generate_summary(
-            transcription=transcription.original_text[:15000],
+            transcription=transcription.text[:15000],
             file_name=transcription.file_name,
             system_prompt=prompt
         )

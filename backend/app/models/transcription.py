@@ -1,7 +1,7 @@
 from sqlalchemy import Column, String, Text, Float, DateTime, ForeignKey, Integer, LargeBinary
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func
-from sqlalchemy.orm import relationship, hybrid_property
+from sqlalchemy.orm import relationship
 import uuid
 import gzip
 from app.db.base_class import Base
@@ -13,7 +13,7 @@ class Transcription(Base):
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
     file_name = Column(String, nullable=False)
     file_path = Column(Text, nullable=True)
-    original_text = Column(Text, nullable=True)  # Legacy, kept for backward compatibility
+    # original_text = Column(Text, nullable=True)  # REMOVED: Use original_text_compressed instead to avoid SSL errors
     original_text_compressed = Column(LargeBinary, nullable=True)  # Gzip-compressed binary data
     status = Column(String, default="processing")  # Legacy, use stage instead
     language = Column(String, nullable=True)
@@ -37,16 +37,18 @@ class Transcription(Base):
     summaries = relationship("Summary", back_populates="transcription", passive_deletes=True)
     gemini_logs = relationship("GeminiRequestLog", back_populates="transcription", passive_deletes=True)
 
-    @hybrid_property
+    @property
     def text(self) -> str:
         """
-        Get the decompressed transcription text.
-        Returns compressed data if available, otherwise falls back to original_text.
+        Get the decompressed transcription text from original_text_compressed.
+        Uses gzip compression to avoid SSL connection errors with large text.
         """
         if self.original_text_compressed:
             try:
                 return gzip.decompress(self.original_text_compressed).decode('utf-8')
-            except Exception:
-                # Fall back to original_text if decompression fails
-                pass
-        return self.original_text or ""
+            except Exception as e:
+                # Log error but don't fail - return empty string
+                import logging
+                logging.getLogger(__name__).error(f"Failed to decompress text: {e}")
+                return ""
+        return ""

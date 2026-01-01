@@ -189,8 +189,8 @@ docker-compose -f docker-compose.dev.yml up -d --build
 | サービス | URL |
 |---|---|
 | フロントエンド | http://localhost:3000 |
-| バックエンドAPI | http://localhost:8000 |
-| API ドキュメント | http://localhost:8000/docs |
+| バックエンドAPI | http://localhost:3080 |
+| API ドキュメント | http://localhost:3080/docs |
 
 ### 本番環境の起動
 
@@ -472,7 +472,7 @@ npm run test:headed
 
 ## API仕様
 
-詳細なAPI仕様は、http://localhost:8000/docs で確認できます。
+詳細なAPI仕様は、http://localhost:3080/docs で確認できます。
 
 ### 主要エンドポイント
 
@@ -582,7 +582,7 @@ docker-compose -f docker-compose.dev.yml exec backend nvidia-smi
 ```bash
 # 使用中のポートを確認
 sudo lsof -i :3000
-sudo lsof -i :8000
+sudo lsof -i :3080
 sudo lsof -i :8001
 
 # プロセスを終了

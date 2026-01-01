@@ -21,23 +21,40 @@ Whisper Summarizer is a web application for audio transcription and AI-powered s
 
 ### Services Architecture
 
+**Development Mode:**
 ```
-┌─────────────┐     ┌─────────────┐
-│  Frontend   │────▶│  Backend    │────▶ Supabase (Auth+DB)
-│  (React)    │     │  (FastAPI + │
-│  :3000      │     │   faster-   │
-│             │     │   whisper)  │
-└─────────────┘     └─────────────┘
-      :                    :8000
-      :
-   (Nginx)
+┌───────────────────────────────────────┐
+│         Frontend (Vite Dev)           │
+│         React + Tailwind               │
+│         :3000 (host)                   │
+│  ┌────────────────────────────────┐   │
+│  │  Vite Proxy: /api → backend:8000 │   │
+│  └────────────────────────────────┘   │
+└───────────────────────────────────────┘
+                  │
+                  │ Docker Network
+                  ▼
+┌───────────────────────────────────────┐
+│         Backend (FastAPI)              │
+│         faster-whisper + cuDNN         │
+│         :8000 (internal)               │
+│         :5678 (debug - host)           │
+└───────────────────────────────────────┘
+                  │
+                  ▼
+          Supabase (Auth + PostgreSQL)
 ```
+
+**Production Mode:**
+- Frontend served by Nginx on :80
+- API accessible at /api/* (proxied by Nginx)
 
 **Key changes from whisper.cpp:**
 - **Simplified architecture**: Transcription now runs in-process within the backend
 - **No separate whispercpp container**: faster-whisper is a Python library
 - **Better GPU performance**: Uses cuDNN optimized kernels via CTranslate2
 - **Lower memory footprint**: No subprocess overhead, model loaded once at startup
+- **Vite proxy in dev**: Frontend proxies `/api/*` to `backend:8000` via Docker network
 
 ## Development Commands
 
@@ -59,8 +76,8 @@ Whisper Summarizer is a web application for audio transcription and AI-powered s
 
 Access URLs:
 - Frontend: http://localhost:3000
-- Backend API: http://localhost:8000
-- API Docs: http://localhost:8000/docs
+- API (via Vite proxy): http://localhost:3000/api/*
+- Backend Debug: http://localhost:5678 (Python debugger)
 
 ### Testing
 
