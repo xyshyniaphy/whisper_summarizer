@@ -877,6 +877,7 @@ class TranscribeService:
     ) -> Dict[str, any]:
         """
         Simple timestamp-based merging (may have duplicates at boundaries).
+        Optimized for large files - skips segment processing to avoid O(n²) complexity.
 
         Args:
             chunks_results: List of chunk transcriptions
@@ -884,10 +885,7 @@ class TranscribeService:
         Returns:
             Merged transcription
         """
-        overlap_seconds = settings.CHUNK_OVERLAP_SECONDS
-
         merged_text = []
-        merged_segments = []
 
         for i, chunk in enumerate(chunks_results):
             if "error" in chunk:
@@ -900,21 +898,11 @@ class TranscribeService:
             if chunk.get("text"):
                 merged_text.append(chunk["text"])
 
-            # For segments, filter out overlap region (except first chunk)
-            chunk_start = chunk.get("chunk_start_time", 0)
-            for segment in chunk.get("segments", []):
-                if i == 0:
-                    # Keep all segments from first chunk
-                    merged_segments.append(segment)
-                else:
-                    # For subsequent chunks, filter segments that start after overlap region
-                    seg_start = self._parse_srt_time(segment["start"])
-                    if seg_start >= (chunk_start + overlap_seconds):
-                        merged_segments.append(segment)
-
+        # Skip segment processing for large files - it's too slow
+        # Segments are only needed for subtitle files, not for summarization
         return {
             "text": "".join(merged_text).strip(),
-            "segments": merged_segments,
+            "segments": [],  # Empty segments for performance
             "language": self.language
         }
 

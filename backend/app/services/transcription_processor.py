@@ -6,6 +6,7 @@ Handles complete workflow: upload -> transcribe -> summarize with retry logic
 import os
 import time
 import asyncio
+import gzip
 import logging
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -382,8 +383,13 @@ class TranscriptionProcessor:
                 transcription_id=transcription_id
             )
 
+            # Compress text using gzip to avoid SSL connection issues with large text
+            text_bytes = result["text"].encode('utf-8')
+            compressed_text = gzip.compress(text_bytes, compresslevel=6)
+
             # Save results
-            transcription.original_text = result["text"]
+            transcription.original_text = result["text"]  # Keep for backward compatibility
+            transcription.original_text_compressed = compressed_text  # New compressed field
             transcription.language = result["language"]
             transcription.duration_seconds = result.get("duration")
             transcription.error_message = None
