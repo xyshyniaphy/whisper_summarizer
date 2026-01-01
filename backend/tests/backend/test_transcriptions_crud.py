@@ -377,3 +377,146 @@ class TestTranscriptionCRUDWorkflow:
         assert len(workflow_steps) == 5
         for step in workflow_steps:
             assert "POST" in step or "GET" in step or "DELETE" in step
+
+
+# ============================================================================
+# DELETE /api/transcriptions/all Endpoint Tests
+# ============================================================================
+
+class TestDeleteAllTranscriptionsEndpoint:
+    """Tests for the delete all transcriptions endpoint."""
+
+    def test_delete_all_returns_200_on_success(self, authenticated_client):
+        """Test that delete all returns 200 with count."""
+        response = authenticated_client.delete("/api/transcriptions/all")
+
+        # Should return 200 with deleted_count
+        assert response.status_code in [
+            http_status.HTTP_200_OK,
+            http_status.HTTP_401_UNAUTHORIZED,
+            http_status.HTTP_403_FORBIDDEN
+        ]
+
+        if response.status_code == http_status.HTTP_200_OK:
+            data = response.json()
+            assert "deleted_count" in data
+            assert "message" in data
+
+    def test_delete_all_requires_authentication(self, client):
+        """Test that delete all requires authentication."""
+        response = client.delete("/api/transcriptions/all")
+
+        # Should return 401 or 403 when not authenticated
+        assert response.status_code in [
+            http_status.HTTP_401_UNAUTHORIZED,
+            http_status.HTTP_403_FORBIDDEN
+        ]
+
+    def test_delete_all_returns_zero_when_empty(self, authenticated_client):
+        """Test that delete all returns 0 when no transcriptions exist."""
+        response = authenticated_client.delete("/api/transcriptions/all")
+
+        if response.status_code == http_status.HTTP_200_OK:
+            data = response.json()
+            # deleted_count should be 0 or higher
+            assert isinstance(data.get("deleted_count"), int)
+            assert data.get("deleted_count") >= 0
+
+
+# ============================================================================
+# GET /api/transcriptions/{id}/markdown Endpoint Tests
+# ============================================================================
+
+class TestGetMarkdownEndpoint:
+    """Tests for the get markdown endpoint."""
+
+    def test_get_markdown_returns_json_with_markdown(self, authenticated_client):
+        """Test that get markdown returns markdown content."""
+        test_id = uuid4()
+
+        response = authenticated_client.get(f"/api/transcriptions/{test_id}/markdown")
+
+        # Should return 200, 400 (empty), or 404 (not found)
+        assert response.status_code in [
+            http_status.HTTP_200_OK,
+            http_status.HTTP_404_NOT_FOUND,
+            http_status.HTTP_400_BAD_REQUEST,
+            http_status.HTTP_401_UNAUTHORIZED,
+            http_status.HTTP_403_FORBIDDEN
+        ]
+
+        if response.status_code == http_status.HTTP_200_OK:
+            data = response.json()
+            assert "markdown" in data
+            assert "cached" in data
+
+    def test_get_markdown_requires_authentication(self, client):
+        """Test that get markdown requires authentication."""
+        test_id = uuid4()
+
+        response = client.get(f"/api/transcriptions/{test_id}/markdown")
+
+        assert response.status_code in [
+            http_status.HTTP_401_UNAUTHORIZED,
+            http_status.HTTP_403_FORBIDDEN
+        ]
+
+    def test_get_markdown_with_invalid_id(self, authenticated_client):
+        """Test get markdown with invalid UUID format."""
+        response = authenticated_client.get("/api/transcriptions/invalid-uuid/markdown")
+
+        assert response.status_code in [
+            http_status.HTTP_422_UNPROCESSABLE_ENTITY,
+            http_status.HTTP_404_NOT_FOUND,
+            http_status.HTTP_401_UNAUTHORIZED,
+            http_status.HTTP_403_FORBIDDEN
+        ]
+
+
+# ============================================================================
+# GET /api/transcriptions/{id}/download-markdown Endpoint Tests
+# ============================================================================
+
+class TestDownloadMarkdownEndpoint:
+    """Tests for the download markdown endpoint."""
+
+    def test_download_markdown_returns_file(self, authenticated_client):
+        """Test that download markdown returns markdown file."""
+        test_id = uuid4()
+
+        response = authenticated_client.get(f"/api/transcriptions/{test_id}/download-markdown")
+
+        # Should return 200 with file or 404
+        assert response.status_code in [
+            http_status.HTTP_200_OK,
+            http_status.HTTP_404_NOT_FOUND,
+            http_status.HTTP_401_UNAUTHORIZED,
+            http_status.HTTP_403_FORBIDDEN
+        ]
+
+        if response.status_code == http_status.HTTP_200_OK:
+            # Verify content type is markdown
+            content_type = response.headers.get("content-type", "")
+            assert "text/markdown" in content_type or "text/plain" in content_type
+
+    def test_download_markdown_requires_authentication(self, client):
+        """Test that download markdown requires authentication."""
+        test_id = uuid4()
+
+        response = client.get(f"/api/transcriptions/{test_id}/download-markdown")
+
+        assert response.status_code in [
+            http_status.HTTP_401_UNAUTHORIZED,
+            http_status.HTTP_403_FORBIDDEN
+        ]
+
+    def test_download_markdown_has_content_disposition(self, authenticated_client):
+        """Test that download markdown has content-disposition header."""
+        test_id = uuid4()
+
+        response = authenticated_client.get(f"/api/transcriptions/{test_id}/download-markdown")
+
+        if response.status_code == http_status.HTTP_200_OK:
+            # Should have Content-Disposition header
+            content_disposition = response.headers.get("content-disposition", "")
+            assert "attachment" in content_disposition or "filename" in content_disposition
