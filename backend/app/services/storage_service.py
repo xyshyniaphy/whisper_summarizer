@@ -8,6 +8,7 @@ Transcription text is stored as gzip-compressed files to reduce size and costs.
 import os
 import gzip
 import logging
+import requests
 from pathlib import Path
 from typing import Optional
 from supabase import create_client, Client
@@ -40,15 +41,22 @@ class StorageService:
 
             if TRANSCRIPTIONS_BUCKET not in bucket_names:
                 logger.info(f"Creating bucket: {TRANSCRIPTIONS_BUCKET}")
-                # Create bucket if it doesn't exist
-                self.supabase.storage.create_bucket(
-                    id=TRANSCRIPTIONS_BUCKET,
-                    options={
-                        "public": False,  # Private bucket - requires auth
-                        "file_size_limit": 104857600,  # 100MB max file size
-                    }
-                )
-                logger.info(f"Bucket created: {TRANSCRIPTIONS_BUCKET}")
+                # Use REST API to create bucket (Python client API is broken)
+                storage_url = f"{settings.SUPABASE_URL}/storage/v1/bucket"
+                headers = {
+                    "apikey": settings.SUPABASE_SERVICE_ROLE_KEY,
+                    "Authorization": f"Bearer {settings.SUPABASE_SERVICE_ROLE_KEY}",
+                    "Content-Type": "application/json"
+                }
+                data = {
+                    "id": TRANSCRIPTIONS_BUCKET,
+                    "name": TRANSCRIPTIONS_BUCKET
+                }
+                response = requests.post(storage_url, json=data, headers=headers)
+                if response.status_code == 200:
+                    logger.info(f"Bucket created: {TRANSCRIPTIONS_BUCKET}")
+                else:
+                    logger.warning(f"Failed to create bucket: {response.text}")
         except Exception as e:
             logger.warning(f"Could not verify/create bucket: {e}")
 

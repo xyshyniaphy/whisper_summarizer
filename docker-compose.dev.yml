@@ -1,13 +1,33 @@
 services:
-  # FastAPIバックエンド (開発モード - ホットリロード + faster-whisper + Supabase PostgreSQL)
+  # PostgreSQL 18 Database (Alpine - Local Development)
+  postgres:
+    image: postgres:18-alpine
+    container_name: whisper_postgres_dev
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-whisper_summarizer}
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data_dev:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - whisper_network_dev
+
+  # FastAPIバックエンド (開発モード - ホットリロード + faster-whisper + Local PostgreSQL)
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
     container_name: whisper_backend_dev
     environment:
-      # Database (Supabase PostgreSQL)
-      DATABASE_URL: ${DATABASE_URL}
+      # Database (Local PostgreSQL)
+      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-whisper_summarizer}
 
       # Supabase
       SUPABASE_URL: ${SUPABASE_URL}
@@ -67,6 +87,9 @@ services:
               device_ids: ['0']
               capabilities: [gpu]
     command: /bin/sh -c "uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --log-level debug 2>&1 | tee /app/logs/backend.log"
+    depends_on:
+      postgres:
+        condition: service_healthy
     networks:
       - whisper_network_dev
 
@@ -101,3 +124,7 @@ services:
 networks:
   whisper_network_dev:
     driver: bridge
+
+volumes:
+  postgres_data_dev:
+    driver: local
