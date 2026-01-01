@@ -1,5 +1,7 @@
 /**
  * 認証状態管理カスタムフック (Jotai版)
+ *
+ * Google OAuthのみをサポートしています。
  */
 
 import { useEffect, useCallback } from 'react'
@@ -14,8 +16,6 @@ import {
 } from '../atoms/auth'
 
 interface AuthActions {
-  signUp: (email: string, password: string, fullName?: string) => Promise<{ user: User | null; session: Session | null; error: AuthError | null }>
-  signIn: (email: string, password: string) => Promise<{ user: User | null; session: Session | null; error: AuthError | null }>
   signInWithGoogle: () => Promise<{ error: AuthError | null }>
   signOut: () => Promise<{ error: AuthError | null }>
 }
@@ -89,72 +89,6 @@ export function useAuth(): [
     return () => subscription.unsubscribe()
   }, [setUser, setSession, setRole, setLoading])
 
-  // 新規ユーザー登録
-  const signUp = useCallback(async (email: string, password: string, fullName?: string) => {
-    // E2Eテストモード
-    if (isE2ETestMode()) {
-      setUser(mockUser)
-      setRole('user')
-      return {
-        user: mockUser,
-        session: null,
-        error: null,
-      }
-    }
-
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: {
-          full_name: fullName || '',
-          role: 'user',
-        },
-      },
-    })
-
-    if (data.user) {
-      setUser(data.user)
-      setRole('user')
-    }
-
-    return {
-      user: data.user,
-      session: data.session,
-      error,
-    }
-  }, [setUser, setRole])
-
-  // サインイン
-  const signIn = useCallback(async (email: string, password: string) => {
-    // E2Eテストモード - 任意の認証情報で成功
-    if (isE2ETestMode()) {
-      setUser(mockUser)
-      setRole('user')
-      return {
-        user: mockUser,
-        session: null,
-        error: null,
-      }
-    }
-
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    })
-
-    if (data.user) {
-      setUser(data.user)
-      setRole(data.user.user_metadata?.role ?? 'user')
-    }
-
-    return {
-      user: data.user,
-      session: data.session,
-      error,
-    }
-  }, [setUser, setRole])
-
   // Google OAuthサインイン
   const signInWithGoogle = useCallback(async () => {
     if (isE2ETestMode()) {
@@ -167,11 +101,9 @@ export function useAuth(): [
       provider: 'google',
       options: {
         queryParams: {
-          // Request minimum user info - just email for auth
           access_type: 'offline',
           prompt: 'consent',
         },
-        // Skip additional scopes to request minimum info
         scopes: 'email',
       },
     })
@@ -197,6 +129,6 @@ export function useAuth(): [
 
   return [
     { user, session, loading, role },
-    { signUp, signIn, signInWithGoogle, signOut },
+    { signInWithGoogle, signOut },
   ]
 }

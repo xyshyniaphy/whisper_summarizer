@@ -225,7 +225,8 @@ src/
 - **Tailwind CSS** for styling (replaces Mantine UI)
 - **lucide-react** for icons (replaces @tabler/icons-react)
 - React Router v7 for navigation
-- `useAuth` hook returns tuple: `[{ user, session, role, loading }, { signUp, signIn, signOut }]`
+- `useAuth` hook returns tuple: `[{ user, session, role, loading }, { signInWithGoogle, signOut }]`
+- **Google OAuth only**: Email/password signup and login have been removed. Users must sign in with Google OAuth.
 - Role-based access control: `role` extracted from `user.user_metadata.role` ('user' | 'admin')
 - Dark mode via selector pattern (`.dark` class on documentElement)
 - Protected routes check `user` state from `useAuth`
@@ -247,11 +248,16 @@ The app includes a fixed top navigation bar with:
 
 **Integration:** Protected routes use `ProtectedLayout` which wraps content with `NavBar` and adds `pt-16` padding for fixed header.
 
-### Authentication Flow
+### Authentication Flow (Google OAuth Only)
 
-1. Frontend: `useAuth` hook manages auth state via Supabase client
-2. Backend: Validates JWT via `SUPABASE_ANON_KEY` on protected routes
-3. Tokens stored in `localStorage` (access token) and Supabase client (refresh)
+**Important:** Email/password signup and login have been removed. Only Google OAuth is supported.
+
+1. Frontend: User clicks "Sign in with Google" button
+2. Frontend: Supabase client redirects to Google OAuth
+3. Google: User authorizes the app
+4. Frontend: Supabase client receives session token
+5. Backend: Validates JWT via `SUPABASE_ANON_KEY` on protected routes
+6. Tokens stored in `localStorage` (access token) and Supabase client (refresh)
 
 **Supabase keys usage:**
 - `SUPABASE_ANON_KEY` - Frontend client, bypasses RLS for public policies

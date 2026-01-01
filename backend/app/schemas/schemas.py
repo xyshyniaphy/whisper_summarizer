@@ -9,24 +9,11 @@ from uuid import UUID
 
 
 # ========================================
-# 認証スキーマ
+# 認証スキーマ (Google OAuthのみ)
 # ========================================
 
-class SignUpRequest(BaseModel):
-    """サインアップリクエスト"""
-    email: EmailStr
-    password: str = Field(..., min_length=8)
-    full_name: Optional[str] = None
-
-
-class SignInRequest(BaseModel):
-    """サインインリクエスト"""
-    email: EmailStr
-    password: str
-
-
 class AuthResponse(BaseModel):
-    """認証レスポンス"""
+    """認証レスポンス (Google OAuth)"""
     access_token: str
     refresh_token: Optional[str] = None
     token_type: str = "bearer"
