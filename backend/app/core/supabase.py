@@ -24,11 +24,11 @@ supabase_admin: Client = create_client(
 )
 
 # HTTPベアラートークン認証
-security = HTTPBearer()
+security = HTTPBearer(auto_error=False)
 
 
 async def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security)
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)
 ) -> dict:
     """
     JWTトークンから現在のユーザーを取得
@@ -42,6 +42,23 @@ async def get_current_user(
     Raises:
         HTTPException: 認証エラー
     """
+    # Bypass auth if DISABLE_AUTH is set (for testing)
+    if settings.DISABLE_AUTH:
+        return {
+            "id": "123e4567-e89b-42d3-a456-426614174000",
+            "email": "test@example.com",
+            "email_confirmed_at": "2024-01-01T00:00:00Z",
+            "user_metadata": {"role": "admin"},
+            "app_metadata": {},
+        }
+
+    # Check if credentials provided
+    if not credentials:
+        raise HTTPException(
+            status_code=401,
+            detail="認証が必要です"
+        )
+
     try:
         token = credentials.credentials
 

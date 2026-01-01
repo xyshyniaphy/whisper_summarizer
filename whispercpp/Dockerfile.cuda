@@ -1,0 +1,122 @@
+# Whisper.cpp Dockerfile - CUDA GPU Support + v3-turbo ct2モデル
+#
+# GPU Requirements:
+#   - NVIDIA GPU with Compute Capability 7.0+ (RTX 3080 recommended)
+#   - NVIDIA Driver 470+ (CUDA 11.4+)
+#   - nvidia-container-toolkit installed on host
+#
+# Performance (RTX 3080):
+#   - 5 min audio chunk: ~30-45 seconds (vs 15 min on CPU)
+#   - Speedup: ~20-30x faster than CPU
+
+# ========================================
+# Stage 1: Model Downloader
+# ========================================
+FROM ubuntu:24.04 AS model-downloader
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# 基本ツールのインストール
+RUN apt-get update && apt-get install -y \
+    wget \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /models
+
+# Whisper v3-turbo ct2モデルをダウンロード
+RUN wget -O ggml-large-v3-turbo.bin \
+    https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo.bin
+
+# ========================================
+# Stage 2: FFmpeg Downloader
+# ========================================
+FROM ubuntu:24.04 AS ffmpeg-downloader
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# 基本ツールのインストール
+RUN apt-get update && apt-get install -y \
+    wget \
+    xz-utils \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /tmp
+
+# 静的FFmpegバイナリをダウンロード
+RUN wget https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz && \
+    tar xf ffmpeg-release-amd64-static.tar.xz && \
+    mkdir -p /ffmpeg-bin && \
+    find . -name "ffmpeg" -exec cp {} /ffmpeg-bin/ffmpeg \; && \
+    find . -name "ffprobe" -exec cp {} /ffmpeg-bin/ffprobe \; && \
+    chmod +x /ffmpeg-bin/ffmpeg /ffmpeg-bin/ffprobe
+
+# ========================================
+# Stage 3: Builder (CUDA Support - Ubuntu 24.04)
+# ========================================
+FROM nvidia/cuda:12.9.1-devel-ubuntu24.04 AS builder
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# ビルドツール + CUDA開発ツールのインストール
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    git \
+    cmake \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /build
+
+# Whisper.cppをクローン
+RUN git clone https://github.com/ggerganov/whisper.cpp.git .
+
+# CMakeでCUDA有効化してビルド
+# WHISPER_CUDA=1 enables CUDA support
+RUN mkdir build && \
+    cd build && \
+    cmake -D WHISPER_CUDA=1 .. && \
+    cmake --build . --config Release
+
+# ========================================
+# Stage 4: Runtime (CUDA Support - Ubuntu 24.04)
+# ========================================
+FROM nvidia/cuda:12.9.1-base-ubuntu24.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+# ランタイム依存関係 (CUDAライブラリ含む)
+RUN apt-get update && apt-get install -y \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# 静的FFmpegバイナリをコピー
+COPY --from=ffmpeg-downloader /ffmpeg-bin/ffmpeg /usr/local/bin/ffmpeg
+COPY --from=ffmpeg-downloader /ffmpeg-bin/ffprobe /usr/local/bin/ffprobe
+
+# Whisper.cppバイナリをコピー
+COPY --from=builder /build/build/bin/whisper-cli /usr/local/bin/whisper-cli
+
+# 共有ライブラリをコピー (CUDA版)
+# ggml-cuda is built into ggml-base when CUDA is enabled
+COPY --from=builder /build/build/src/libwhisper.so* /usr/lib/
+COPY --from=builder /build/build/ggml/src/libggml.so* /usr/lib/
+COPY --from=builder /build/build/ggml/src/libggml-cpu.so* /usr/lib/
+COPY --from=builder /build/build/ggml/src/libggml-base.so* /usr/lib/
+
+# CUDAライブラリへのシmlink作成 (実行時に必要)
+RUN ldconfig
+
+# モデルをコピー
+COPY --from=model-downloader /models/ggml-large-v3-turbo.bin /usr/local/share/whisper-models/
+
+# データディレクトリを作成
+RUN mkdir -p /app/data /app/output
+
+# エントリーポイントはWhisper.cppバイナリ
+ENTRYPOINT ["/usr/local/bin/whisper-cli"]
+
+# デフォルトコマンド (ヘルプ表示)
+CMD ["--help"]

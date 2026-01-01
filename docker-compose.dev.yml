@@ -1,5 +1,5 @@
 services:
-  # FastAPIバックエンド (開発モード - ホットリロード + Whisper.cpp統合 + Supabase PostgreSQL)
+  # FastAPIバックエンド (開発モード - ホットリロード + faster-whisper + Supabase PostgreSQL)
   backend:
     build:
       context: ./backend
@@ -8,26 +8,29 @@ services:
     environment:
       # Database (Supabase PostgreSQL)
       DATABASE_URL: ${DATABASE_URL}
-      
+
       # Supabase
       SUPABASE_URL: ${SUPABASE_URL}
       SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
       SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
-      
+
       # Gemini API
       GEMINI_API_KEY: ${GEMINI_API_KEY}
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.0-flash-exp}
       REVIEW_LANGUAGE: ${REVIEW_LANGUAGE:-zh}
       GEMINI_API_ENDPOINT: ${GEMINI_API_ENDPOINT:-}
-      
+
       # Backend Config
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
       LOG_LEVEL: ${LOG_LEVEL:-DEBUG}
+      DISABLE_AUTH: ${DISABLE_AUTH:-false}
 
-      # Whisper.cpp Config
+      # faster-whisper Config (GPU-accelerated transcription)
+      FASTER_WHISPER_DEVICE: ${FASTER_WHISPER_DEVICE:-cuda}
+      FASTER_WHISPER_COMPUTE_TYPE: ${FASTER_WHISPER_COMPUTE_TYPE:-float16}
+      FASTER_WHISPER_MODEL_SIZE: ${FASTER_WHISPER_MODEL_SIZE:-large-v3-turbo}
       WHISPER_LANGUAGE: ${WHISPER_LANGUAGE:-zh}
       WHISPER_THREADS: ${WHISPER_THREADS:-4}
-      WHISPER_SERVICE_URL: ${WHISPER_SERVICE_URL:-http://whispercpp:8001}
 
       # Audio Chunking
       ENABLE_CHUNKING: ${ENABLE_CHUNKING:-true}
@@ -56,6 +59,14 @@ services:
       - /app/.pytest_cache
       # venvは除外 (ビルド時に作成されたものを使用)
       - /opt/venv
+    # GPU Support (faster-whisper with cuDNN)
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ['0']
+              capabilities: [gpu]
     command: /bin/sh -c "uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --log-level debug 2>&1 | tee /app/logs/backend.log"
     networks:
       - whisper_network_dev

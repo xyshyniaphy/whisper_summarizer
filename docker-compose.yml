@@ -1,5 +1,5 @@
 services:
-  # FastAPIバックエンド (Whisper.cpp統合 + Supabase PostgreSQL)
+  # FastAPIバックエンド (faster-whisper + Supabase PostgreSQL)
   backend:
     build:
       context: ./backend
@@ -25,7 +25,10 @@ services:
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
       SECRET_KEY: ${SECRET_KEY:-your-secret-key-change-in-production}
 
-      # Whisper.cpp Config
+      # faster-whisper Config (GPU-accelerated transcription)
+      FASTER_WHISPER_DEVICE: ${FASTER_WHISPER_DEVICE:-cuda}
+      FASTER_WHISPER_COMPUTE_TYPE: ${FASTER_WHISPER_COMPUTE_TYPE:-float16}
+      FASTER_WHISPER_MODEL_SIZE: ${FASTER_WHISPER_MODEL_SIZE:-large-v3-turbo}
       WHISPER_LANGUAGE: ${WHISPER_LANGUAGE:-ja}
       WHISPER_THREADS: ${WHISPER_THREADS:-4}
 
@@ -39,6 +42,14 @@ services:
     volumes:
       - backend_data:/app/data
       - backend_output:/app/output
+    # GPU Support (faster-whisper with cuDNN)
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ['0']
+              capabilities: [gpu]
     networks:
       - whisper_network
     restart: unless-stopped

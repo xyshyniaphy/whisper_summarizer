@@ -4,27 +4,40 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Whisper Summarizer is a microservices web application for audio transcription and AI-powered summarization. It uses:
-- **Whisper.cpp** (v3-turbo) for CPU-based audio transcription
+Whisper Summarizer is a web application for audio transcription and AI-powered summarization. It uses:
+- **faster-whisper** (CTranslate2 + cuDNN) for GPU-accelerated audio transcription
 - **Google Gemini 2.0 Flash** API for summarization
 - **Supabase** for authentication and PostgreSQL database
 - **Docker Compose** for orchestration
 
+### Transcription Performance Comparison
+
+| Configuration | 5-min Chunk Time | 20-min File Time | Speedup |
+|---------------|------------------|-----------------|---------|
+| **CPU (Intel/AMD)** | ~15 min | ~60 min | 1x (baseline) |
+| **GPU (RTX 3080 with cuDNN)** | ~15-20 sec | ~1-1.5 min | **40-60x** |
+
+*Note: faster-whisper with cuDNN optimized kernels provides significantly better GPU performance than whisper.cpp. Performance varies by GPU model, VRAM, and audio complexity.*
+
 ### Services Architecture
 
 ```
-┌─────────────┐     ┌─────────────┐     ┌──────────────────┐
-│  Frontend   │────▶│  Backend    │────▶│  Whisper.cpp     │
-│  (React)    │     │  (FastAPI)  │     │  Service         │
-│  :3000      │     │  :8000      │     │  :8001           │
-└─────────────┘     └─────────────┘     └──────────────────┘
-                           │
-                           ▼
-                    ┌─────────────┐
-                    │  Supabase   │
-                    │  (Auth+DB)  │
-                    └─────────────┘
+┌─────────────┐     ┌─────────────┐
+│  Frontend   │────▶│  Backend    │────▶ Supabase (Auth+DB)
+│  (React)    │     │  (FastAPI + │
+│  :3000      │     │   faster-   │
+│             │     │   whisper)  │
+└─────────────┘     └─────────────┘
+      :                    :8000
+      :
+   (Nginx)
 ```
+
+**Key changes from whisper.cpp:**
+- **Simplified architecture**: Transcription now runs in-process within the backend
+- **No separate whispercpp container**: faster-whisper is a Python library
+- **Better GPU performance**: Uses cuDNN optimized kernels via CTranslate2
+- **Lower memory footprint**: No subprocess overhead, model loaded once at startup
 
 ## Development Commands
 
@@ -65,16 +78,51 @@ Use `run_test.sh` for all testing - this is the only supported way to run tests:
 ### Building
 
 ```bash
-# Whisper.cpp base image
-./build_whisper.sh              # With cache
-./build_whisper.sh --no-cache   # Without cache
+# Step 1: Build the fastwhisper base image (first time only, or when model/Marp needs update)
+./build_fastwhisper_base.sh
+
+# Step 2: Build backend (uses base image, much faster)
+docker-compose -f docker-compose.dev.yml build backend
+
+# Step 3: Build frontend (when package.json changes)
+docker-compose -f docker-compose.dev.yml build --no-cache frontend
+
+# Step 4: Start services
+docker-compose -f docker-compose.dev.yml up -d --force-recreate
 
 # Production
 docker-compose up -d --build
+```
 
-# Development rebuild (when package.json changes)
-docker-compose -f docker-compose.dev.yml build --no-cache frontend
-docker-compose -f docker-compose.dev.yml up -d --force-recreate
+**Base Image Notes:**
+- The `whisper-summarizer-fastwhisper-base` image contains: CUDA cuDNN, faster-whisper model (~3GB), Marp CLI, Chromium
+- Build takes ~10-15 minutes on first run (model download)
+- Subsequent backend builds are much faster since model is pre-downloaded
+- Rebuild base image with `./build_fastwhisper_base.sh` when updating model or dependencies
+
+### GPU Support
+
+**Requirements:**
+- NVIDIA GPU with Compute Capability 7.0+ (RTX 3080, 3090, 4080, 4090, A5000, A6000, etc.)
+- NVIDIA Driver 470+ (CUDA 11.4+)
+- nvidia-container-toolkit installed on host
+
+**GPU is enabled by default** with faster-whisper. The backend uses `nvidia/cuda:12.9.1-cudnn-runtime-ubuntu24.04` as the base image.
+
+**Configure GPU in .env:**
+```bash
+# GPU configuration (default settings)
+FASTER_WHISPER_DEVICE=cuda              # Use GPU (set to 'cpu' for CPU-only)
+FASTER_WHISPER_COMPUTE_TYPE=float16     # float16 for GPU, int8 for CPU
+FASTER_WHISPER_MODEL_SIZE=large-v3-turbo
+WHISPER_THREADS=4
+```
+
+**Switch to CPU-only:**
+```bash
+# In .env, set:
+FASTER_WHISPER_DEVICE=cpu
+FASTER_WHISPER_COMPUTE_TYPE=int8
 ```
 
 **Note**: When `package.json` changes, use `--no-cache` to rebuild the frontend image. The `deps` stage caches `node_modules` and won't pick up new dependencies otherwise.
@@ -197,15 +245,18 @@ GEMINI_MODEL=gemini-2.0-flash-exp
 REVIEW_LANGUAGE=zh    # zh, ja, en
 GEMINI_API_ENDPOINT=  # Optional custom endpoint
 
-# Whisper
-WHISPER_LANGUAGE=zh
+# faster-whisper Configuration
+FASTER_WHISPER_DEVICE=cuda              # cuda (GPU) or cpu
+FASTER_WHISPER_COMPUTE_TYPE=float16     # float16 (GPU), float32 (GPU), int8 (CPU)
+FASTER_WHISPER_MODEL_SIZE=large-v3-turbo
+WHISPER_LANGUAGE=zh                     # auto, zh, ja, en, etc.
 WHISPER_THREADS=4
 
 # Audio Chunking (for faster transcription of long audio)
 ENABLE_CHUNKING=true              # Master toggle for chunking
 CHUNK_SIZE_MINUTES=10             # Target chunk length in minutes
 CHUNK_OVERLAP_SECONDS=15          # Overlap duration in seconds
-MAX_CONCURRENT_CHUNKS=2           # Max parallel chunks (CPU: 2-4, GPU: 4-8)
+MAX_CONCURRENT_CHUNKS=2           # Max parallel chunks (GPU: 4-8 recommended)
 USE_VAD_SPLIT=true                # Use Voice Activity Detection for smart splitting
 VAD_SILENCE_THRESHOLD=-30         # Silence threshold in dB
 VAD_MIN_SILENCE_DURATION=0.5      # Minimum silence duration for split point
@@ -217,13 +268,15 @@ CORS_ORIGINS=http://localhost:3000
 
 ## Important Notes
 
-1. **Whisper.cpp service** runs as separate Docker container (3.46GB image with v3-turbo model)
-2. **Hot reload**: Development uses volume mounts for instant code updates
-3. **Test coverage target**: 70%+ (currently 73.37% for backend)
-4. **uv** is used for Python dependency management (not pip)
-5. **Tailwind CSS** is the styling framework - prefer utility classes over custom CSS
-6. **Jotai** is used for global state - prefer atoms over React Context
-7. **Data persistence**: `data/` directory is volume-mounted (uploads, output, test artifacts)
+1. **faster-whisper with cuDNN** runs in-process within the backend container
+2. **Base image**: `whisper-summarizer-fastwhisper-base` contains pre-downloaded model + Marp CLI
+3. **First-time setup**: Run `./build_fastwhisper_base.sh` before building backend (takes ~10-15 min)
+4. **Hot reload**: Development uses volume mounts for instant code updates
+5. **Test coverage target**: 70%+ (currently 73.37% for backend)
+6. **uv** is used for Python dependency management (not pip)
+7. **Tailwind CSS** is the styling framework - prefer utility classes over custom CSS
+8. **Jotai** is used for global state - prefer atoms over React Context
+9. **Data persistence**: `data/` directory is volume-mounted (uploads, output, test artifacts)
 
 ## Database Relationships & Cascade Deletes
 
@@ -291,6 +344,7 @@ The application implements intelligent audio chunking to significantly speed up 
 | Method | Purpose |
 |--------|---------|
 | `transcribe_with_chunking()` | Main orchestrator for chunked transcription |
+| `_run_faster_whisper()` | Core faster-whisper transcription |
 | `_detect_silence_segments()` | Use FFmpeg to find silence in audio |
 | `_calculate_split_points()` | Determine optimal split points at silence |
 | `_split_audio_into_chunks()` | Split audio into chunk files |
@@ -308,14 +362,14 @@ See Environment Variables section above for all chunking-related settings.
 
 | Aspect | Benefit | Consideration |
 |--------|---------|---------------|
-| **Speed** | 2-3x faster for long audio | Higher memory usage |
+| **Speed** | 2-3x faster for long audio with chunking | Higher memory usage |
 | **VAD Splitting** | No words cut at boundaries | Requires silence in audio |
 | **LCS Merging** | Seamless text alignment | More complex than simple join |
-| **Parallel Processing** | Better CPU utilization | More disk I/O for temp chunks |
+| **Parallel Processing** | Better GPU/CPU utilization | More disk I/O for temp chunks |
 
 ### Recommended Settings
 
-**whisper.cpp (CPU):**
+**faster-whisper (CPU):**
 ```python
 CHUNK_SIZE_MINUTES = 10      # Larger chunks reduce overhead
 MAX_CONCURRENT_CHUNKS = 2    # Based on CPU cores
@@ -323,12 +377,44 @@ USE_VAD_SPLIT = True         # Smart splitting at silence
 MERGE_STRATEGY = "lcs"       # Text-based merging
 ```
 
-**faster-whisper (GPU):**
+**faster-whisper (GPU with cuDNN):**
 ```python
-CHUNK_SIZE_MINUTES = 15      # Can use larger chunks with GPU
-MAX_CONCURRENT_CHUNKS = 4    # Based on VRAM (INT8 quantization)
-USE_VAD_SPLIT = True
-MERGE_STRATEGY = "lcs"
+CHUNK_SIZE_MINUTES = 10      # Can use larger chunks with GPU
+MAX_CONCURRENT_CHUNKS = 4-8  # Based on VRAM (RTX 3080: 4-6 chunks, RTX 3090: 6-8)
+USE_VAD_SPLIT = True         # Smart splitting at silence
+MERGE_STRATEGY = "lcs"       # Text-based merging
+```
+
+**GPU Performance Tips:**
+- RTX 3080 8GB: 4-6 concurrent chunks recommended
+- RTX 3090/4080 10GB+: 6-8 concurrent chunks
+- For very long files (60+ min), consider smaller chunks (5 min) for better progress visibility
+- faster-whisper with cuDNN provides 40-60x speedup over CPU (vs 20-30x with whisper.cpp)
+
+## Debugging & Logging
+
+### Debug Log Output Limits
+
+**IMPORTANT:** When adding debug logging, **always restrict by max bytes, NOT line count**. Single lines (especially JSON, base64, or transcribed text) can be extremely long and overwhelm the output.
+
+```python
+# GOOD - Restrict by bytes
+logger.debug(f"Transcription result: {result[:5000]}")  # First 5000 bytes
+
+# BAD - Restricting by lines doesn't help with long single lines
+logger.debug(f"Transcription result: {result}")  # Could be 100KB+ in one line
+```
+
+**Recommended limits:**
+- General debug output: **1000-5000 bytes**
+- Large objects (JSON, transcriptions): **5000-10000 bytes**
+- Binary/base64 data: **500-1000 bytes**
+
+**Python pattern:**
+```python
+MAX_DEBUG_BYTES = 5000
+debug_output = str(some_large_object)[:MAX_DEBUG_BYTES]
+logger.debug(f"Data: {debug_output}")
 ```
 
 ## Frontend UI Patterns

@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     # Backend
     CORS_ORIGINS: str = "http://localhost:3000"
     LOG_LEVEL: str = "INFO"
+    DISABLE_AUTH: bool = False  # Disable authentication for testing
     
     # Whisper.cpp
     WHISPER_SERVICE_URL: str = "http://whispercpp:8001"

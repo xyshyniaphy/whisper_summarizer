@@ -1,6 +1,9 @@
-# Backend Dockerfile - FastAPI + Python 3.12 + uv + Whisper.cpp統合
+# Backend Dockerfile - FastAPI + Python 3.12 + uv
 # ビルダー: Ubuntu 24.04 + uv
-# ランタイム: whisper-summarizer-whispercpp (Whisper.cpp + FFmpeg含む)
+# ランタイム: whisper-summarizer-fastwhisper-base (CUDA cuDNN + Model + Marp)
+
+# Build argument for base image (allows overriding if needed)
+ARG BASE_IMAGE=whisper-summarizer-fastwhisper-base:latest
 
 # ========================================
 # Stage 1: UV Builder (Ubuntu 24.04)
@@ -35,6 +38,7 @@ COPY requirements.txt .
 COPY pyproject.toml .
 
 # uvで依存関係をインストール (venv作成) - 本番用のみ
+# Note: faster-whisper is in base image, but we include it here for consistency
 RUN uv venv /opt/venv && \
     . /opt/venv/bin/activate && \
     uv pip install -r requirements.txt
@@ -76,50 +80,16 @@ RUN . /opt/venv/bin/activate && uv pip install ruff && \
     ruff format --check .
 
 # ========================================
-# Stage 3: Runtime (whisper-summarizer-whispercpp)
+# Stage 3: Runtime (Base image with CUDA cuDNN + Model + Marp)
 # ========================================
-FROM whisper-summarizer-whispercpp:latest
+FROM ${BASE_IMAGE}
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PYTHONUNBUFFERED=1
 ENV PATH="/opt/venv/bin:$PATH"
 
-# ランタイム依存関係のみインストール
-RUN apt-get update && apt-get install -y \
-    python3.12 \
-    libgomp1 \
-    ca-certificates \
-    curl \
-    fontconfig \
-    fonts-noto-cjk \
-    fonts-noto-cjk-extra \
-    && fc-cache -fv \
-    && rm -rf /var/lib/apt/lists/*
-
-# Install Node.js 22 LTS for Marp CLI
-RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
-    apt-get install -y nodejs && \
-    npm install -g @marp-team/marp-cli && \
-    node --version && npm --version && marp --version
-
-# Install Chromium for Marp CLI (using direct download for Docker compatibility)
-RUN apt-get update && apt-get install -y \
-    wget gnupg \
-    && wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | gpg --dearmor -o /usr/share/keyrings/googlechrome-linux-keyring.gpg \
-    && sh -c 'echo "deb [arch=amd64 signed-by=/usr/share/keyrings/googlechrome-linux-keyring.gpg] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google.list' \
-    && apt-get update \
-    && apt-get install -y google-chrome-stable \
-    && rm -rf /var/lib/apt/lists/*
-
-# Set Chrome path for Marp/Puppeteer
-ENV CHROME_PATH=/usr/bin/google-chrome
-ENV CHROME_BIN=/usr/bin/google-chrome
-ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
-ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome
-
-# Python 3.12をデフォルトに設定
-RUN update-alternatives --install /usr/bin/python python /usr/bin/python3.12 1 && \
-    update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.12 1
+# Python 3.12, CUDA cuDNN, faster-whisper model, Marp CLI, Chrome are already in base image
+# Just need to add application-specific dependencies
 
 WORKDIR /app
 
@@ -129,7 +99,7 @@ COPY --from=builder /opt/venv /opt/venv
 # アプリケーションコードをコピー
 COPY . .
 
-# データディレクトリを作成
+# データディレクトリを作成 (already in base image, but ensuring)
 RUN mkdir -p /tmp/uploads /app/data /app/output
 
 # ポート公開

@@ -147,7 +147,7 @@ class MarpService:
 
         except json.JSONDecodeError as e:
             logger.error(f"Failed to parse AI response as JSON: {e}")
-            logger.error(f"AI response: {ai_response}")
+            logger.error(f"AI response: {ai_response[:5000]}")
             raise Exception(f"Failed to parse AI response: {e}")
 
     def _build_marp_markdown(
@@ -317,14 +317,14 @@ class MarpService:
 
             logger.info(f"Marp conversion successful: {output_path}")
             if result.stdout:
-                logger.debug(f"Marp stdout: {result.stdout}")
+                logger.debug(f"Marp stdout: {result.stdout[:1000]}")
 
             return output_path
 
         except subprocess.TimeoutExpired:
             raise Exception(f"Marp CLI timeout after 60 seconds")
         except subprocess.CalledProcessError as e:
-            logger.error(f"Marp CLI error: {e.stderr}")
+            logger.error(f"Marp CLI error: {e.stderr[:1000]}")
             raise Exception(f"Marp CLI conversion failed: {e.stderr}")
         except FileNotFoundError:
             raise Exception("Marp CLI not found. Install with: npm install -g @marp-team/marp-cli")

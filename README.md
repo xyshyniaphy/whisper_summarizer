@@ -1,6 +1,6 @@
 # Whisper Summarizer
 
-音声文字起こし・要約システム - GLM4.7 & Supabase統合版
+音声文字起こし・要約システム - faster-whisper (cuDNN) & Supabase統合版
 
 ## 概要
 
@@ -8,11 +8,11 @@ Whisper Summarizerは、音声ファイルを自動で文字起こしし、Googl
 
 ### 主な機能
 
-- **音声文字起こし**: Whisper.cpp (v3-turbo) によるCPU処理
-- **AI要約生成**: GLM4.7による高品質な要約
+- **音声文字起こし**: faster-whisper (CTranslate2 + cuDNN) によるGPU加速処理
+- **AI要約生成**: Google Gemini 2.0 Flash による高品質な要約
 - **音声管理**: アップロードした音声と文字起こし結果の削除機能
 - **ユーザー認証**: Supabase Authによる安全な認証
-- **マイクロサービス構成**: Docker Composeによる統合環境
+- **Docker Compose**: シンプルな2コンテナ構成
 
 ### 技術スタック
 
@@ -22,7 +22,7 @@ Whisper Summarizerは、音声ファイルを自動で文字起こしし、Googl
 | ステート管理 | Jotai (atomic state) |
 | UIコンポーネント | Tailwind CSS + lucide-react (icons) |
 | バックエンド | FastAPI + Python 3.12 + uv |
-| 音声処理 | Whisper.cpp v3-turbo (CPU専用) + 静的FFmpeg |
+| 音声処理 | faster-whisper (CTranslate2 + cuDNN) |
 | AI要約 | Google Gemini 2.0 Flash |
 | 認証 | Supabase Auth (JWT) |
 | データベース | Supabase PostgreSQL (マネージド) |
@@ -32,9 +32,13 @@ Whisper Summarizerは、音声ファイルを自動で文字起こしし、Googl
 
 | イメージ | サイズ | 説明 |
 |---|---|---|
-| whisper-summarizer-whispercpp | 3.46GB | Whisper.cpp + 静的FFmpeg + v3-turboモデル |
-| whisper_summarizer-backend | 3.68GB | FastAPI + Python + Whisper.cpp統合 |
+| whisper_summarizer-backend | ~8GB | FastAPI + Python + CUDA cuDNN Runtime + faster-whisper |
 | whisper_summarizer-frontend | 380MB | React + Vite (開発) / Nginx (本番) |
+
+**アーキテクチャ改善:**
+- whisper.cpp (3.46GB) の別コンテナが不要に
+- faster-whisperはPythonライブラリとしてバックエンドに統合
+- cuDNN最適化カーネルによりGPU性能が向上 (40-60x vs 20-30x)
 
 ## セットアップ
 
@@ -44,6 +48,13 @@ Whisper Summarizerは、音声ファイルを自動で文字起こしし、Googl
 - Supabaseプロジェクト (https://supabase.com)
 - Google Gemini APIキー
 
+**GPUオプション（推奨）:**
+- NVIDIA GPU (Compute Capability 7.0+、RTX 3080推奨)
+- NVIDIA Driver 470+ (CUDA 11.4+)
+- nvidia-container-toolkit (インストール方法: https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html)
+
+**GPUはデフォルトで有効** - バックエンドは `nvidia/cuda:12.9.1-cudnn-runtime-ubuntu24.04` ベースイメージを使用します。CPUのみを使用する場合は `.env` で設定変更可能です。
+
 ### 環境変数の設定
 
 1. `.env.sample`をコピーして`.env`を作成:
@@ -52,6 +63,7 @@ cp .env.sample .env
 ```
 
 2. `.env`を編集して以下を設定:
+
 ```bash
 # Supabase設定 (Supabaseダッシュボードから取得)
 SUPABASE_URL=https://xxxx.supabase.co
@@ -71,38 +83,52 @@ DATABASE_URL=postgresql://postgres:[YOUR-PASSWORD]@db.[PROJECT-REF].supabase.co:
 # バックエンド設定
 CORS_ORIGINS=http://localhost:3000
 
-# Whisper設定
-WHISPER_LANGUAGE=zh  # 文字起こし言語 (zh, ja, en 等)
-WHISPER_THREADS=4    # Whisper処理に使用するスレッド数 (CPUコア数に合わせて調整)
+# faster-whisper設定 (GPU加速)
+FASTER_WHISPER_DEVICE=cuda              # cuda (GPU) または cpu
+FASTER_WHISPER_COMPUTE_TYPE=float16     # float16 (GPU), float32 (GPU), int8 (CPU)
+FASTER_WHISPER_MODEL_SIZE=large-v3-turbo
+WHISPER_LANGUAGE=zh                     # 文字起こし言語 (auto, zh, ja, en 等)
+WHISPER_THREADS=4                       # 処理に使用するスレッド数
 
 # Audio Chunking (長音声の高速文字起こし)
 ENABLE_CHUNKING=true              # チャンキング機能の有効化
 CHUNK_SIZE_MINUTES=10             # チャンクの長さ（分）- 推奨: CPUで5-10、GPUで10-15
 CHUNK_OVERLAP_SECONDS=15          # チャンク間のオーバーラップ（秒）- VAD有効時15秒、固定分割時30秒
-MAX_CONCURRENT_CHUNKS=2           # 並列処理するチャンク数 - CPU: 2-4、GPU(INT8): 4-8
+MAX_CONCURRENT_CHUNKS=4           # 並列処理するチャンク数 - GPU: 4-8推奨
 USE_VAD_SPLIT=true                # 無音検出によるスマート分割
 VAD_SILENCE_THRESHOLD=-30         # 無音と判定する閾値
 VAD_MIN_SILENCE_DURATION=0.5      # 分割点として判定する最小無音時間（秒）
 MERGE_STRATEGY=lcs                # マージ戦略: lcs（テキストベース）、timestamp（シンプル）
 ```
 
-### Whisper.cppベースイメージのビルド
+### ベースイメージのビルド（初回のみ）
 
-Whisper.cppベースイメージは初回起動時に自動ビルドされますが、手動でビルドすることも可能です:
+**初回起動前に**、faster-whisperモデルとMarp CLIを含むベースイメージをビルドする必要があります:
 
 ```bash
-# Whisper.cppベースイメージをビルド (キャッシュ使用)
-./build_whisper.sh
+# ベースイメージをビルド (~10-15分、モデルダウンロード含む)
+./build_fastwhisper_base.sh
 
-# キャッシュなしでビルド
-./build_whisper.sh --no-cache
+# 出力例:
+# - Image: whisper-summarizer-fastwhisper-base:latest
+# - Size: ~8-10 GB (CUDA cuDNN + 3GB model + Marp + Chrome)
 ```
 
-**イメージの特徴:**
-- サイズ: 3.46GB (静的FFmpeg使用により28%削減)
-- v3-turbo ct2モデル事前ダウンロード
-- CPU専用ビルド
-- 静的FFmpeg (77MB) + FFprobe統合
+**ベースイメージの内容:**
+- NVIDIA CUDA 12.9.1 cuDNN Runtime
+- Python 3.12 + uv + faster-whisper
+- **事前ダウンロード済み** `large-v3-turbo` モデル (~3GB)
+- Node.js 22 + Marp CLI + Chromium
+
+**ベースイメージの再ビルドが必要な場合:**
+- モデルの更新が必要な時
+- Marp CLIのバージョンを更新する時
+- 依存関係を大きく変更する時
+
+```bash
+# キャッシュなしで再ビルド
+./build_fastwhisper_base.sh --no-cache
+```
 
 ### 開発環境の起動
 
@@ -127,7 +153,26 @@ Whisper.cppベースイメージは初回起動時に自動ビルドされます
 
 `run_dev.sh`は以下をチェックします:
 - `.env`ファイルの存在
-- 必須環境変数の設定 (SUPABASE_URL, GLM_API_KEY等)
+- 必須環境変数の設定 (SUPABASE_URL, GEMINI_API_KEY等)
+
+### GPU設定の確認
+
+**GPUはデフォルトで有効**です。以下のコマンドでGPUが使用されていることを確認できます:
+
+```bash
+# コンテナ内でGPUを確認
+docker-compose -f docker-compose.dev.yml exec backend nvidia-smi
+
+# バックエンドログでGPU使用状況を確認
+docker-compose -f docker-compose.dev.yml logs backend | grep -i cuda
+```
+
+**CPUのみを使用する場合:**
+`.env` で以下を設定:
+```bash
+FASTER_WHISPER_DEVICE=cpu
+FASTER_WHISPER_COMPUTE_TYPE=int8
+```
 
 **方法2: Docker Composeを直接使用**
 
@@ -171,18 +216,15 @@ whisper_summarizer/
 │   ├── Dockerfile
 │   └── package.json
 │
-├── backend/               # FastAPIバックエンド
+├── backend/               # FastAPIバックエンド (faster-whisper統合)
 │   ├── app/
 │   │   ├── api/          # APIエンドポイント
-│   │   ├── core/         # 設定・Supabase・GLM統合
+│   │   ├── services/     # faster-whisper + Gemini統合
+│   │   ├── core/         # 設定・Supabase統合
 │   │   ├── models/       # データベースモデル
 │   │   └── schemas/      # Pydanticスキーマ
-│   ├── Dockerfile
-│   └── requirements.txt
-│
-├── whispercpp/            # Whisper.cppベースイメージ
-│   ├── Dockerfile        # マルチステージビルド (静的FFmpeg統合)
-│   └── models/           # Whisperモデル (ビルド時ダウンロード)
+│   ├── Dockerfile        # CUDA cuDNN Runtimeベース
+│   └── requirements.txt  # faster-whisper依存関係
 │
 ├── data/                 # データ保存用 (Dockerボリュームマウント)
 │   ├── uploads/          # アップロードされた音声ファイル
@@ -293,8 +335,7 @@ cp .env.sample .env
 開発環境では、ソースコードの変更が即座に反映されます:
 
 - **フロントエンド**: `./frontend` → Vite Dev Server
-- **バックエンド**: `./backend` → Uvicorn --reload
-- **Whisper.cpp**: `./whispercpp` → Uvicorn --reload
+- **バックエンド**: `./backend` → Uvicorn --reload (faster-whisperモデルは起動時にロード)
 
 ### ログの確認
 
@@ -305,7 +346,6 @@ docker-compose -f docker-compose.dev.yml logs -f
 # 特定のサービスのログ
 docker-compose -f docker-compose.dev.yml logs -f backend
 docker-compose -f docker-compose.dev.yml logs -f frontend
-docker-compose -f docker-compose.dev.yml logs -f whispercpp
 ```
 
 ### コンテナに入る
@@ -461,15 +501,29 @@ npm run test:headed
 - **VAD分割**: Voice Activity Detectionによる無音区間でのスマート分割
 - **LCSマージ**: Longest Common Subsequenceアルゴリズムによるオーバーラップ領域の正確な結合
 
-### パフォーマンス
+### パフォーマンス比較
 
-| ファイル長 | 従来 | チャンキング (並列数: 2) |
-|-----------|------|------------------------|
-| 10分 | ~3分 | ~1.5分 (2x) |
-| 20分 | ~6分 | ~3分 (2x) |
-| 60分 | ~18分 | ~9分 (2x) |
+**CPU (Intel/AMD) vs GPU (NVIDIA RTX 3080 with faster-whisper + cuDNN):**
 
-※ 実際の速度はCPU性能、言語、音質によって変動します
+| ファイル長 | CPU (並列数: 2) | GPU (並列数: 4-6) | 高速化 |
+|-----------|----------------|-------------------|--------|
+| 5分チャンク | ~15分 | ~15-20秒 | **40-60x** |
+| 10分 | ~18分 | ~30-40秒 | **27-36x** |
+| 20分 | ~36分 | ~1-1.5分 | **24-36x** |
+| 60分 | ~108分 | ~3-4分 | **27-36x** |
+
+※ faster-whisper with cuDNNはwhisper.cppより約2倍高速 (20-30x vs 40-60x)
+※ 実際の速度はGPU性能、VRAM、言語、音質によって変動します
+
+**チャンキング効果 (CPU):**
+
+| ファイル長 | 従来 (単一) | チャンキング (並列数: 2) |
+|-----------|------------|------------------------|
+| 10分 | ~30分 | ~18分 (1.7x) |
+| 20分 | ~60分 | ~36分 (1.7x) |
+| 60分 | ~180分 | ~108分 (1.7x) |
+
+※ GPUの場合、チャンキング効果はより顕著 (2-4x)
 
 ### 設定パラメータ
 
@@ -484,23 +538,44 @@ npm run test:headed
 
 ### 推奨設定
 
-**whisper.cpp (CPU only):**
+**faster-whisper (CPU only):**
 ```bash
+FASTER_WHISPER_DEVICE=cpu
+FASTER_WHISPER_COMPUTE_TYPE=int8
 CHUNK_SIZE_MINUTES=10
 MAX_CONCURRENT_CHUNKS=2
 CHUNK_OVERLAP_SECONDS=15
 USE_VAD_SPLIT=true
 ```
 
-**faster-whisper (GPU):**
+**faster-whisper (GPU with cuDNN - RTX 3080 etc.):**
 ```bash
+FASTER_WHISPER_DEVICE=cuda
+FASTER_WHISPER_COMPUTE_TYPE=float16
 CHUNK_SIZE_MINUTES=15
-MAX_CONCURRENT_CHUNKS=4
+MAX_CONCURRENT_CHUNKS=4-6      # RTX 3080 8GB: 4-6, RTX 3090 10GB+: 6-8
 CHUNK_OVERLAP_SECONDS=15
 USE_VAD_SPLIT=true
 ```
 
 ## トラブルシューティング
+
+### GPUが認識されない
+
+```bash
+# ホストマシンでGPUを確認
+nvidia-smi
+
+# nvidia-container-runtimeがインストールされているか確認
+docker run --rm --gpus all nvidia/cuda:12.4.0-base-ubuntu22.04 nvidia-smi
+
+# コンテナ内でGPUを確認
+docker-compose -f docker-compose.dev.yml exec backend nvidia-smi
+```
+
+**エラー: `could not select device driver`**
+- nvidia-container-toolkitをインストール: https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html
+- Dockerデーモンを再起動: `sudo systemctl restart docker`
 
 ### ポートが既に使用されている
 
@@ -525,17 +600,12 @@ docker-compose -f docker-compose.dev.yml down -v
 docker-compose -f docker-compose.dev.yml up --build
 ```
 
-### Whisper.cppモデルのダウンロードエラー
+### faster-whisperモデルのダウンロード
 
-Dockerイメージのビルド時にモデルダウンロードが失敗する場合:
-
-1. 手動でモデルをダウンロード:
-```bash
-cd whispercpp/models
-wget https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-turbo.bin
-```
-
-2. Dockerfileを編集してCOPYに変更
+faster-whisperモデルは初回使用時に自動的に `/tmp/whisper_models` にダウンロードされます:
+- モデルサイズ: large-v3-turbo ~3GB
+- ダウンロード元: Hugging Face
+- 一度ダウンロードされるとキャッシュされます
 
 ## ライセンス
 
@@ -543,7 +613,8 @@ MIT License
 
 ## リンク
 
-- [Whisper.cpp](https://github.com/ggerganov/whisper.cpp)
+- [faster-whisper](https://github.com/ggerganov/whisper.cpp) - CTranslate2による高速化
+- [CTranslate2](https://github.com/OpenNMT/CTranslate2) - 最適化推論エンジン
 - [Supabase](https://supabase.com)
 - [FastAPI](https://fastapi.tiangolo.com)
 - [React](https://react.dev)

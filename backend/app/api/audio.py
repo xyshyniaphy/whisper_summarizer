@@ -35,13 +35,24 @@ def get_or_create_user(db: Session, user_id: str, email: str) -> User:
     Get existing user or create new one in local database.
     Syncs Supabase auth users to local users table.
     """
+    # First try to find by ID
     user = db.query(User).filter(User.id == user_id).first()
-    if not user:
-        logger.info(f"Creating new local user record for Supabase user: {user_id}")
-        user = User(id=user_id, email=email)
-        db.add(user)
-        db.commit()
-        db.refresh(user)
+    if user:
+        return user
+
+    # If not found by ID, check by email and return existing user
+    if email:
+        user = db.query(User).filter(User.email == email).first()
+        if user:
+            logger.info(f"Found existing user by email: {email}, using existing ID: {user.id}")
+            return user
+
+    # If still not found, create new user
+    logger.info(f"Creating new local user record for Supabase user: {user_id}")
+    user = User(id=user_id, email=email)
+    db.add(user)
+    db.commit()
+    db.refresh(user)
     return user
 
 
