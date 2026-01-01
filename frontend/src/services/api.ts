@@ -102,6 +102,13 @@ export const api = {
     return response.data;
   },
 
+  downloadSummaryDocx: async (transcriptionId: string): Promise<Blob> => {
+    const response = await apiClient.get(`/transcriptions/${transcriptionId}/download-docx`, {
+      responseType: 'blob'
+    });
+    return response.data;
+  },
+
   generatePptx: async (transcriptionId: string): Promise<{ status: string; message: string }> => {
     const response = await apiClient.post(`/transcriptions/${transcriptionId}/generate-pptx`);
     return response.data;

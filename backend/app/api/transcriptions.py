@@ -648,3 +648,158 @@ async def download_markdown(
     filename=download_filename,
     media_type="text/markdown"
   )
+
+
+@router.get("/{transcription_id}/download-docx")
+async def download_summary_docx(
+    transcription_id: str,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_active_user)
+):
+    """
+    下载AI摘要的DOCX文件
+
+    使用python-docx将摘要Markdown转换为DOCX格式，支持中文。
+
+    Args:
+        transcription_id: 转录ID
+
+    Returns:
+        FileResponse: DOCX文件下载
+    """
+    # 验证转录所有权 - Convert string ID to UUID for database query
+    try:
+        transcription_uuid = UUID(transcription_id)
+    except ValueError:
+        raise HTTPException(status_code=422, detail="Invalid transcription ID format")
+    transcription = db.query(Transcription).filter(
+        Transcription.id == transcription_uuid,
+        Transcription.user_id == current_user.get("id")
+    ).first()
+
+    if not transcription:
+        raise HTTPException(status_code=404, detail="未找到转录")
+
+    # 获取摘要
+    if not transcription.summaries or len(transcription.summaries) == 0:
+        raise HTTPException(status_code=404, detail="未找到摘要数据")
+
+    summary_text = transcription.summaries[0].summary_text
+    if not summary_text:
+        raise HTTPException(status_code=400, detail="摘要内容为空")
+
+    try:
+        from docx import Document
+        from docx.shared import Pt, Inches
+        from docx.enum.text import WD_ALIGN_PARAGRAPH
+        from docx.oxml.ns import qn
+        import tempfile
+        import re
+
+        # 创建临时目录
+        temp_dir = tempfile.mkdtemp()
+        docx_path = tempfile.mktemp(suffix=".docx", dir=temp_dir)
+
+        try:
+            # 创建Document对象
+            doc = Document()
+
+            # 设置默认字体（支持中文）
+            doc.styles['Normal'].font.name = 'Microsoft YaHei'
+            doc.styles['Normal']._element.rPr.rFonts.set(qn('w:eastAsia'), 'Microsoft YaHei')
+            doc.styles['Normal'].font.size = Pt(11)
+
+            # 简单的Markdown解析
+            lines = summary_text.split('\n')
+            in_list = False
+
+            for line in lines:
+                line = line.rstrip()
+
+                # 空行
+                if not line:
+                    if in_list:
+                        in_list = False
+                    doc.add_paragraph()
+                    continue
+
+                # 标题
+                if line.startswith('#'):
+                    level = len(line) - len(line.lstrip('#'))
+                    if level <= 6:
+                        heading_text = line.lstrip('#').strip()
+                        heading = doc.add_heading(heading_text, level=min(level, 9))
+                        # 设置中文字体
+                        for run in heading.runs:
+                            run.font.name = 'Microsoft YaHei'
+                            run._element.rPr.rFonts.set(qn('w:eastAsia'), 'Microsoft YaHei')
+                        continue
+
+                # 列表项
+                if line.startswith(('- ', '* ', '+ ')) or re.match(r'^\d+\. ', line):
+                    if not in_list:
+                        in_list = True
+                    list_text = line.lstrip('-*+').lstrip('0123456789.')
+                    p = doc.add_paragraph(list_text, style='List Bullet')
+                    # 设置中文字体
+                    for run in p.runs:
+                        run.font.name = 'Microsoft YaHei'
+                        run._element.rPr.rFonts.set(qn('w:eastAsia'), 'Microsoft YaHei')
+                    continue
+
+                # 代码块（简单处理）
+                if line.startswith('```'):
+                    continue
+
+                # 普通段落 - 处理内联格式
+                in_list = False
+                p = doc.add_paragraph()
+
+                # 处理粗体和斜体
+                parts = re.split(r'(\*\*.*?\*\*|_.*?_)', line)
+                for part in parts:
+                    if not part:
+                        continue
+
+                    run = p.add_run(part)
+
+                    # 设置中文字体
+                    run.font.name = 'Microsoft YaHei'
+                    run._element.rPr.rFonts.set(qn('w:eastAsia'), 'Microsoft YaHei')
+
+                    if part.startswith('**') and part.endswith('**'):
+                        run.bold = True
+                        run.text = part[2:-2]
+                    elif part.startswith('_') and part.endswith('_'):
+                        run.italic = True
+                        run.text = part[1:-1]
+
+            # 保存文档
+            doc.save(docx_path)
+
+            # 设置文件名
+            original_filename = Path(transcription.file_name).stem
+            download_filename = f"{original_filename}-摘要.docx"
+
+            return FileResponse(
+                path=docx_path,
+                filename=download_filename,
+                media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            )
+
+        finally:
+            # 清理临时文件
+            import shutil
+            try:
+                shutil.rmtree(temp_dir, ignore_errors=True)
+            except Exception as e:
+                logger.warning(f"Failed to cleanup temp directory: {e}")
+
+    except ImportError:
+        raise HTTPException(
+            status_code=500,
+            detail="python-docx未安装，请联系管理员"
+        )
+    except Exception as e:
+        logger.error(f"DOCX生成失败 {transcription_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"DOCX生成失败: {str(e)}")

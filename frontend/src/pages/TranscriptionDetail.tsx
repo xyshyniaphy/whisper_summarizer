@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { Download, AlertCircle, FileText, Loader2 } from 'lucide-react'
+import { Download, AlertCircle, FileText, Loader2, File } from 'lucide-react'
 import { api } from '../services/api'
 import { Transcription, Summary } from '../types'
 import { Button } from '../components/ui/Button'
@@ -189,6 +189,24 @@ export function TranscriptionDetail() {
         }
     }
 
+    const handleDownloadDocx = async () => {
+        if (!id || !summary) return
+
+        try {
+            const blob = await api.downloadSummaryDocx(id)
+            const link = document.createElement('a')
+            link.href = URL.createObjectURL(blob)
+            link.download = `${transcription?.file_name.replace(/\.[^/.]+$/, '')}-摘要.docx`
+            document.body.appendChild(link)
+            link.click()
+            document.body.removeChild(link)
+            URL.revokeObjectURL(link.href)
+        } catch (error) {
+            console.error('DOCX download failed:', error)
+            alert('DOCX下载失败')
+        }
+    }
+
     const getBadgeVariant = (stage: string): 'success' | 'error' | 'info' | 'warning' => {
         if (stage === 'completed') return 'success'
         if (stage === 'failed') return 'error'
@@ -244,11 +262,36 @@ export function TranscriptionDetail() {
                                         <Download className="w-4 h-4" />
                                         下载字幕(SRT)
                                     </button>
+                                </div>
+                            )}
+                        </div>
+                        <pre className="whitespace-pre-wrap font-sans text-sm">
+                            {displayText}
+                        </pre>
+                    </CardContent>
+                </Card>
+
+                <Card>
+                    <CardContent className="pt-6">
+                        <div className="flex justify-between items-center mb-4">
+                            <h3 className="text-lg font-semibold">AI摘要</h3>
+                            {summary && transcription.stage === 'completed' && (
+                                <div className="flex gap-2 flex-wrap">
+                                    {/* Download DOCX button */}
+                                    <button
+                                        onClick={handleDownloadDocx}
+                                        className="inline-flex items-center gap-1 px-3 py-1.5 text-sm bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 rounded-lg hover:bg-green-200 dark:hover:bg-green-900/50 transition-colors"
+                                        title="下载Word文档"
+                                    >
+                                        <File className="w-4 h-4" />
+                                        下载DOCX
+                                    </button>
                                     {/* PPTX button */}
                                     {pptxStatus === 'ready' ? (
                                         <button
                                             onClick={handleDownloadPptx}
                                             className="inline-flex items-center gap-1 px-3 py-1.5 text-sm bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-lg hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-colors"
+                                            title="下载PowerPoint演示文稿"
                                         >
                                             <FileText className="w-4 h-4" />
                                             下载PPT
@@ -265,6 +308,7 @@ export function TranscriptionDetail() {
                                         <button
                                             onClick={handleGeneratePptx}
                                             className="inline-flex items-center gap-1 px-3 py-1.5 text-sm bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 rounded-lg hover:bg-red-200 dark:hover:bg-red-900/50 transition-colors"
+                                            title="重试生成PowerPoint演示文稿"
                                         >
                                             <FileText className="w-4 h-4" />
                                             重试生成PPT
@@ -273,6 +317,7 @@ export function TranscriptionDetail() {
                                         <button
                                             onClick={handleGeneratePptx}
                                             className="inline-flex items-center gap-1 px-3 py-1.5 text-sm bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-lg hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-colors"
+                                            title="生成PowerPoint演示文稿"
                                         >
                                             <FileText className="w-4 h-4" />
                                             生成PPT
@@ -281,15 +326,6 @@ export function TranscriptionDetail() {
                                 </div>
                             )}
                         </div>
-                        <pre className="whitespace-pre-wrap font-sans text-sm">
-                            {displayText}
-                        </pre>
-                    </CardContent>
-                </Card>
-
-                <Card>
-                    <CardContent className="pt-6">
-                        <h3 className="text-lg font-semibold mb-4">AI摘要</h3>
                         {summary ? (
                             <pre className="whitespace-pre-wrap font-sans text-sm">
                                 {summary.summary_text}

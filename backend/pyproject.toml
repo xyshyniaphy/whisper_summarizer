@@ -19,6 +19,7 @@ dependencies = [
     "APScheduler>=3.10.0",
     "faster-whisper>=1.0.0",
     "pydub>=0.25.0",
+    "pypandoc>=1.13",
 ]
 
 [dependency-groups]

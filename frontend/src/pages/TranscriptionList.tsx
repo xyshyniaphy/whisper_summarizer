@@ -249,7 +249,7 @@ export function TranscriptionList() {
                                             <Badge variant={getBadgeVariant(item.stage)}>
                                                 {STAGE_LABELS[item.stage] || item.stage}
                                             </Badge>
-                                            {item.retry_count && item.retry_count > 0 && (
+                                            {(item.retry_count ?? 0) > 0 && (
                                                 <span className="ml-2 text-xs text-gray-500 dark:text-gray-400">
                                                     重试 {item.retry_count} 次
                                                 </span>

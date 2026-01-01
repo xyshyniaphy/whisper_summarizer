@@ -19,6 +19,7 @@ RUN apt-get update && apt-get install -y \
     python3.12 \
     curl \
     ca-certificates \
+    pandoc \
     && rm -rf /var/lib/apt/lists/*
 
 # Python 3.12をデフォルトに設定
@@ -57,6 +58,7 @@ RUN apt-get update && apt-get install -y \
     python3.12 \
     curl \
     ca-certificates \
+    pandoc \
     && rm -rf /var/lib/apt/lists/*
 
 RUN update-alternatives --install /usr/bin/python python /usr/bin/python3.12 1 && \
@@ -90,12 +92,17 @@ ENV PYTHONUNBUFFERED=1
 ENV PATH="/opt/venv/bin:$PATH"
 
 # Python 3.12, CUDA cuDNN, faster-whisper model, Marp CLI, Chrome are already in base image
-# Just need to add application-specific dependencies
+# Just need to add application-specific dependencies to the existing venv
 
 WORKDIR /app
 
-# venvをコピー (本番用依存関係のみ、Ruffなし)
-COPY --from=builder /opt/venv /opt/venv
+# Install pip and python-docx system-wide (base image doesn't have pip in venv)
+RUN apt-get update && apt-get install -y python3-pip && \
+    pip3 install --no-cache-dir --break-system-packages python-docx && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# Add system dist-packages to Python path so venv can find python-docx
+ENV PYTHONPATH="/usr/local/lib/python3.12/dist-packages:/opt/venv/lib/python3.12/site-packages:$PYTHONPATH"
 
 # アプリケーションコードをコピー
 COPY . .

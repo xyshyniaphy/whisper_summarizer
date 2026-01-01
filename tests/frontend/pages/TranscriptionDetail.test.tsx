@@ -27,6 +27,7 @@ vi.mock('../../../src/services/supabase', () => ({
 // Mock API
 const mockGetTranscription = vi.fn()
 const mockDownloadFile = vi.fn()
+const mockDownloadSummaryDocx = vi.fn()
 const mockGeneratePptx = vi.fn()
 const mockGetPptxStatus = vi.fn()
 
@@ -34,6 +35,7 @@ vi.mock('../../../src/services/api', () => ({
   api: {
     getTranscription: (id: string) => mockGetTranscription(id),
     downloadFile: (id: string, format: string) => mockDownloadFile(id, format),
+    downloadSummaryDocx: (id: string) => mockDownloadSummaryDocx(id),
     generatePptx: (id: string) => mockGeneratePptx(id),
     getPptxStatus: (id: string) => mockGetPptxStatus(id),
     getDownloadUrl: (id: string, format: string) => `/api/transcriptions/${id}/download?format=${format}`
@@ -104,6 +106,7 @@ describe('TranscriptionDetail', () => {
     vi.useFakeTimers()
     mockGetTranscription.mockResolvedValue(mockTranscription)
     mockDownloadFile.mockResolvedValue(new Blob(['test content']))
+    mockDownloadSummaryDocx.mockResolvedValue(new Blob(['docx content']))
     mockGeneratePptx.mockResolvedValue({ status: 'generating' })
     mockGetPptxStatus.mockResolvedValue({ status: 'ready', exists: true })
   })
@@ -355,6 +358,112 @@ describe('TranscriptionDetail', () => {
       vi.advanceTimersByTime(5000)
 
       expect(mockGetTranscription.mock.calls.length).toBe(initialCallCount)
+    })
+  })
+
+  describe('DOCX Download Functionality (NEW)', () => {
+    it('DOCXダウンロードボタンがAI摘要セクションに表示される', async () => {
+      renderWithRoute('test-1')
+
+      await waitFor(() => {
+        expect(screen.getByText('AI摘要')).toBeTruthy()
+        expect(screen.getByText('下载DOCX')).toBeTruthy()
+      })
+    })
+
+    it('要約がない場合、DOCXダウンロードボタンは表示されない', async () => {
+      const noSummaryTranscription = { ...mockTranscription, summaries: [] }
+      mockGetTranscription.mockResolvedValue(noSummaryTranscription)
+      renderWithRoute('test-1')
+
+      await waitFor(() => {
+        expect(screen.queryByText('下载DOCX')).toBeNull()
+      })
+    })
+
+    it('DOCXダウンロードが動作する', async () => {
+      const user = userEvent.setup()
+      renderWithRoute('test-1')
+
+      await waitFor(() => {
+        expect(screen.getByText('下载DOCX')).toBeTruthy()
+      })
+
+      const downloadButton = screen.getByTitle('下载Word文档')
+      await user.click(downloadButton)
+
+      await waitFor(() => {
+        expect(mockDownloadSummaryDocx).toHaveBeenCalledWith('test-1')
+      })
+    })
+
+    it('DOCXダウンロード失敗時、エラーメッセージが表示される', async () => {
+      const user = userEvent.setup()
+      mockDownloadSummaryDocx.mockRejectedValue(new Error('Download failed'))
+      const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+      global.alert = vi.fn()
+
+      renderWithRoute('test-1')
+
+      await waitFor(() => {
+        expect(screen.getByText('下载DOCX')).toBeTruthy()
+      })
+
+      const downloadButton = screen.getByTitle('下载Word文档')
+      await user.click(downloadButton)
+
+      await waitFor(() => {
+        expect(consoleSpy).toHaveBeenCalled()
+        expect(global.alert).toHaveBeenCalledWith('DOCX下载失败')
+      })
+
+      consoleSpy.mockRestore()
+    })
+  })
+
+  describe('PPT Button Location (UPDATED)', () => {
+    it('PPTボタンがAI摘要セクションに表示される', async () => {
+      renderWithRoute('test-1')
+
+      await waitFor(() => {
+        expect(screen.getByText('AI摘要')).toBeTruthy()
+        expect(screen.getByText('下载PPT')).toBeTruthy()
+      })
+    })
+
+    it('PPTボタンが転写結果セクションに表示されない', async () => {
+      renderWithRoute('test-1')
+
+      await waitFor(() => {
+        expect(screen.getByText('转录结果')).toBeTruthy()
+        // 転写結果セクションにはPPTボタンがないはず
+        const pptButtons = screen.queryAllByText('生成PPT')
+        const pptDownloadButtons = screen.queryAllByText('下载PPT')
+        // これらはAI摘要セクションにあるので、転写結果セクションのカードには含まれない
+        const transcriptionResultCard = screen.getByText('转录结果').closest('.space-y-6 > div')
+        if (transcriptionResultCard) {
+          expect(transcriptionResultCard.querySelectorAll('[title*="PPT"]')).toHaveLength(0)
+        }
+      })
+    })
+
+    it('AI摘要セクションにPPT生成ボタンが表示される（未生成の場合）', async () => {
+      mockGetPptxStatus.mockResolvedValue({ status: 'not-started', exists: false })
+      renderWithRoute('test-1')
+
+      await waitFor(() => {
+        expect(screen.getByText('AI摘要')).toBeTruthy()
+        expect(screen.getByTitle('生成PowerPoint演示文稿')).toBeTruthy()
+      })
+    })
+
+    it('AI摘要セクションにPPTダウンロードボタンが表示される（準備完了の場合）', async () => {
+      renderWithRoute('test-1')
+
+      await waitFor(() => {
+        expect(screen.getByText('AI摘要')).toBeTruthy()
+        expect(screen.getByTitle('下载PowerPoint演示文稿')).toBeTruthy()
+      })
     })
   })
 })

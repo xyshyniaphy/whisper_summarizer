@@ -248,7 +248,20 @@ describe('TranscriptionList', () => {
   })
 
   describe('Retry Count Display', () => {
-    it('リトライ回数が表示される', async () => {
+    it('retry_countが0の場合、ステータスバッジの後に余分なテキストが表示されない（UI bug fix）', async () => {
+      render(<TranscriptionList />, { wrapper })
+
+      await waitFor(() => {
+        // Check that "已完成" badge doesn't have stray "0" after it
+        const completedBadge = screen.getByText('已完成')
+        const parent = completedBadge.closest('td')
+        // The status cell should only contain the badge, not "已完成0"
+        expect(parent?.textContent).not.toContain('已完成0')
+        expect(parent?.textContent).toContain('已完成')
+      })
+    })
+
+    it('retry_countが3の場合、「重试 3 次」が表示される', async () => {
       const transcriptionsWithRetry = [
         {
           ...mockTranscriptions[0],
@@ -261,7 +274,17 @@ describe('TranscriptionList', () => {
 
       await waitFor(() => {
         const retryText = screen.queryByText(/重试.*3.*次/)
-        // May or may not be visible depending on component
+        expect(retryText).toBeTruthy()
+      })
+    })
+
+    it('retry_countが0の場合、リトライ表示はされない', async () => {
+      render(<TranscriptionList />, { wrapper })
+
+      await waitFor(() => {
+        // Should not show "重试 0 次" when retry_count is 0
+        const retryTextZero = screen.queryByText(/重试.*0.*次/)
+        expect(retryTextZero).toBeNull()
       })
     })
   })
