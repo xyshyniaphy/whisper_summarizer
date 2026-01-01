@@ -10,7 +10,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { BrowserRouter } from 'react-router-dom'
 import { Provider } from 'jotai'
-import TranscriptionList from '../../../src/pages/TranscriptionList'
+import { TranscriptionList } from '../../../src/pages/TranscriptionList'
 
 // Mock Supabase client
 vi.mock('../../../src/services/supabase', () => ({
