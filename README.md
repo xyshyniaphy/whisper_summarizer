@@ -26,7 +26,7 @@ Whisper Summarizerは、音声ファイルを自動で文字起こしし、Googl
 | AI要約 | Google Gemini 2.0 Flash |
 | 認証 | Supabase Auth (JWT) |
 | データベース | PostgreSQL 18 Alpine (開発) / Supabase PostgreSQL (本番) |
-| ファイル保存 | Supabase Storage (gzip圧縮) |
+| ファイル保存 | ローカルファイルシステム (gzip圧縮) |
 | コンテナ | Docker + Docker Compose |
 
 ### Dockerイメージサイズ

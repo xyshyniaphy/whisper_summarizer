@@ -8,7 +8,7 @@ Whisper Summarizer is a web application for audio transcription and AI-powered s
 - **faster-whisper** (CTranslate2 + cuDNN) for GPU-accelerated audio transcription
 - **Google Gemini 2.0 Flash** API for summarization
 - **PostgreSQL 18 Alpine** for local development database
-- **Supabase** for authentication, cloud database (production), and Storage (file storage)
+- **Supabase** for authentication and cloud database (production)
 - **Docker Compose** for orchestration
 
 ### Transcription Performance Comparison
@@ -46,15 +46,19 @@ Whisper Summarizer is a web application for audio transcription and AI-powered s
         ▼                   ▼
 ┌──────────────┐    ┌─────────────────┐
 │  PostgreSQL  │    │  Supabase       │
-│  18 Alpine   │    │  (Auth +        │
-│  (Dev only)  │    │   Storage)      │
+│  18 Alpine   │    │  (Auth only)    │
+│  (Dev only)  │    │  - No Storage   │
 └──────────────┘    └─────────────────┘
+
+         Local File Storage
+         /app/data/transcribes/
+         (gzip-compressed .txt.gz)
 ```
 
 **Key changes:**
 - **Local PostgreSQL 18 Alpine** for development database (no port export - internal only)
-- **Supabase Storage** for transcription text files (gzip-compressed)
-- **Supabase Auth** for authentication
+- **Local filesystem** for transcription text files (`/app/data/transcribes/`, gzip-compressed)
+- **Supabase Auth** for authentication only (no Storage used)
 - **Vite proxy** pattern - Frontend on :3000 proxies `/api/*` to backend:8000
 
 ## Development Commands
@@ -160,7 +164,7 @@ app/
 │   ├── supabase.py   # Supabase client initialization
 │   └── gemini.py     # Gemini API integration
 ├── services/         # Business logic services
-│   ├── storage_service.py      # Supabase Storage integration
+│   ├── storage_service.py      # Local filesystem storage (gzip)
 │   ├── whisper_service.py      # faster-whisper wrapper
 │   ├── transcription_processor.py  # Async transcription workflow
 │   ├── pptx_service.py          # PowerPoint generation
@@ -258,7 +262,7 @@ The app includes a fixed top navigation bar with:
 Required in `.env`:
 
 ```bash
-# Supabase (Auth + Storage)
+# Supabase (Auth only - no Storage used)
 SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_ANON_KEY=eyJ...
 SUPABASE_SERVICE_ROLE_KEY=eyJ...
@@ -343,16 +347,16 @@ db.execute(text('ALTER TABLE gemini_request_logs ADD CONSTRAINT gemini_request_l
 
 **Rebuild required:** After model changes, rebuild backend container: `docker-compose -f docker-compose.dev.yml up -d --build --force-recreate backend`
 
-## Supabase Storage for Transcription Text
+## Local File Storage for Transcription Text
 
-Transcription text is stored in Supabase Storage as gzip-compressed files to avoid database size limits and SSL connection errors with large text.
+Transcription text is stored on the local filesystem as gzip-compressed files to avoid database size limits and improve performance.
 
 ### Storage Service (`storage_service.py`)
 
 ```python
 from app.services.storage_service import get_storage_service
 
-# Save transcription text to Storage
+# Save transcription text to local filesystem
 storage_service = get_storage_service()
 storage_path = storage_service.save_transcription_text(
     transcription_id=str(transcription.id),
@@ -360,22 +364,33 @@ storage_path = storage_service.save_transcription_text(
 )
 # Returns: "{transcription_id}.txt.gz"
 
-# Download and decompress
+# Read and decompress
 text = storage_service.get_transcription_text(transcription_id)
 
 # Delete
 storage_service.delete_transcription_text(transcription_id)
+
+# Check existence
+exists = storage_service.transcription_exists(transcription_id)
 ```
+
+### Storage Configuration
+
+- **Directory**: `/app/data/transcribes/` (auto-created on initialization)
+- **File format**: `{uuid}.txt.gz`
+- **Compression**: gzip level 6
+- **Permissions**: Managed by Docker container (root:root)
+- **Persistence**: Volume-mounted to host `./data/transcribes/`
 
 ### Transcription Model Property
 
-The `Transcription` model provides a `.text` property that automatically downloads and decompresses:
+The `Transcription` model provides a `.text` property that automatically reads and decompresses:
 
 ```python
 # In transcription.py model
 @property
 def text(self) -> str:
-    """Get decompressed text from Supabase Storage."""
+    """Get decompressed text from local filesystem."""
     if not self.storage_path:
         return ""
     from app.services.storage_service import get_storage_service
@@ -383,19 +398,11 @@ def text(self) -> str:
     return storage_service.get_transcription_text(str(self.id))
 ```
 
-### Storage Configuration
-
-- **Bucket**: `transcriptions` (auto-created via REST API)
-- **File format**: `{uuid}.txt.gz`
-- **Compression**: gzip level 6
-- **Size limit**: 100MB per file
-- **Access**: Private (requires Supabase auth)
-
 ### Database Schema
 
 ```python
 # In transcriptions table
-storage_path = Column(String, nullable=True)  # Path to file in Storage
+storage_path = Column(String, nullable=True)  # Path to file in local filesystem
 # Format: "{uuid}.txt.gz"
 ```
 
