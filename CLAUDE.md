@@ -7,7 +7,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Whisper Summarizer is a web application for audio transcription and AI-powered summarization. It uses:
 - **faster-whisper** (CTranslate2 + cuDNN) for GPU-accelerated audio transcription
 - **Google Gemini 2.0 Flash** API for summarization
-- **Supabase** for authentication and PostgreSQL database
+- **PostgreSQL 18 Alpine** for local development database
+- **Supabase** for authentication, cloud database (production), and Storage (file storage)
 - **Docker Compose** for orchestration
 
 ### Transcription Performance Comparison
@@ -41,20 +42,20 @@ Whisper Summarizer is a web application for audio transcription and AI-powered s
 │         :5678 (debug - host)           │
 └───────────────────────────────────────┘
                   │
-                  ▼
-          Supabase (Auth + PostgreSQL)
+        ┌─────────┴─────────┐
+        ▼                   ▼
+┌──────────────┐    ┌─────────────────┐
+│  PostgreSQL  │    │  Supabase       │
+│  18 Alpine   │    │  (Auth +        │
+│  (Dev only)  │    │   Storage)      │
+└──────────────┘    └─────────────────┘
 ```
 
-**Production Mode:**
-- Frontend served by Nginx on :80
-- API accessible at /api/* (proxied by Nginx)
-
-**Key changes from whisper.cpp:**
-- **Simplified architecture**: Transcription now runs in-process within the backend
-- **No separate whispercpp container**: faster-whisper is a Python library
-- **Better GPU performance**: Uses cuDNN optimized kernels via CTranslate2
-- **Lower memory footprint**: No subprocess overhead, model loaded once at startup
-- **Vite proxy in dev**: Frontend proxies `/api/*` to `backend:8000` via Docker network
+**Key changes:**
+- **Local PostgreSQL 18 Alpine** for development database (no port export - internal only)
+- **Supabase Storage** for transcription text files (gzip-compressed)
+- **Supabase Auth** for authentication
+- **Vite proxy** pattern - Frontend on :3000 proxies `/api/*` to backend:8000
 
 ## Development Commands
 
@@ -158,6 +159,12 @@ app/
 │   ├── config.py     # Settings (Pydantic BaseSettings)
 │   ├── supabase.py   # Supabase client initialization
 │   └── gemini.py     # Gemini API integration
+├── services/         # Business logic services
+│   ├── storage_service.py      # Supabase Storage integration
+│   ├── whisper_service.py      # faster-whisper wrapper
+│   ├── transcription_processor.py  # Async transcription workflow
+│   ├── pptx_service.py          # PowerPoint generation
+│   └── marp_service.py          # Marp CLI integration
 ├── models/           # SQLAlchemy ORM models
 ├── schemas/          # Pydantic request/response schemas
 ├── db/
@@ -169,7 +176,8 @@ app/
 - FastAPI with dependency injection for auth
 - SQLAlchemy ORM with UUID primary keys
 - Pydantic schemas for validation
-- Service layer pattern for external API calls (Gemini)
+- Service layer pattern for external API calls (Gemini, Storage)
+- Background tasks for async transcription processing
 
 ### Frontend Structure (`frontend/src/`)
 
@@ -250,11 +258,18 @@ The app includes a fixed top navigation bar with:
 Required in `.env`:
 
 ```bash
-# Supabase
+# Supabase (Auth + Storage)
 SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_ANON_KEY=eyJ...
 SUPABASE_SERVICE_ROLE_KEY=eyJ...
-DATABASE_URL=postgresql://postgres:pass@host:5432/postgres
+
+# Database (Development - PostgreSQL 18 Alpine)
+POSTGRES_DB=whisper_summarizer
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=postgres
+
+# Database (Production - Supabase PostgreSQL)
+# DATABASE_URL=postgresql://postgres:pass@db.project.supabase.co:5432/postgres
 
 # Gemini API
 GEMINI_API_KEY=your-key
@@ -327,6 +342,62 @@ db.execute(text('ALTER TABLE gemini_request_logs ADD CONSTRAINT gemini_request_l
 ```
 
 **Rebuild required:** After model changes, rebuild backend container: `docker-compose -f docker-compose.dev.yml up -d --build --force-recreate backend`
+
+## Supabase Storage for Transcription Text
+
+Transcription text is stored in Supabase Storage as gzip-compressed files to avoid database size limits and SSL connection errors with large text.
+
+### Storage Service (`storage_service.py`)
+
+```python
+from app.services.storage_service import get_storage_service
+
+# Save transcription text to Storage
+storage_service = get_storage_service()
+storage_path = storage_service.save_transcription_text(
+    transcription_id=str(transcription.id),
+    text=text  # Automatically compressed with gzip level 6
+)
+# Returns: "{transcription_id}.txt.gz"
+
+# Download and decompress
+text = storage_service.get_transcription_text(transcription_id)
+
+# Delete
+storage_service.delete_transcription_text(transcription_id)
+```
+
+### Transcription Model Property
+
+The `Transcription` model provides a `.text` property that automatically downloads and decompresses:
+
+```python
+# In transcription.py model
+@property
+def text(self) -> str:
+    """Get decompressed text from Supabase Storage."""
+    if not self.storage_path:
+        return ""
+    from app.services.storage_service import get_storage_service
+    storage_service = get_storage_service()
+    return storage_service.get_transcription_text(str(self.id))
+```
+
+### Storage Configuration
+
+- **Bucket**: `transcriptions` (auto-created via REST API)
+- **File format**: `{uuid}.txt.gz`
+- **Compression**: gzip level 6
+- **Size limit**: 100MB per file
+- **Access**: Private (requires Supabase auth)
+
+### Database Schema
+
+```python
+# In transcriptions table
+storage_path = Column(String, nullable=True)  # Path to file in Storage
+# Format: "{uuid}.txt.gz"
+```
 
 ## Audio Chunking for Faster Transcription
 

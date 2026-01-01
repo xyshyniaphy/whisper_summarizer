@@ -45,3 +45,4 @@ class TranscriptionInDBBase(TranscriptionBase):
 
 class Transcription(TranscriptionInDBBase):
     summaries: List[Summary] = []
+    text: str = ""  # Transcription text (decompressed from storage)

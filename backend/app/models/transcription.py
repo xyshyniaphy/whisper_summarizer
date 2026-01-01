@@ -12,7 +12,7 @@ class Transcription(Base):
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
     file_name = Column(String, nullable=False)
     file_path = Column(Text, nullable=True)
-    # Path to compressed text file in Supabase Storage (format: {uuid}.txt.gz)
+    # Path to compressed text file in local filesystem (format: {uuid}.txt.gz)
     storage_path = Column(String, nullable=True)
     status = Column(String, default="processing")  # Legacy, use stage instead
     language = Column(String, nullable=True)
@@ -39,10 +39,10 @@ class Transcription(Base):
     @property
     def text(self) -> str:
         """
-        Get the decompressed transcription text from Supabase Storage.
+        Get the decompressed transcription text from local filesystem.
 
-        The text is stored as a gzip-compressed file in Supabase Storage.
-        This property downloads and decompresses it on demand.
+        The text is stored as a gzip-compressed file in /app/data/transcribes/.
+        This property reads and decompresses it on demand.
         """
         if not self.storage_path:
             return ""

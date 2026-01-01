@@ -390,12 +390,12 @@ class TranscriptionProcessor:
             logger.info(f"[TRANSCRIPTION PROCESSOR] Got text from result: {len(text)} chars")
             print(f"[TRANSCRIPTION PROCESSOR] Got text from result: {len(text)} chars", flush=True)
 
-            # Save to Supabase Storage
+            # Save to local filesystem
             from app.services.storage_service import get_storage_service
             storage_service = get_storage_service()
 
-            logger.info(f"[TRANSCRIPTION PROCESSOR] Uploading to Supabase Storage...")
-            print(f"[TRANSCRIPTION PROCESSOR] Uploading to Supabase Storage...", flush=True)
+            logger.info(f"[TRANSCRIPTION PROCESSOR] Saving to local storage...")
+            print(f"[TRANSCRIPTION PROCESSOR] Saving to local storage...", flush=True)
 
             storage_path = storage_service.save_transcription_text(
                 transcription_id=str(transcription.id),

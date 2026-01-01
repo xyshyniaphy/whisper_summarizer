@@ -25,7 +25,8 @@ Whisper Summarizerは、音声ファイルを自動で文字起こしし、Googl
 | 音声処理 | faster-whisper (CTranslate2 + cuDNN) |
 | AI要約 | Google Gemini 2.0 Flash |
 | 認証 | Supabase Auth (JWT) |
-| データベース | Supabase PostgreSQL (マネージド) |
+| データベース | PostgreSQL 18 Alpine (開発) / Supabase PostgreSQL (本番) |
+| ファイル保存 | Supabase Storage (gzip圧縮) |
 | コンテナ | Docker + Docker Compose |
 
 ### Dockerイメージサイズ
@@ -34,6 +35,7 @@ Whisper Summarizerは、音声ファイルを自動で文字起こしし、Googl
 |---|---|---|
 | whisper_summarizer-backend | ~8GB | FastAPI + Python + CUDA cuDNN Runtime + faster-whisper |
 | whisper_summarizer-frontend | 380MB | React + Vite (開発) / Nginx (本番) |
+| postgres | ~250MB | PostgreSQL 18 Alpine (開発のみ) |
 
 **アーキテクチャ改善:**
 - whisper.cpp (3.46GB) の別コンテナが不要に
@@ -76,9 +78,11 @@ GEMINI_MODEL=gemini-2.0-flash-exp  # 使用モデル (gemini-2.0-flash-exp, gemi
 REVIEW_LANGUAGE=zh                 # 要約生成言語 (zh, ja, en)
 GEMINI_API_ENDPOINT=               # オプション: カスタムエンドポイントを使用する場合のみ設定
 
-# Supabase PostgreSQL接続文字列
-# SupabaseダッシュボードのSettings > Database > Connection Stringから取得
-DATABASE_URL=postgresql://postgres:[YOUR-PASSWORD]@db.[PROJECT-REF].supabase.co:5432/postgres
+# データベース設定 (開発環境ではPostgreSQL 18 Alpineを使用)
+# 本番環境でSupabase PostgreSQLを使用する場合はDATABASE_URLを設定してください
+POSTGRES_DB=whisper_summarizer
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=postgres
 
 # バックエンド設定
 CORS_ORIGINS=http://localhost:3000
@@ -189,8 +193,8 @@ docker-compose -f docker-compose.dev.yml up -d --build
 | サービス | URL |
 |---|---|
 | フロントエンド | http://localhost:3000 |
-| バックエンドAPI | http://localhost:3080 |
-| API ドキュメント | http://localhost:3080/docs |
+| バックエンドAPI | http://localhost:3000/api/* (Viteプロキシ経由) |
+| API ドキュメント | http://localhost:3000/api/docs (Viteプロキシ経由) |
 
 ### 本番環境の起動
 
@@ -219,7 +223,7 @@ whisper_summarizer/
 ├── backend/               # FastAPIバックエンド (faster-whisper統合)
 │   ├── app/
 │   │   ├── api/          # APIエンドポイント
-│   │   ├── services/     # faster-whisper + Gemini統合
+│   │   ├── services/     # faster-whisper + Gemini + Storage統合
 │   │   ├── core/         # 設定・Supabase統合
 │   │   ├── models/       # データベースモデル
 │   │   └── schemas/      # Pydanticスキーマ
@@ -472,7 +476,7 @@ npm run test:headed
 
 ## API仕様
 
-詳細なAPI仕様は、http://localhost:3080/docs で確認できます。
+詳細なAPI仕様は、http://localhost:3000/api/docs で確認できます。
 
 ### 主要エンドポイント
 

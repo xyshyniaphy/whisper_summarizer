@@ -1,64 +1,37 @@
 """
-Supabase Storage Service
+Local File Storage Service
 
-Handles file storage operations for transcriptions using Supabase Storage.
-Transcription text is stored as gzip-compressed files to reduce size and costs.
+Handles file storage operations for transcriptions using local filesystem.
+Transcription text is stored as gzip-compressed files to reduce size.
 """
 
 import os
 import gzip
 import logging
-import requests
 from pathlib import Path
 from typing import Optional
-from supabase import create_client, Client
-
-from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
-# Bucket name for transcription texts
-TRANSCRIPTIONS_BUCKET = "transcriptions"
+# Local storage directory for transcription texts
+TRANSCRIPTIONS_DIR = Path("/app/data/transcribes")
 
 
 class StorageService:
-    """Service for managing Supabase Storage operations."""
+    """Service for managing local file storage operations."""
 
     def __init__(self):
-        """Initialize Supabase client for storage operations."""
-        self.supabase: Client = create_client(
-            settings.SUPABASE_URL,
-            settings.SUPABASE_SERVICE_ROLE_KEY
-        )
-        self._ensure_bucket_exists()
+        """Initialize local storage directory."""
+        self._ensure_directory_exists()
 
-    def _ensure_bucket_exists(self):
-        """Ensure the transcriptions bucket exists in Supabase Storage."""
+    def _ensure_directory_exists(self):
+        """Ensure the transcriptions directory exists."""
         try:
-            # List buckets to check if our bucket exists
-            buckets = self.supabase.storage.list_buckets()
-            bucket_names = [b.get("name") or b.get("id") for b in buckets]
-
-            if TRANSCRIPTIONS_BUCKET not in bucket_names:
-                logger.info(f"Creating bucket: {TRANSCRIPTIONS_BUCKET}")
-                # Use REST API to create bucket (Python client API is broken)
-                storage_url = f"{settings.SUPABASE_URL}/storage/v1/bucket"
-                headers = {
-                    "apikey": settings.SUPABASE_SERVICE_ROLE_KEY,
-                    "Authorization": f"Bearer {settings.SUPABASE_SERVICE_ROLE_KEY}",
-                    "Content-Type": "application/json"
-                }
-                data = {
-                    "id": TRANSCRIPTIONS_BUCKET,
-                    "name": TRANSCRIPTIONS_BUCKET
-                }
-                response = requests.post(storage_url, json=data, headers=headers)
-                if response.status_code == 200:
-                    logger.info(f"Bucket created: {TRANSCRIPTIONS_BUCKET}")
-                else:
-                    logger.warning(f"Failed to create bucket: {response.text}")
+            TRANSCRIPTIONS_DIR.mkdir(parents=True, exist_ok=True)
+            logger.info(f"Storage directory ready: {TRANSCRIPTIONS_DIR}")
         except Exception as e:
-            logger.warning(f"Could not verify/create bucket: {e}")
+            logger.error(f"Failed to create storage directory: {e}")
+            raise
 
     def save_transcription_text(
         self,
@@ -67,7 +40,7 @@ class StorageService:
         compression_level: int = 6
     ) -> str:
         """
-        Save transcription text to Supabase Storage as gzip-compressed file.
+        Save transcription text to local filesystem as gzip-compressed file.
 
         Args:
             transcription_id: Transcription UUID
@@ -75,10 +48,10 @@ class StorageService:
             compression_level: Gzip compression level (1-9, default 6)
 
         Returns:
-            str: Storage path (e.g., "{transcription_id}.txt.gz")
+            str: Relative storage path (e.g., "{transcription_id}.txt.gz")
 
         Raises:
-            Exception: If upload fails
+            Exception: If save fails
         """
         try:
             # Compress text
@@ -87,29 +60,21 @@ class StorageService:
 
             # Create storage path
             storage_path = f"{transcription_id}.txt.gz"
+            file_path = TRANSCRIPTIONS_DIR / storage_path
 
-            # Upload to Supabase Storage
-            logger.info(f"Uploading to storage: {storage_path} ({len(compressed_bytes)} bytes compressed)")
-
-            self.supabase.storage.from_(TRANSCRIPTIONS_BUCKET).upload(
-                file=compressed_bytes,
-                path=storage_path,
-                file_options={
-                    "content-type": "application/gzip",
-                    "upsert": "true"  # Overwrite if exists
-                }
-            )
-
-            logger.info(f"Successfully uploaded to storage: {storage_path}")
+            # Write to local filesystem
+            logger.info(f"Saving to local storage: {storage_path} ({len(compressed_bytes)} bytes compressed)")
+            file_path.write_bytes(compressed_bytes)
+            logger.info(f"Successfully saved to local storage: {storage_path}")
             return storage_path
 
         except Exception as e:
-            logger.error(f"Failed to upload to storage: {e}")
+            logger.error(f"Failed to save to local storage: {e}")
             raise
 
     def get_transcription_text(self, transcription_id: str) -> str:
         """
-        Download and decompress transcription text from Supabase Storage.
+        Read and decompress transcription text from local filesystem.
 
         Args:
             transcription_id: Transcription UUID
@@ -118,30 +83,34 @@ class StorageService:
             str: Decompressed transcription text
 
         Raises:
-            Exception: If download or decompression fails
+            Exception: If read or decompression fails
         """
         try:
             storage_path = f"{transcription_id}.txt.gz"
+            file_path = TRANSCRIPTIONS_DIR / storage_path
 
-            logger.debug(f"Downloading from storage: {storage_path}")
+            logger.debug(f"Reading from local storage: {storage_path}")
 
-            # Download from Supabase Storage
-            response = self.supabase.storage.from_(TRANSCRIPTIONS_BUCKET).download(storage_path)
+            # Read from local filesystem
+            compressed_bytes = file_path.read_bytes()
 
             # Decompress
-            decompressed_bytes = gzip.decompress(response)
+            decompressed_bytes = gzip.decompress(compressed_bytes)
             text = decompressed_bytes.decode('utf-8')
 
-            logger.debug(f"Downloaded and decompressed: {len(text)} chars from {storage_path}")
+            logger.debug(f"Read and decompressed: {len(text)} chars from {storage_path}")
             return text
 
+        except FileNotFoundError:
+            logger.error(f"File not found in local storage: {storage_path}")
+            raise
         except Exception as e:
-            logger.error(f"Failed to download from storage: {e}")
+            logger.error(f"Failed to read from local storage: {e}")
             raise
 
     def delete_transcription_text(self, transcription_id: str) -> bool:
         """
-        Delete transcription text from Supabase Storage.
+        Delete transcription text from local filesystem.
 
         Args:
             transcription_id: Transcription UUID
@@ -151,22 +120,25 @@ class StorageService:
         """
         try:
             storage_path = f"{transcription_id}.txt.gz"
+            file_path = TRANSCRIPTIONS_DIR / storage_path
 
-            logger.info(f"Deleting from storage: {storage_path}")
+            logger.info(f"Deleting from local storage: {storage_path}")
 
-            # Delete from Supabase Storage
-            self.supabase.storage.from_(TRANSCRIPTIONS_BUCKET).remove([storage_path])
-
-            logger.info(f"Deleted from storage: {storage_path}")
+            # Delete from local filesystem
+            file_path.unlink()
+            logger.info(f"Deleted from local storage: {storage_path}")
             return True
 
+        except FileNotFoundError:
+            logger.warning(f"File not found in local storage (may not exist): {storage_path}")
+            return False
         except Exception as e:
-            logger.warning(f"Failed to delete from storage (may not exist): {e}")
+            logger.warning(f"Failed to delete from local storage: {e}")
             return False
 
     def transcription_exists(self, transcription_id: str) -> bool:
         """
-        Check if transcription text exists in Supabase Storage.
+        Check if transcription text exists in local filesystem.
 
         Args:
             transcription_id: Transcription UUID
@@ -176,9 +148,8 @@ class StorageService:
         """
         try:
             storage_path = f"{transcription_id}.txt.gz"
-            # Try to get file info
-            self.supabase.storage.from_(TRANSCRIPTIONS_BUCKET).get_metadata(storage_path)
-            return True
+            file_path = TRANSCRIPTIONS_DIR / storage_path
+            return file_path.exists()
         except Exception:
             return False
 
