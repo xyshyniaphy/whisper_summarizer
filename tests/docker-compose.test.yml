@@ -10,6 +10,14 @@ services:
     environment:
       # Python path
       PYTHONPATH: /app
+      # Enable authentication for tests
+      DISABLE_AUTH: "false"
+      # faster-whisper Config (GPU-accelerated transcription)
+      FASTER_WHISPER_DEVICE: ${FASTER_WHISPER_DEVICE:-cuda}
+      FASTER_WHISPER_COMPUTE_TYPE: ${FASTER_WHISPER_COMPUTE_TYPE:-float16}
+      FASTER_WHISPER_MODEL_SIZE: ${FASTER_WHISPER_MODEL_SIZE:-large-v3-turbo}
+      WHISPER_LANGUAGE: ${WHISPER_LANGUAGE:-zh}
+      WHISPER_THREADS: ${WHISPER_THREADS:-4}
     volumes:
       # バックエンドソースコードをマウント
       - ../backend/app:/app/app
@@ -22,6 +30,14 @@ services:
       - ../data:/app/data
     working_dir: /app
     command: pytest -v --cov=app --cov-report=html --cov-report=term
+    # GPU Support (faster-whisper with cuDNN)
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ['0']
+              capabilities: [gpu]
     networks:
       - whisper_test_network
 
