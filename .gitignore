@@ -12,7 +12,6 @@ __pycache__/
 build/
 develop-eggs/
 dist/
-testdata/
 downloads/
 eggs/
 .eggs/
@@ -33,6 +32,8 @@ wheels/
 .coverage
 htmlcov/
 tests/e2e/test-results/
+*.m4a
+*.wav
 
 # IDEディレクトリ
 .vscode/
