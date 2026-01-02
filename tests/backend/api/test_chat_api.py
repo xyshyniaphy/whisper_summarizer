@@ -47,12 +47,14 @@ class TestGetChatHistoryEndpoint:
             chat1 = ChatMessage(
                 id=str(uuid.uuid4()),
                 transcription_id=trans_id,
+                user_id=real_auth_user["raw_uuid"],
                 role="user",
                 content="Test question"
             )
             chat2 = ChatMessage(
                 id=str(uuid.uuid4()),
                 transcription_id=trans_id,
+                user_id=real_auth_user["raw_uuid"],
                 role="assistant",
                 content="Test answer"
             )
@@ -136,13 +138,14 @@ class TestSendChatMessageEndpoint:
             db.commit()
 
             # GLM APIをモック
-            with patch("app.services.api.glm_client") as mock_glm:
-                mock_glm.chat_stream = AsyncMock()
+            with patch("app.core.glm.get_glm_client") as mock_get_client:
+                mock_client = AsyncMock()
                 # ジェネレータを作成
                 async def mock_generator():
                     yield {"content": "Test", "done": False}
                     yield {"content": " response", "done": True}
-                mock_glm.chat_stream.return_value = mock_generator()
+                mock_client.chat_stream = AsyncMock(return_value=mock_generator())
+                mock_get_client.return_value = mock_client
 
                 response = real_auth_client.post(
                     f"/api/transcriptions/{trans_id}/chat",

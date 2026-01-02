@@ -33,10 +33,7 @@ class TestUsersAPI:
 
     def test_update_me_success(self, real_auth_client: TestClient) -> None:
         """ユーザー情報の更新が成功するテスト"""
-        update_data = {
-            "full_name": "Updated Name"
-        }
-        response = real_auth_client.put("/api/users/me", json=update_data)
+        response = real_auth_client.put("/api/users/me?full_name=Updated Name")
         assert response.status_code == 200
         data = response.json()
         assert data["full_name"] == "Updated Name"

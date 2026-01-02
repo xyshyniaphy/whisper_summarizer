@@ -26,6 +26,26 @@ os.environ.setdefault("GEMINI_MODEL", "gemini-2.0-flash-exp")
 os.environ.setdefault("REVIEW_LANGUAGE", "zh")
 
 
+# ============================================================================
+# Database Initialization
+# ============================================================================
+
+@pytest.fixture(scope="session", autouse=True)
+def init_test_database():
+    """
+    Initialize database tables for tests.
+    This runs once at the beginning of the test session.
+    """
+    from app.db.base_class import Base
+    from app.db.session import engine
+
+    # Create all tables
+    Base.metadata.create_all(bind=engine)
+    yield
+    # Optional: drop tables after tests (commented out to keep data for inspection)
+    # Base.metadata.drop_all(bind=engine)
+
+
 @pytest.fixture
 def test_client() -> Generator[TestClient, None, None]:
   """
