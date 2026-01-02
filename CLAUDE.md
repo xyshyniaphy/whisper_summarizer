@@ -282,9 +282,13 @@ POSTGRES_PASSWORD=postgres
 # DATABASE_URL=postgresql://postgres:pass@db.project.supabase.co:5432/postgres
 
 # GLM API (OpenAI-compatible)
+# Get API key from https://z.ai/ (international platform)
 GLM_API_KEY=your-key
 GLM_MODEL=GLM-4.5-Air
-GLM_BASE_URL=https://open.bigmodel.cn/api/paas/v4
+# International endpoint (recommended for global users)
+GLM_BASE_URL=https://api.z.ai/api/paas/v4/
+# China domestic endpoint (alternative for mainland China users)
+# GLM_BASE_URL=https://open.bigmodel.cn/api/paas/v4/
 REVIEW_LANGUAGE=zh    # zh, ja, en
 
 # faster-whisper Configuration

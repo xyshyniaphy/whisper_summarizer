@@ -32,7 +32,7 @@ class GLMClient:
             review_language: 要約言語 (zh, ja, en)
         """
         self.api_key = api_key or os.getenv("GLM_API_KEY")
-        self.base_url = base_url or os.getenv("GLM_BASE_URL", "https://open.bigmodel.cn/api/paas/v4")
+        self.base_url = base_url or os.getenv("GLM_BASE_URL", "https://api.z.ai/api/paas/v4/")
 
         if not self.api_key:
             raise ValueError("GLM_API_KEY が設定されていません")
@@ -176,14 +176,14 @@ class GLMClient:
                         })
 
             # コンテキスト付きの質問を追加
-            context_message = f"""以下の文字起こしテキストを参照して、質問に答えてください:
+            context_message = f"""请根据以下转录文本内容回答问题：
 
 ---
-文字起こし:
+转录内容:
 {transcription_context}
 ---
 
-質問: {question}"""
+问题: {question}"""
 
             messages.append({
                 "role": "user",
@@ -222,6 +222,98 @@ class GLMClient:
             import traceback
             logger.error(f"[Chat] API error: {str(e)}\n{traceback.format_exc()}")
             raise Exception(f"Chat error: {str(e)}")
+
+    def chat_stream(
+        self,
+        question: str,
+        transcription_context: str,
+        chat_history: list[dict] = None
+    ):
+        """
+        Chat with AI about the transcription (streaming version).
+
+        Yields chunks of the response as they are generated.
+
+        Args:
+            question: User's question
+            transcription_context: The transcription text to use as context
+            chat_history: Previous chat messages [{"role": "user", "content": "..."}, ...]
+
+        Yields:
+            str: SSE-formatted chunks of the response
+        """
+        import time
+        import json
+
+        logger.info(f"[GLM.chat_stream] Starting stream chat with question: {question[:50]}...")
+        system_prompt = self._get_chat_system_prompt()
+
+        start_time = time.time()
+
+        try:
+            # メッセージリストを構築
+            messages = [
+                {"role": "system", "content": system_prompt}
+            ]
+
+            # チャット履歴を追加（最大10件）
+            if chat_history:
+                for msg in chat_history[-10:]:
+                    if msg["role"] in ["user", "assistant"]:
+                        messages.append({
+                            "role": msg["role"],
+                            "content": msg["content"]
+                        })
+
+            # コンテキスト付きの質問を追加
+            context_message = f"""请根据以下转录文本内容回答问题：
+
+---
+转录内容:
+{transcription_context}
+---
+
+问题: {question}"""
+
+            messages.append({
+                "role": "user",
+                "content": context_message
+            })
+
+            logger.info(f"[ChatStream] Calling GLM API with model: {self.model}, messages count: {len(messages)}")
+
+            # GLM APIでチャット（ストリーミング）
+            # Note: OpenAI SDK's stream=True returns a sync iterator
+            stream = self.client.chat.completions.create(
+                model=self.model,
+                messages=messages,
+                temperature=0.7,
+                max_tokens=2000,
+                stream=True,
+            )
+
+            full_response = ""
+            chunk_count = 0
+            for chunk in stream:
+                chunk_count += 1
+                if chunk.choices and chunk.choices[0].delta.content:
+                    content = chunk.choices[0].delta.content
+                    full_response += content
+                    chunk_time_ms = (time.time() - start_time) * 1000
+                    logger.debug(f"[ChatStream] Chunk #{chunk_count} at {chunk_time_ms:.0f}ms: {repr(content[:50])}")
+                    # Yield each chunk as SSE format immediately
+                    yield f"data: {json.dumps({'content': content, 'done': False})}\n\n"
+
+            # Send completion signal
+            response_time_ms = (time.time() - start_time) * 1000
+            logger.info(f"[ChatStream] Stream complete ({chunk_count} chunks, {len(full_response)} chars, {response_time_ms:.0f}ms)")
+            yield f"data: {json.dumps({'content': '', 'done': True, 'response_time_ms': response_time_ms})}\n\n"
+
+        except Exception as e:
+            import traceback
+            logger.error(f"[ChatStream] API error: {str(e)}\n{traceback.format_exc()}")
+            # Send error through stream
+            yield f"data: {json.dumps({'error': str(e), 'done': True})}\n\n"
 
     def _get_system_prompt_by_language(self) -> str:
         """
@@ -284,14 +376,13 @@ Please use concise and easy-to-understand language, and make good use of bullet 
     def _get_chat_system_prompt(self) -> str:
         """Get system prompt for chat Q&A."""
         if self.review_language == "zh":
-            return """你是一个专业的问答助手。
-你的任务是基于提供的文字起こしテキスト（转录文本）来回答用户的问题。
+            return """你是一个专业的问答助手，专门基于转录文本内容回答用户的问题。
 
-请注意：
-1. 仅根据提供的转录文本回答问题，不要添加外部信息
-2. 如果转录文本中没有相关信息，请明确告知
-3. 使用简洁明了的语言
-4. 如果是中文问题，用中文回答；如果是日文问题，用日文回答；如果是英文问题，用英文回答
+重要规则：
+1. 只能根据提供的转录文本回答问题，绝对不要添加任何外部信息
+2. 如果转录文本中没有相关信息，必须明确告知用户"转录文本中没有提到这个内容"
+3. 使用简洁明了的中文回答
+4. 保持回答的准确性和客观性
 """
 
         elif self.review_language == "ja":
@@ -331,7 +422,7 @@ def get_glm_client() -> GLMClient:
     global glm_client
     if glm_client is None:
         api_key = os.getenv("GLM_API_KEY")
-        base_url = os.getenv("GLM_BASE_URL", "https://open.bigmodel.cn/api/paas/v4")
+        base_url = os.getenv("GLM_BASE_URL", "https://api.z.ai/api/paas/v4/")
         model = os.getenv("GLM_MODEL", "GLM-4.5-Air")
         review_language = os.getenv("REVIEW_LANGUAGE", "zh")
         glm_client = GLMClient(

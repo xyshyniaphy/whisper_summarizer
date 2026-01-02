@@ -144,6 +144,88 @@ export const api = {
     return response.data;
   },
 
+  sendChatMessageStream: async (
+    transcriptionId: string,
+    content: string,
+    onChunk: (chunk: string) => void,
+    onError?: (error: string) => void,
+    onComplete?: () => void
+  ): Promise<void> => {
+    console.log('[API] Starting stream chat:', { transcriptionId, content });
+
+    // Get current session from Supabase
+    const { data: { session } } = await supabase.auth.getSession();
+
+    const response = await fetch(`${API_URL}/transcriptions/${transcriptionId}/chat/stream`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session?.access_token || ''}`,
+      },
+      body: JSON.stringify({ content }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Stream error: ${response.status} ${response.statusText}`);
+    }
+
+    const reader = response.body?.getReader();
+    if (!reader) {
+      throw new Error('No response body');
+    }
+
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+
+        if (done) {
+          console.log('[API] Stream complete');
+          onComplete?.();
+          break;
+        }
+
+        // Decode the chunk and add to buffer
+        buffer += decoder.decode(value, { stream: true });
+
+        // Process complete SSE messages
+        const lines = buffer.split('\n\n');
+        buffer = lines.pop() || ''; // Keep incomplete line in buffer
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const jsonStr = line.slice(6);
+            try {
+              const data = JSON.parse(jsonStr);
+
+              if (data.error) {
+                console.error('[API] Stream error:', data.error);
+                onError?.(data.error);
+                return;
+              }
+
+              if (data.content && !data.done) {
+                onChunk(data.content);
+              }
+
+              if (data.done) {
+                console.log('[API] Stream done signal received');
+                onComplete?.();
+                return;
+              }
+            } catch (e) {
+              console.error('[API] Failed to parse SSE data:', jsonStr, e);
+            }
+          }
+        }
+      }
+    } finally {
+      reader.releaseLock();
+    }
+  },
+
   // Share endpoints
   createShareLink: async (transcriptionId: string): Promise<{
     id: string;

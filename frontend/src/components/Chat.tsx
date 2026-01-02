@@ -5,8 +5,9 @@
  */
 
 import { useState, useEffect, useRef } from 'react'
-import { Send, Loader2 } from 'lucide-react'
+import { Send, Loader2, ChevronDown, Brain } from 'lucide-react'
 import { api } from '../services/api'
+import { cn } from '../utils/cn'
 
 export interface ChatMessage {
   id: string
@@ -25,6 +26,8 @@ export function Chat({ transcriptionId, disabled = false }: ChatProps) {
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [isInitialLoading, setIsInitialLoading] = useState(true)
+  const [isThinking, setIsThinking] = useState(false)
+  const [thinkingCollapsed, setThinkingCollapsed] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   // Load chat history on mount
@@ -64,6 +67,8 @@ export function Chat({ transcriptionId, disabled = false }: ChatProps) {
     console.log('[Chat] User message:', userMessage)
     setInput('')
     setIsLoading(true)
+    setIsThinking(true)
+    setThinkingCollapsed(false)
 
     // Optimistically add user message to the list immediately
     const tempUserMessage: ChatMessage = {
@@ -74,18 +79,63 @@ export function Chat({ transcriptionId, disabled = false }: ChatProps) {
     }
     setMessages(prev => [...prev, tempUserMessage])
 
-    try {
-      console.log('[Chat] Sending chat message to API...')
-      const response = await api.sendChatMessage(transcriptionId, userMessage)
-      console.log('[Chat] Chat response received:', response)
+    // Create a placeholder assistant message that will be updated with streamed content
+    const tempAssistantId = `temp-assistant-${Date.now()}`
+    setMessages(prev => [...prev, {
+      id: tempAssistantId,
+      role: 'assistant',
+      content: '',
+      created_at: new Date().toISOString()
+    }])
 
-      // Keep the temp user message (same content as what was saved to DB)
-      // and add the assistant's response
-      setMessages(prev => [...prev, response])
+    try {
+      console.log('[Chat] Sending chat message to streaming API...')
+      let fullContent = ''
+      let firstChunkReceived = false
+
+      await api.sendChatMessageStream(
+        transcriptionId,
+        userMessage,
+        // onChunk - update the assistant message progressively
+        (chunk: string) => {
+          // Stop thinking indicator when first chunk arrives
+          if (!firstChunkReceived) {
+            firstChunkReceived = true
+            setIsThinking(false)
+            setThinkingCollapsed(true) // Auto-collapse thinking section
+          }
+
+          fullContent += chunk
+          setMessages(prev => prev.map(msg =>
+            msg.id === tempAssistantId
+              ? { ...msg, content: fullContent }
+              : msg
+          ))
+        },
+        // onError
+        (error: string) => {
+          console.error('[Chat] Stream error:', error)
+          setIsThinking(false)
+          setMessages(prev => prev.map(msg =>
+            msg.id === tempAssistantId
+              ? { ...msg, content: '抱歉，AI回复失败，请稍后再试。' }
+              : msg
+          ))
+        },
+        // onComplete
+        () => {
+          console.log('[Chat] Stream complete, reloading history to get saved messages')
+          setIsThinking(false)
+          // Reload chat history to get the actual saved messages with real IDs
+          loadChatHistory()
+        }
+      )
+
     } catch (error) {
       console.error('[Chat] Failed to send message:', error)
-      // Remove the temp user message on error
-      setMessages(prev => prev.filter(m => m.id !== tempUserMessage.id))
+      setIsThinking(false)
+      // Remove both temp messages on error
+      setMessages(prev => prev.filter(m => m.id !== tempUserMessage.id && m.id !== tempAssistantId))
       // Re-add input on error
       setInput(userMessage)
     } finally {
@@ -129,13 +179,50 @@ export function Chat({ transcriptionId, disabled = false }: ChatProps) {
             </div>
           ))
         )}
-        {isLoading && (
+
+        {/* Collapsible Thinking Section */}
+        {isThinking && (
           <div className="flex justify-start">
-            <div className="bg-gray-200 dark:bg-gray-700 rounded-lg px-4 py-2">
-              <Loader2 className="w-4 h-4 text-gray-500 dark:text-gray-400 animate-spin" />
+            <div className="max-w-[80%] w-full">
+              <div className="border border-purple-200 dark:border-purple-800 rounded-lg overflow-hidden bg-purple-50 dark:bg-purple-900/20">
+                {/* Thinking Header */}
+                <button
+                  onClick={() => setThinkingCollapsed(!thinkingCollapsed)}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-purple-100 dark:hover:bg-purple-900/30 transition-colors"
+                  aria-expanded={!thinkingCollapsed}
+                >
+                  <Brain className="w-4 h-4 text-purple-600 dark:text-purple-400 flex-shrink-0" />
+                  <span className="text-sm font-medium text-purple-700 dark:text-purple-300">
+                    AI 正在思考...
+                  </span>
+                  <ChevronDown
+                    className={cn(
+                      "w-4 h-4 text-purple-600 dark:text-purple-400 ml-auto transition-transform flex-shrink-0",
+                      !thinkingCollapsed && "rotate-180"
+                    )}
+                  />
+                </button>
+
+                {/* Thinking Content */}
+                {!thinkingCollapsed && (
+                  <div className="px-3 py-2 pt-0 border-t border-purple-200 dark:border-purple-800">
+                    <div className="flex items-center gap-2 text-sm text-purple-600 dark:text-purple-400">
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>正在分析转录内容并生成回复...</span>
+                    </div>
+                    {/* Animated dots */}
+                    <div className="flex gap-1 mt-2 ml-6">
+                      <span className="w-2 h-2 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                      <span className="w-2 h-2 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                      <span className="w-2 h-2 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         )}
+
         <div ref={messagesEndRef} />
       </div>
 

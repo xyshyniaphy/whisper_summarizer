@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from pathlib import Path
@@ -1024,6 +1024,141 @@ async def send_chat_message(
     logger.info(f"[Chat] Saved assistant message: {assistant_message.id}")
 
     return assistant_message
+
+
+@router.post("/{transcription_id}/chat/stream")
+async def send_chat_message_stream(
+    transcription_id: str,
+    message: dict,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_active_user)
+):
+    """
+    发送聊天消息并获取AI回复（流式输出）
+
+    使用Server-Sent Events (SSE)流式返回AI响应。
+    """
+    logger.info(f"[ChatStream] Received message for transcription {transcription_id}: {message}")
+
+    try:
+        transcription_uuid = UUID(transcription_id)
+    except ValueError:
+        logger.error(f"[ChatStream] Invalid UUID format: {transcription_id}")
+        raise HTTPException(status_code=422, detail="Invalid transcription ID format")
+
+    # Verify ownership
+    transcription = db.query(Transcription).filter(
+        Transcription.id == transcription_uuid,
+        Transcription.user_id == current_user.get("id")
+    ).first()
+
+    if not transcription:
+        logger.warning(f"[ChatStream] Transcription not found or access denied: {transcription_uuid}")
+        raise HTTPException(status_code=404, detail="未找到转录")
+
+    user_content = message.get("content")
+    if not user_content:
+        logger.warning("[ChatStream] Empty content received")
+        raise HTTPException(status_code=400, detail="消息内容不能为空")
+
+    logger.info(f"[ChatStream] Processing user message: {user_content[:100]}...")
+
+    # Save user message immediately
+    user_message = ChatMessage(
+        transcription_id=transcription_uuid,
+        user_id=current_user.get("id"),
+        role="user",
+        content=user_content
+    )
+    db.add(user_message)
+    db.commit()
+    db.refresh(user_message)
+    logger.info(f"[ChatStream] Saved user message: {user_message.id}")
+
+    # Get chat history for context
+    history = db.query(ChatMessage).filter(
+        ChatMessage.transcription_id == transcription_uuid
+    ).order_by(ChatMessage.created_at).all()
+
+    chat_history = [
+        {"role": msg.role, "content": msg.content}
+        for msg in history[:-1]  # Exclude the message we just added
+    ]
+    logger.info(f"[ChatStream] Chat history length: {len(chat_history)}")
+
+    # Get transcription text for context
+    transcription_text = transcription.text
+    logger.info(f"[ChatStream] Transcription text length: {len(transcription_text)} chars")
+
+    async def stream_generator():
+        """Async generator wrapper for streaming response."""
+        from app.core.glm import get_glm_client
+
+        glm_client = get_glm_client()
+        full_response = ""
+
+        try:
+            logger.info("[ChatStream] Starting stream from GLM API...")
+
+            # chat_stream is a sync generator, iterate with regular for loop
+            for chunk in glm_client.chat_stream(
+                question=user_content,
+                transcription_context=transcription_text,
+                chat_history=chat_history
+            ):
+                # Yield each chunk immediately
+                yield chunk
+
+                # Parse the chunk to accumulate full response
+                # Format: "data: {json}\n\n"
+                if chunk.startswith("data: "):
+                    json_str = chunk[6:].strip()  # Remove "data: " prefix
+                    if json_str:
+                        try:
+                            import json
+                            data = json.loads(json_str)
+                            if "content" in data and not data.get("done"):
+                                full_response += data["content"]
+                        except json.JSONDecodeError:
+                            pass
+
+            # Save assistant message after stream completes
+            logger.info(f"[ChatStream] Stream complete, saving assistant message (length: {len(full_response)})")
+            assistant_message = ChatMessage(
+                transcription_id=transcription_uuid,
+                user_id=current_user.get("id"),
+                role="assistant",
+                content=full_response
+            )
+            db.add(assistant_message)
+            db.commit()
+            logger.info(f"[ChatStream] Saved assistant message: {assistant_message.id}")
+
+        except Exception as e:
+            logger.error(f"[ChatStream] Stream error: {e}", exc_info=True)
+            # Send error through stream
+            import json
+            yield f"data: {json.dumps({'error': str(e), 'done': True})}\n\n"
+
+            # Save error message
+            assistant_message = ChatMessage(
+                transcription_id=transcription_uuid,
+                user_id=current_user.get("id"),
+                role="assistant",
+                content="抱歉，AI回复失败，请稍后再试。"
+            )
+            db.add(assistant_message)
+            db.commit()
+
+    return StreamingResponse(
+        stream_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",  # Disable nginx buffering
+        }
+    )
 
 
 # ==================== Share Link Endpoints ====================

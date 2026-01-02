@@ -263,4 +263,122 @@ describe('API Service', () => {
       const { api: apiWithError } = require('../../../src/services/api')
     })
   })
+
+  describe('sendChatMessageStream', () => {
+    it('streams chat response using fetch API', async () => {
+      const mockChunks = ['Hello', ' there', '!']
+      let chunkIndex = 0
+
+      // Mock fetch to return SSE stream
+      global.fetch = vi.fn(() =>
+        Promise.resolve({
+          ok: true,
+          body: {
+            getReader: () => ({
+              read: async () => {
+                if (chunkIndex < mockChunks.length) {
+                  const chunk = mockChunks[chunkIndex++]
+                  const encoder = new TextEncoder()
+                  return {
+                    done: false,
+                    value: encoder.encode('data: ' + JSON.stringify({ content: chunk, done: false }) + '\\n\\n')
+                  }
+                } else {
+                  return { done: true, value: new Uint8Array() }
+                }
+              },
+              releaseLock: vi.fn()
+            })
+          }
+        } as Response)
+      )
+
+      const onChunk = vi.fn()
+      const onError = vi.fn()
+      const onComplete = vi.fn()
+
+      await api.sendChatMessageStream('transcription-123', 'Test question', onChunk, onError, onComplete)
+
+      expect(onChunk).toHaveBeenCalledWith('Hello')
+      expect(onChunk).toHaveBeenCalledWith(' there')
+      expect(onChunk).toHaveBeenCalledWith('!')
+      expect(onComplete).toHaveBeenCalled()
+    })
+
+    it('handles stream errors gracefully', async () => {
+      global.fetch = vi.fn(() =>
+        Promise.resolve({
+          ok: true,
+          body: {
+            getReader: () => ({
+              read: async () => {
+                const encoder = new TextEncoder()
+                return {
+                  done: false,
+                  value: encoder.encode('data: ' + JSON.stringify({ error: 'API error', done: true }) + '\\n\\n')
+                }
+              },
+              releaseLock: vi.fn()
+            })
+          }
+        } as Response)
+      )
+
+      const onChunk = vi.fn()
+      const onError = vi.fn()
+      const onComplete = vi.fn()
+
+      await api.sendChatMessageStream('transcription-123', 'Test', onChunk, onError, onComplete)
+
+      expect(onError).toHaveBeenCalledWith('API error')
+    })
+
+    it('includes authorization header', async () => {
+      global.fetch = vi.fn(() =>
+        Promise.resolve({
+          ok: true,
+          body: {
+            getReader: () => ({
+              read: async () => ({ done: true, value: new Uint8Array() }),
+              releaseLock: vi.fn()
+            })
+          }
+        } as Response)
+      )
+
+      await api.sendChatMessageStream('test-id', 'Hello', vi.fn(), vi.fn(), vi.fn())
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            'Authorization': expect.stringContaining('Bearer')
+          })
+        })
+      )
+    })
+
+    it('sends request body with content', async () => {
+      global.fetch = vi.fn(() =>
+        Promise.resolve({
+          ok: true,
+          body: {
+            getReader: () => ({
+              read: async () => ({ done: true, value: new Uint8Array() }),
+              releaseLock: vi.fn()
+            })
+          }
+        } as Response)
+      )
+
+      await api.sendChatMessageStream('test-id', 'My question', vi.fn(), vi.fn(), vi.fn())
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          body: expect.stringContaining('My question')
+        })
+      )
+    })
+  })
 })
