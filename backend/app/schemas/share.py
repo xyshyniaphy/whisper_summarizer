@@ -27,8 +27,7 @@ class SharedTranscriptionResponse(BaseModel):
     """Response for shared transcription access (no auth required)."""
     id: UUID4
     file_name: str
-    text: str  # Original transcription text
-    formatted_text: str  # AI-formatted transcription text (with punctuation and paragraphs)
+    text: str  # AI-formatted transcription text (with punctuation and paragraphs)
     summary: Optional[str] = None  # AI summary
     language: Optional[str] = None
     duration_seconds: Optional[float] = None

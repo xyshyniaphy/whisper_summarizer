@@ -59,7 +59,6 @@ async def get_shared_transcription(
         id=transcription.id,
         file_name=transcription.file_name,
         text=transcription.text,
-        formatted_text=transcription.formatted_text,
         summary=summary,
         language=transcription.language,
         duration_seconds=transcription.duration_seconds,

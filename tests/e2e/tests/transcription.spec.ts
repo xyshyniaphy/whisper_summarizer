@@ -60,10 +60,8 @@ test.describe('文字起こしフロー', () => {
         }
     });
 
-    // ログイン
-    await page.fill('input[type="email"]', 'test@example.com')
-    await page.fill('input[type="password"]', 'password123')
-    await page.click('button[type="submit"]')
+    // E2EテストモードでGoogle OAuthログインをモック
+    await page.click('button:has-text("使用 Google 继续")')
     await expect(page).toHaveURL(/\/transcriptions/)
   })
 

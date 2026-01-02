@@ -489,8 +489,8 @@ class TranscriptionProcessor:
         from app.services.storage_service import get_storage_service
         from app.services.formatting_service import get_formatting_service
 
-        # Get original text
-        text = transcription.text
+        # Get original text (unformatted) for processing
+        text = transcription.original_text
         if not text or len(text.strip()) < 50:
             logger.info(f"Text too short to format ({len(text)} chars), skipping")
             return

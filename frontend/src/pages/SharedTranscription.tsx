@@ -19,8 +19,7 @@ import { MarkdownRenderer } from '../components/MarkdownRenderer'
 interface SharedTranscriptionData {
     id: string
     file_name: string
-    text: string
-    formatted_text: string  // AI-formatted transcription text
+    text: string  // AI-formatted transcription text
     summary: string | null
     language: string | null
     duration_seconds: number | null
@@ -287,8 +286,8 @@ export function SharedTranscription() {
         )
     }
 
-    // Use AI-formatted text if available, otherwise fall back to original text
-    const displayText = (data.formatted_text || data.text) ? getDisplayText(data.formatted_text || data.text, 100) : ''
+    // Display AI-formatted transcription text (already formatted by backend)
+    const displayText = data.text ? getDisplayText(data.text, 100) : ''
 
     // Format duration as MM:SS
     const formatDuration = (seconds: number) => {

@@ -45,8 +45,7 @@ class TranscriptionInDBBase(TranscriptionBase):
 
 class Transcription(TranscriptionInDBBase):
     summaries: List[Summary] = []
-    text: str = ""  # Transcription text (decompressed from storage)
-    formatted_text: str = ""  # AI-formatted transcription text (with punctuation and paragraphs)
+    text: str = ""  # Transcription text (AI-formatted with punctuation, falls back to original)
     time_remaining: Optional[timedelta] = None  # Time until auto-deletion (calculated)
 
     @field_serializer('time_remaining')

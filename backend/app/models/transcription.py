@@ -39,12 +39,13 @@ class Transcription(Base):
     share_links = relationship("ShareLink", back_populates="transcription", passive_deletes=True)
 
     @property
-    def text(self) -> str:
+    def original_text(self) -> str:
         """
-        Get the decompressed transcription text from local filesystem.
+        Get the original unformatted transcription text from local filesystem.
 
-        The text is stored as a gzip-compressed file in /app/data/transcribes/.
-        This property reads and decompresses it on demand.
+        This reads from {uuid}.txt.gz which contains the raw Whisper output
+        without AI formatting. Use this for operations that need original text
+        (e.g., re-formatting, timestamp-based operations).
         """
         if not self.storage_path:
             return ""
@@ -55,29 +56,31 @@ class Transcription(Base):
             return storage_service.get_transcription_text(str(self.id))
         except Exception as e:
             import logging
-            logging.getLogger(__name__).error(f"Failed to load transcription text from storage: {e}")
+            logging.getLogger(__name__).error(f"Failed to load original transcription text from storage: {e}")
             return ""
 
     @property
-    def formatted_text(self) -> str:
+    def text(self) -> str:
         """
-        Get the AI-formatted transcription text from local filesystem.
+        Get the transcription text, preferring AI-formatted version.
 
-        Returns the formatted text with punctuation and paragraphs added by the LLM.
+        Returns formatted text with punctuation and paragraphs added by the LLM.
         Falls back to original text if formatted version doesn't exist.
+
+        This is the default property for displaying transcription content.
         """
         try:
             from app.services.storage_service import get_storage_service
             storage_service = get_storage_service()
+            # Try formatted text first
             if storage_service.formatted_text_exists(str(self.id)):
                 return storage_service.get_formatted_text(str(self.id))
-            # Fall back to original text if formatted version doesn't exist
-            return self.text
+            # Fall back to original text
+            return storage_service.get_transcription_text(str(self.id))
         except Exception as e:
             import logging
-            logging.getLogger(__name__).error(f"Failed to load formatted text from storage: {e}")
-            # Fall back to original text on error
-            return self.text
+            logging.getLogger(__name__).error(f"Failed to load transcription text from storage: {e}")
+            return ""
 
     @property
     def time_remaining(self) -> timedelta:
