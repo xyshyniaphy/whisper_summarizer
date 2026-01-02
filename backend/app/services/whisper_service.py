@@ -881,15 +881,19 @@ class TranscribeService:
     ) -> Dict[str, any]:
         """
         Simple timestamp-based merging (may have duplicates at boundaries).
-        Optimized for large files - skips segment processing to avoid O(n²) complexity.
-
+        
+        Collects all segments from chunks - timestamps are already offset.
+        May have duplicates at overlap boundaries, but provides complete segment data
+        for SRT subtitle generation.
+        
         Args:
             chunks_results: List of chunk transcriptions
 
         Returns:
-            Merged transcription
+            Merged transcription with segments
         """
         merged_text = []
+        merged_segments = []
 
         for i, chunk in enumerate(chunks_results):
             if "error" in chunk:
@@ -901,12 +905,18 @@ class TranscribeService:
                 merged_text.append(" ")
             if chunk.get("text"):
                 merged_text.append(chunk["text"])
+            
+            # Collect segments with proper timestamps (already offset by _transcribe_chunk)
+            chunk_segments = chunk.get("segments", [])
+            if chunk_segments:
+                merged_segments.extend(chunk_segments)
+                logger.debug(f"Added {len(chunk_segments)} segments from chunk {i}")
 
-        # Skip segment processing for large files - it's too slow
-        # Segments are only needed for subtitle files, not for summarization
+        logger.info(f"Merged {len(merged_segments)} total segments from {len(chunks_results)} chunks")
+        
         return {
             "text": "".join(merged_text).strip(),
-            "segments": [],  # Empty segments for performance
+            "segments": merged_segments,
             "language": self.language
         }
 
