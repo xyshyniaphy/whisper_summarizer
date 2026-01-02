@@ -165,53 +165,6 @@ describe('API Service', () => {
         responseType: 'blob'
       })
     })
-
-    it('PPTXフォーマットもダウンロードできる', async () => {
-      const mockBlob = new Blob(['pptx content'])
-      const mockGet = vi.fn().mockResolvedValue({ data: mockBlob })
-
-      vi.mocked(axios.create).mockReturnValue({
-        get: mockGet
-      } as any)
-
-      await api.downloadFile('123', 'pptx')
-
-      expect(mockGet).toHaveBeenCalledWith('/transcriptions/123/download?format=pptx', {
-        responseType: 'blob'
-      })
-    })
-  })
-
-  describe('generatePptx', () => {
-    it('PPTX生成をリクエストできる', async () => {
-      const mockResponse = { status: 'generating', message: 'Generating PPTX' }
-      const mockPost = vi.fn().mockResolvedValue({ data: mockResponse })
-
-      vi.mocked(axios.create).mockReturnValue({
-        post: mockPost
-      } as any)
-
-      const result = await api.generatePptx('123')
-
-      expect(result).toEqual(mockResponse)
-      expect(mockPost).toHaveBeenCalledWith('/transcriptions/123/generate-pptx')
-    })
-  })
-
-  describe('getPptxStatus', () => {
-    it('PPTXステータスを取得できる', async () => {
-      const mockResponse = { status: 'ready', exists: true }
-      const mockGet = vi.fn().mockResolvedValue({ data: mockResponse })
-
-      vi.mocked(axios.create).mockReturnValue({
-        get: mockGet
-      } as any)
-
-      const result = await api.getPptxStatus('123')
-
-      expect(result).toEqual(mockResponse)
-      expect(mockGet).toHaveBeenCalledWith('/transcriptions/123/pptx-status')
-    })
   })
 
   describe('Request Interceptor', () => {

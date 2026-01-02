@@ -89,26 +89,6 @@ export function TranscriptionDetail() {
     const [shareCopied, setShareCopied] = useState(false)
     const [shareLoading, setShareLoading] = useState(false)
 
-    // PPTX generation state
-    type PptxStatus = 'not-started' | 'generating' | 'ready' | 'error'
-    const [pptxStatus, setPptxStatus] = useState<PptxStatus>('not-started')
-    const pptxPollingRef = useRef(false)
-
-    // Check PPTX status
-    const checkPptxStatus = useCallback(async (transcriptionId: string) => {
-        if (pptxPollingRef.current) return
-        pptxPollingRef.current = true
-
-        try {
-            const result = await api.getPptxStatus(transcriptionId)
-            setPptxStatus(result.exists ? 'ready' : 'not-started')
-        } catch (e) {
-            console.error('Failed to check PPTX status:', e)
-        } finally {
-            pptxPollingRef.current = false
-        }
-    }, [])
-
     const loadTranscription = useCallback(async (transcriptionId: string) => {
         // Prevent duplicate calls (React 18 StrictMode)
         if (isLoadingRef.current) return
@@ -122,52 +102,13 @@ export function TranscriptionDetail() {
             if (data.summaries && data.summaries.length > 0) {
                 setSummary(data.summaries[0])
             }
-
-            // Check PPTX status when loading transcription
-            checkPptxStatus(transcriptionId)
         } catch (e) {
             console.error(e)
         } finally {
             setLoading(false)
             isLoadingRef.current = false
         }
-    }, [checkPptxStatus])
-
-    // Generate PPTX
-    const handleGeneratePptx = async () => {
-        if (!id) return
-
-        try {
-            const result = await api.generatePptx(id)
-            if (result.status === 'ready') {
-                setPptxStatus('ready')
-            } else if (result.status === 'generating') {
-                setPptxStatus('generating')
-            }
-        } catch (e) {
-            console.error('Failed to generate PPTX:', e)
-            setPptxStatus('error')
-        }
-    }
-
-    // Download PPTX
-    const handleDownloadPptx = async () => {
-        if (!id) return
-
-        try {
-            const blob = await api.downloadFile(id, 'pptx')
-            const link = document.createElement('a')
-            link.href = URL.createObjectURL(blob)
-            link.download = `${transcription?.file_name.replace(/\.[^/.]+$/, '')}.pptx`
-            document.body.appendChild(link)
-            link.click()
-            document.body.removeChild(link)
-            URL.revokeObjectURL(link.href)
-        } catch (error) {
-            console.error('PPTX download failed:', error)
-            alert('PPTX下载失败')
-        }
-    }
+    }, [])
 
     useEffect(() => {
         if (id) {
@@ -189,19 +130,6 @@ export function TranscriptionDetail() {
 
         return () => clearInterval(interval)
     }, [transcription, id, loadTranscription])
-
-    // Poll for PPTX status when generating
-    useEffect(() => {
-        if (pptxStatus !== 'generating' || !id) {
-            return
-        }
-
-        const interval = setInterval(() => {
-            checkPptxStatus(id)
-        }, 30000) // Poll every 30 seconds
-
-        return () => clearInterval(interval)
-    }, [pptxStatus, id, checkPptxStatus])
 
     if (loading) {
         return (
@@ -403,43 +331,6 @@ export function TranscriptionDetail() {
                                     <File className="w-4 h-4" />
                                     下载DOCX
                                 </button>
-                                {/* PPTX button */}
-                                {pptxStatus === 'ready' ? (
-                                    <button
-                                        onClick={() => handleDownloadPptx()}
-                                        className="inline-flex items-center gap-1 px-3 py-1.5 text-sm bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-lg hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-colors"
-                                        title="下载PowerPoint演示文稿"
-                                    >
-                                        <FileText className="w-4 h-4" />
-                                        下载PPT
-                                    </button>
-                                ) : pptxStatus === 'generating' ? (
-                                    <button
-                                        disabled
-                                        className="inline-flex items-center gap-1 px-3 py-1.5 text-sm bg-gray-100 dark:bg-gray-800 text-gray-500 rounded-lg cursor-not-allowed"
-                                    >
-                                        <Loader2 className="w-4 h-4 animate-spin" />
-                                        生成中...
-                                    </button>
-                                ) : pptxStatus === 'error' ? (
-                                    <button
-                                        onClick={() => handleGeneratePptx()}
-                                        className="inline-flex items-center gap-1 px-3 py-1.5 text-sm bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 rounded-lg hover:bg-red-200 dark:hover:bg-red-900/50 transition-colors"
-                                        title="重试生成PowerPoint演示文稿"
-                                    >
-                                        <FileText className="w-4 h-4" />
-                                        重试生成PPT
-                                    </button>
-                                ) : (
-                                    <button
-                                        onClick={() => handleGeneratePptx()}
-                                        className="inline-flex items-center gap-1 px-3 py-1.5 text-sm bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-lg hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-colors"
-                                        title="生成PowerPoint演示文稿"
-                                    >
-                                        <FileText className="w-4 h-4" />
-                                        生成PPT
-                                    </button>
-                                )}
                             </div>
                         )
                     }

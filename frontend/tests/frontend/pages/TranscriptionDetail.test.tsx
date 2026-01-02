@@ -2,7 +2,7 @@
  * TranscriptionDetailページのテスト
  *
  * 転写詳細表示、要約表示、ダウンロード機能、
- * PPTX生成、ポーリングをテストする。
+ * ポーリングをテストする。
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
@@ -27,15 +27,11 @@ vi.mock('../../../src/services/supabase', () => ({
 // Mock API
 const mockGetTranscription = vi.fn()
 const mockDownloadFile = vi.fn()
-const mockGeneratePptx = vi.fn()
-const mockGetPptxStatus = vi.fn()
 
 vi.mock('../../../src/services/api', () => ({
   api: {
     getTranscription: (id: string) => mockGetTranscription(id),
     downloadFile: (id: string, format: string) => mockDownloadFile(id, format),
-    generatePptx: (id: string) => mockGeneratePptx(id),
-    getPptxStatus: (id: string) => mockGetPptxStatus(id),
     getDownloadUrl: (id: string, format: string) => `/api/transcriptions/${id}/download?format=${format}`
   }
 }))
@@ -104,8 +100,6 @@ describe('TranscriptionDetail', () => {
     vi.useFakeTimers()
     mockGetTranscription.mockResolvedValue(mockTranscription)
     mockDownloadFile.mockResolvedValue(new Blob(['test content']))
-    mockGeneratePptx.mockResolvedValue({ status: 'generating' })
-    mockGetPptxStatus.mockResolvedValue({ status: 'ready', exists: true })
   })
 
   afterEach(() => {
@@ -253,52 +247,6 @@ describe('TranscriptionDetail', () => {
 
       await waitFor(() => {
         expect(mockDownloadFile).toHaveBeenCalledWith('test-1', 'srt')
-      })
-    })
-  })
-
-  describe('PPTX Functionality', () => {
-    it('PPTX生成ボタンが表示される', async () => {
-      mockGetPptxStatus.mockResolvedValue({ status: 'not-started', exists: false })
-      renderWithRoute('test-1')
-
-      await waitFor(() => {
-        expect(screen.getByText('生成PPT')).toBeTruthy()
-      })
-    })
-
-    it('PPTXが準備完了の場合、ダウンロードボタンが表示される', async () => {
-      renderWithRoute('test-1')
-
-      await waitFor(() => {
-        expect(screen.getByText('下载PPT')).toBeTruthy()
-      })
-    })
-
-    it('PPTX生成中の場合、ローディング表示がされる', async () => {
-      mockGetPptxStatus.mockResolvedValue({ status: 'generating', exists: false })
-      mockGeneratePptx.mockResolvedValue({ status: 'generating', message: 'Generating' })
-      renderWithRoute('test-1')
-
-      await waitFor(() => {
-        expect(screen.getByText(/生成中/)).toBeTruthy()
-      })
-    })
-
-    it('PPTX生成をクリックするとAPIが呼ばれる', async () => {
-      mockGetPptxStatus.mockResolvedValue({ status: 'not-started', exists: false })
-      const user = userEvent.setup()
-      renderWithRoute('test-1')
-
-      await waitFor(() => {
-        expect(screen.getByText('生成PPT')).toBeTruthy()
-      })
-
-      const generateButton = screen.getByText('生成PPT')
-      await user.click(generateButton)
-
-      await waitFor(() => {
-        expect(mockGeneratePptx).toHaveBeenCalledWith('test-1')
       })
     })
   })

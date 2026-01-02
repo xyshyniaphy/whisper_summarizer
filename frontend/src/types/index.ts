@@ -14,8 +14,6 @@ export interface Transcription {
   updated_at: string;
   time_remaining?: number;  // Seconds remaining before auto-delete (negative if expired)
   summaries?: Summary[];
-  pptx_status?: 'not-started' | 'generating' | 'ready' | 'error';
-  pptx_error_message?: string;
 }
 
 export interface Summary {
