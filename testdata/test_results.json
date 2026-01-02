@@ -1,26 +1,93 @@
 [
   {
-    "file": "2_min.m4a",
-    "description": "2 minutes",
-    "success": false,
-    "error": "upload_failed"
+    "success": true,
+    "total_time": 10.041619777679443,
+    "stages": [
+      "transcribing",
+      "completed"
+    ],
+    "duration_seconds": 20.0,
+    "language": "zh",
+    "text_length": 58,
+    "original_text_length": 0,
+    "storage_path": "229e7a88-f937-4430-af8b-d6c8f729a5dc.txt.gz",
+    "error_message": null,
+    "completed_at": "2026-01-02T02:59:52.985974Z",
+    "overall_time": 10.069275140762329,
+    "storage_files": {
+      "txt.gz": true,
+      "segments.json.gz": true,
+      "original.json.gz": true,
+      "formatted.txt.gz": true
+    }
   },
   {
-    "file": "20_min.m4a",
-    "description": "20 minutes",
-    "success": false,
-    "error": "upload_failed"
+    "success": true,
+    "total_time": 170.42484617233276,
+    "stages": [
+      "transcribing",
+      "summarizing",
+      "completed"
+    ],
+    "duration_seconds": 1220.0,
+    "language": "auto",
+    "text_length": 4715,
+    "original_text_length": 0,
+    "storage_path": "e0ad778c-f99e-4d2e-a3b0-b6450a6e6f1d.txt.gz",
+    "error_message": null,
+    "completed_at": "2026-01-02T03:02:51.317702Z",
+    "overall_time": 170.46693563461304,
+    "storage_files": {
+      "txt.gz": true,
+      "segments.json.gz": true,
+      "original.json.gz": true,
+      "formatted.txt.gz": true
+    }
   },
   {
-    "file": "60_min.m4a",
-    "description": "60 minutes",
-    "success": false,
-    "error": "upload_failed"
+    "success": true,
+    "total_time": 395.97460746765137,
+    "stages": [
+      "transcribing",
+      "summarizing",
+      "completed"
+    ],
+    "duration_seconds": 3620.0,
+    "language": "auto",
+    "text_length": 14305,
+    "original_text_length": 0,
+    "storage_path": "2b820b7f-a8c2-48f0-9bcd-a041d9b88a15.txt.gz",
+    "error_message": null,
+    "completed_at": "2026-01-02T03:09:37.625502Z",
+    "overall_time": 396.07155895233154,
+    "storage_files": {
+      "txt.gz": true,
+      "segments.json.gz": false,
+      "original.json.gz": true,
+      "formatted.txt.gz": true
+    }
   },
   {
-    "file": "210_min.m4a",
-    "description": "210 minutes",
-    "success": false,
-    "error": "upload_failed"
+    "success": true,
+    "total_time": 1243.6524600982666,
+    "stages": [
+      "transcribing",
+      "summarizing",
+      "completed"
+    ],
+    "duration_seconds": 12320.0,
+    "language": "auto",
+    "text_length": 48429,
+    "original_text_length": 0,
+    "storage_path": "084f8f5c-7745-4905-9c61-efa0849ea281.txt.gz",
+    "error_message": null,
+    "completed_at": "2026-01-02T03:30:34.050826Z",
+    "overall_time": 1243.9685459136963,
+    "storage_files": {
+      "txt.gz": true,
+      "segments.json.gz": false,
+      "original.json.gz": true,
+      "formatted.txt.gz": true
+    }
   }
 ]
