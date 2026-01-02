@@ -88,11 +88,11 @@ POSTGRES_PASSWORD=postgres
 CORS_ORIGINS=http://localhost:3000
 
 # faster-whisper設定 (GPU加速)
-FASTER_WHISPER_DEVICE=cuda              # cuda (GPU) または cpu
-FASTER_WHISPER_COMPUTE_TYPE=float16     # float16 (GPU), float32 (GPU), int8 (CPU)
+FASTER_WHISPER_DEVICE=cuda                  # cuda (GPU) または cpu
+FASTER_WHISPER_COMPUTE_TYPE=int8_float16     # int8_float16 (推奨, GPU), float16 (GPU), float32 (GPU), int8 (CPU)
 FASTER_WHISPER_MODEL_SIZE=large-v3-turbo
-WHISPER_LANGUAGE=zh                     # 文字起こし言語 (auto, zh, ja, en 等)
-WHISPER_THREADS=4                       # 処理に使用するスレッド数
+WHISPER_LANGUAGE=zh                         # 文字起こし言語 (auto, zh, ja, en 等)
+WHISPER_THREADS=4                           # 処理に使用するスレッド数
 
 # Audio Chunking (長音声の高速文字起こし)
 ENABLE_CHUNKING=true              # チャンキング機能の有効化
@@ -555,7 +555,8 @@ USE_VAD_SPLIT=true
 **faster-whisper (GPU with cuDNN - RTX 3080 etc.):**
 ```bash
 FASTER_WHISPER_DEVICE=cuda
-FASTER_WHISPER_COMPUTE_TYPE=float16
+FASTER_WHISPER_COMPUTE_TYPE=int8_float16    # 推奨: メモリ効率と精度のバランス
+# または float16 (より高速だがVRAM使用量が増加)
 CHUNK_SIZE_MINUTES=15
 MAX_CONCURRENT_CHUNKS=4-6      # RTX 3080 8GB: 4-6, RTX 3090 10GB+: 6-8
 CHUNK_OVERLAP_SECONDS=15

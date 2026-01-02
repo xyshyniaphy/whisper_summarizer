@@ -247,11 +247,17 @@ docker-compose up -d --build
 **Configure GPU in .env:**
 ```bash
 # GPU configuration (default settings)
-FASTER_WHISPER_DEVICE=cuda              # Use GPU (set to 'cpu' for CPU-only)
-FASTER_WHISPER_COMPUTE_TYPE=float16     # float16 for GPU, int8 for CPU
+FASTER_WHISPER_DEVICE=cuda                  # Use GPU (set to 'cpu' for CPU-only)
+FASTER_WHISPER_COMPUTE_TYPE=int8_float16     # Mixed precision: int8 weights, float16 activations
 FASTER_WHISPER_MODEL_SIZE=large-v3-turbo
 WHISPER_THREADS=4
 ```
+
+**Compute Type Options:**
+- `int8_float16` - **Default (recommended)**: Mixed precision for optimal memory efficiency (~40% VRAM savings)
+- `float16` - Pure 16-bit floating point (fastest, highest accuracy, more VRAM)
+- `float32` - Pure 32-bit floating point (most accurate, slowest, most VRAM)
+- `int8` - 8-bit integer quantization (CPU/low-VRAM mode, lowest accuracy)
 
 **Switch to CPU-only:**
 ```bash
@@ -405,10 +411,10 @@ GLM_BASE_URL=https://api.z.ai/api/paas/v4/
 REVIEW_LANGUAGE=zh    # zh, ja, en
 
 # faster-whisper Configuration
-FASTER_WHISPER_DEVICE=cuda              # cuda (GPU) or cpu
-FASTER_WHISPER_COMPUTE_TYPE=float16     # float16 (GPU), float32 (GPU), int8 (CPU)
+FASTER_WHISPER_DEVICE=cuda                  # cuda (GPU) or cpu
+FASTER_WHISPER_COMPUTE_TYPE=int8_float16     # int8_float16 (default, GPU), float16 (GPU), float32 (GPU), int8 (CPU)
 FASTER_WHISPER_MODEL_SIZE=large-v3-turbo
-WHISPER_LANGUAGE=zh                     # auto, zh, ja, en, etc.
+WHISPER_LANGUAGE=zh                         # auto, zh, ja, en, etc.
 WHISPER_THREADS=4
 
 # Audio Chunking (for faster transcription of long audio)
