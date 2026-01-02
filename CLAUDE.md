@@ -60,6 +60,119 @@ Whisper Summarizer is a web application for audio transcription and AI-powered s
 - **Local filesystem** for transcription text files (`/app/data/transcribes/`, gzip-compressed)
 - **Supabase Auth** for authentication only (no Storage used)
 - **Vite proxy** pattern - Frontend on :3000 proxies `/api/*` to backend:8000
+- **SSE Streaming** - Vite proxy configured to disable buffering for Server-Sent Events
+
+## SSE Streaming Configuration
+
+The application uses Server-Sent Events (SSE) for real-time AI chat responses. Proper configuration is required to prevent buffering in development mode.
+
+### Vite Proxy Configuration
+
+**File:** `frontend/vite.config.ts`
+
+```typescript
+proxy: {
+  '/api': {
+    target: 'http://backend:8000',
+    changeOrigin: true,
+    // Enable WebSocket support (also helps with SSE streaming)
+    ws: true,
+    // Configure proxy to NOT buffer SSE responses
+    configure: (proxy, options) => {
+      proxy.on('proxyRes', (proxyRes: any, req: any, res: any) => {
+        // Disable buffering for SSE endpoints
+        if (req.url?.includes('/chat/stream') ||
+            proxyRes.headers['content-type']?.includes('text/event-stream')) {
+          // Ensure no buffering
+          delete proxyRes.headers['content-length'];
+          // Flush immediately
+          proxyRes.headers['x-accel-buffering'] = 'no';
+          proxyRes.headers['Cache-Control'] = 'no-cache';
+        }
+      });
+    }
+  }
+}
+```
+
+**Why this is needed:**
+- By default, Vite's development proxy buffers responses before forwarding them
+- SSE requires immediate forwarding of chunks for real-time streaming
+- The configuration above disables buffering for `/chat/stream` endpoints
+- Production (static files) doesn't need this - only affects `npm run dev`
+
+### Backend Implementation
+
+**File:** `backend/app/core/glm.py`
+
+The backend uses **httpx** (not OpenAI SDK) for true progressive streaming:
+
+```python
+def chat_stream(self, question: str, transcription_context: str, chat_history: list[dict] = None):
+    """Uses raw HTTP (httpx) for true progressive streaming."""
+    import httpx
+
+    with httpx.Client(timeout=60.0) as client:
+        with client.stream(
+            'POST',
+            f'{self.base_url.rstrip('/')}/chat/completions',
+            headers={
+                'Authorization': f'Bearer {self.api_key}',
+                'Content-Type': 'application/json',
+            },
+            json={
+                'model': self.model,
+                'messages': messages,
+                'stream': True,
+            }
+        ) as response:
+            for line in response.iter_lines():
+                # Process SSE chunks immediately
+                if line_str.startswith('data: '):
+                    yield f"data: {json.dumps({'content': content, 'done': False})}\n\n"
+```
+
+**Key implementation details:**
+- Uses `httpx.Client.stream()` with `iter_lines()` for true progressive streaming
+- Yields SSE-formatted chunks: `data: {"content": "...", "done": false}\n\n`
+- Response includes `Content-Type: text/event-stream; charset=utf-8`
+- Backend adds `x-accel-buffering: no` header to prevent nginx buffering
+
+### Testing SSE Streaming
+
+To verify streaming is working correctly:
+
+```bash
+# Test from host (via Vite proxy - may show buffering in dev mode)
+python3 /tmp/test_streaming_speed.py
+
+# Test from inside backend container (true streaming)
+docker exec whisper_backend_dev python3 -c "
+import httpx, json, time
+start = time.time()
+with httpx.Client() as client:
+    with client.stream('POST', 'https://api.z.ai/api/paas/v4/chat/completions',
+        headers={'Authorization': f'Bearer {GLM_API_KEY}'},
+        json={'model': 'GLM-4.5-Air', 'messages': [...], 'stream': True}) as r:
+        for line in r.iter_lines():
+            if line: print(f'{(time.time()-start)*1000:.0f}ms: {line[:50]}...')
+"
+```
+
+**Expected results:**
+- Direct backend test: Chunks spread over 500-2000ms (true streaming)
+- Via Vite proxy: Same spread (with proper SSE configuration)
+- Without config: All chunks arrive within <10ms (buffered)
+
+### Streaming Behavior by Response Length
+
+| Response Type | Chunks | Spread | Behavior |
+|---------------|--------|--------|----------|
+| Short (<100 chars) | ~10-50 | 100-500ms | Minimal visible streaming |
+| Medium (100-500 chars) | ~50-150 | 500-1500ms | Noticeable word-by-word streaming |
+| Long (>500 chars) | ~150+ | 1500-5000ms | Clear progressive streaming |
+
+**Note:** The GLM API (api.z.ai) provides true streaming, but short responses complete quickly enough that the spread may not be noticeable. This is expected behavior.
 
 ## Development Commands
 

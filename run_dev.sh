@@ -19,7 +19,7 @@ if [ ! -f ".env" ]; then
     echo "  - SUPABASE_URL"
     echo "  - SUPABASE_ANON_KEY"
     echo "  - SUPABASE_SERVICE_ROLE_KEY"
-    echo "  - GEMINI_API_KEY"
+    echo "  - GLM_API_KEY"
     echo ""
     exit 1
 fi
@@ -41,8 +41,8 @@ if [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then
     missing_vars+=("SUPABASE_SERVICE_ROLE_KEY")
 fi
 
-if [ -z "$GEMINI_API_KEY" ]; then
-    missing_vars+=("GEMINI_API_KEY")
+if [ -z "$GLM_API_KEY" ]; then
+    missing_vars+=("GLM_API_KEY")
 fi
 
 if [ -z "$DATABASE_URL" ]; then

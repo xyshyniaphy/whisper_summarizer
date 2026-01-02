@@ -8,6 +8,7 @@ import { useState, useEffect, useRef } from 'react'
 import { Send, Loader2, ChevronDown, Brain } from 'lucide-react'
 import { api } from '../services/api'
 import { cn } from '../utils/cn'
+import { MarkdownRenderer } from './MarkdownRenderer'
 
 export interface ChatMessage {
   id: string
@@ -174,7 +175,11 @@ export function Chat({ transcriptionId, disabled = false }: ChatProps) {
                     : 'bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-gray-100'
                 }`}
               >
-                <p className="text-sm whitespace-pre-wrap break-words">{message.content}</p>
+                {message.role === 'assistant' ? (
+                  <MarkdownRenderer content={message.content} />
+                ) : (
+                  <p className="text-sm whitespace-pre-wrap break-words">{message.content}</p>
+                )}
               </div>
             </div>
           ))

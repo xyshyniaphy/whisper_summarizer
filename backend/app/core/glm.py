@@ -232,6 +232,8 @@ class GLMClient:
         """
         Chat with AI about the transcription (streaming version).
 
+        Uses raw HTTP (httpx) for true progressive streaming instead of OpenAI SDK.
+
         Yields chunks of the response as they are generated.
 
         Args:
@@ -244,6 +246,7 @@ class GLMClient:
         """
         import time
         import json
+        import httpx
 
         logger.info(f"[GLM.chat_stream] Starting stream chat with question: {question[:50]}...")
         system_prompt = self._get_chat_system_prompt()
@@ -282,35 +285,58 @@ class GLMClient:
 
             logger.info(f"[ChatStream] Calling GLM API with model: {self.model}, messages count: {len(messages)}")
 
-            # GLM APIでチャット（ストリーミング）
-            # Note: OpenAI SDK's stream=True returns a sync iterator
-            stream = self.client.chat.completions.create(
-                model=self.model,
-                messages=messages,
-                temperature=0.7,
-                max_tokens=2000,
-                stream=True,
-            )
+            # Use raw HTTP (httpx) for true progressive streaming
+            # OpenAI SDK buffers responses, httpx doesn't
+            with httpx.Client(timeout=60.0) as client:
+                with client.stream(
+                    'POST',
+                    f'{self.base_url.rstrip('/')}/chat/completions',
+                    headers={
+                        'Authorization': f'Bearer {self.api_key}',
+                        'Content-Type': 'application/json',
+                    },
+                    json={
+                        'model': self.model,
+                        'messages': messages,
+                        'temperature': 0.1,
+                        'max_tokens': 8000,
+                        'stream': True,
+                    }
+                ) as response:
+                    full_response = ""
+                    chunk_count = 0
 
-            full_response = ""
-            chunk_count = 0
-            for chunk in stream:
-                chunk_count += 1
-                if chunk.choices and chunk.choices[0].delta.content:
-                    content = chunk.choices[0].delta.content
-                    full_response += content
-                    chunk_time_ms = (time.time() - start_time) * 1000
-                    logger.debug(f"[ChatStream] Chunk #{chunk_count} at {chunk_time_ms:.0f}ms: {repr(content[:50])}")
-                    # Yield each chunk as SSE format immediately
-                    yield f"data: {json.dumps({'content': content, 'done': False})}\n\n"
+                    for line in response.iter_lines():
+                        if line:
+                            line_str = line.decode() if isinstance(line, bytes) else line
 
-            # Send completion signal
-            response_time_ms = (time.time() - start_time) * 1000
-            logger.info(f"[ChatStream] Stream complete ({chunk_count} chunks, {len(full_response)} chars, {response_time_ms:.0f}ms)")
-            yield f"data: {json.dumps({'content': '', 'done': True, 'response_time_ms': response_time_ms})}\n\n"
+                            if line_str.startswith('data: '):
+                                data = line_str[6:]
+
+                                if data == '[DONE]':
+                                    # Stream complete
+                                    response_time_ms = (time.time() - start_time) * 1000
+                                    logger.info(f"[ChatStream] Stream complete ({chunk_count} chunks, {len(full_response)} chars, {response_time_ms:.0f}ms)")
+                                    yield f"data: {json.dumps({'content': '', 'done': True, 'response_time_ms': response_time_ms})}\n\n"
+                                    break
+
+                                try:
+                                    parsed = json.loads(data)
+                                    content = parsed.get('choices', [{}])[0].get('delta', {}).get('content', '')
+                                    if content:
+                                        chunk_count += 1
+                                        full_response += content
+                                        chunk_time_ms = (time.time() - start_time) * 1000
+                                        logger.debug(f"[ChatStream] Chunk #{chunk_count} at {chunk_time_ms:.0f}ms: {repr(content[:50])}")
+                                        # Yield each chunk as SSE format immediately
+                                        yield f"data: {json.dumps({'content': content, 'done': False})}\n\n"
+                                except json.JSONDecodeError:
+                                    # Skip invalid JSON lines
+                                    pass
 
         except Exception as e:
             import traceback
+            response_time_ms = (time.time() - start_time) * 1000
             logger.error(f"[ChatStream] API error: {str(e)}\n{traceback.format_exc()}")
             # Send error through stream
             yield f"data: {json.dumps({'error': str(e), 'done': True})}\n\n"
