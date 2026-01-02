@@ -16,8 +16,6 @@ from app.schemas.transcription import Transcription as TranscriptionSchema
 from app.schemas.summary import Summary as SummarySchema
 from app.schemas.chat import ChatMessage as ChatMessageSchema, ChatHistoryResponse
 from app.schemas.share import ShareLink as ShareLinkSchema
-from app.services.pptx_service import get_pptx_service
-from app.services.marp_service import get_marp_service
 
 import logging
 import asyncio
@@ -161,7 +159,7 @@ async def delete_all_transcriptions(
             if transcription.file_path and os.path.exists(transcription.file_path):
                 os.remove(transcription.file_path)
 
-            for ext in [".wav", ".txt", ".srt", ".vtt", ".json", ".pptx", ".md"]:
+            for ext in [".wav", ".txt", ".srt", ".vtt", ".json"]:
                 output_file = output_dir / f"{transcription.id}{ext}"
                 if output_file.exists():
                     output_file.unlink()
@@ -259,9 +257,9 @@ async def delete_transcription(
             os.remove(transcription.file_path)
             logger.info(f"[DELETE] Deleted upload file: {transcription.file_path}")
 
-        # 出力ファイル削除 (wav, txt, srt, vtt, json, pptx, md)
+        # 出力ファイル削除 (wav, txt, srt, vtt, json)
         output_dir = Path("/app/data/output")
-        for ext in [".wav", ".txt", ".srt", ".vtt", ".json", ".pptx", ".md"]:
+        for ext in [".wav", ".txt", ".srt", ".vtt", ".json"]:
             output_file = output_dir / f"{transcription.id}{ext}"
             if output_file.exists():
                 output_file.unlink()
@@ -287,7 +285,7 @@ async def delete_transcription(
 @router.get("/{transcription_id}/download")
 async def download_transcription(
   transcription_id: str,
-  format: str = Query("txt", pattern="^(txt|srt|formatted|pptx)$"),
+  format: str = Query("txt", pattern="^(txt|srt|formatted)$"),
   db: Session = Depends(get_db),
   current_user: dict = Depends(get_current_active_user)
 ):
@@ -298,11 +296,10 @@ async def download_transcription(
   - txt: 原始转录文本
   - formatted: LLM格式化后的文本（带标点符号和段落）
   - srt: 从存储的转录文本生成（带时间戳）
-  - pptx: 检查现有文件
 
   Args:
     transcription_id: 转录ID
-    format: 文件格式 (txt, formatted, srt 或 pptx)
+    format: 文件格式 (txt, formatted, srt)
 
   Returns:
     StreamingResponse: 下载文件
@@ -319,23 +316,6 @@ async def download_transcription(
 
   if not transcription:
     raise HTTPException(status_code=404, detail="未找到转录")
-
-  # PPTX 特殊处理 - 检查现有文件
-  if format == "pptx":
-    output_dir = Path("/app/data/output")
-    file_path = output_dir / f"{transcription_id}.{format}"
-
-    if not file_path.exists():
-      raise HTTPException(status_code=404, detail="PPTX文件未找到，请先生成")
-
-    original_filename = Path(transcription.file_name).stem
-    download_filename = f"{original_filename}.{format}"
-
-    return FileResponse(
-      path=str(file_path),
-      filename=download_filename,
-      media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation"
-    )
 
   # Formatted text - LLM formatted with punctuation and paragraphs
   if format == "formatted":
@@ -414,326 +394,6 @@ async def download_transcription(
     headers={
       "Content-Disposition": f'attachment; filename="{download_filename}"'
     }
-  )
-
-
-async def _generate_pptx_task(transcription_id: str, db: Session) -> None:
-  """
-  后台任务：使用Marp生成PPTX文件（AI驱动结构化）
-
-  使用GLM AI智能提取主题、生成目录、总结和后续安排。
-
-  Args:
-    transcription_id: 转录ID
-    db: 数据库会话
-  """
-  # Set status to generating - Convert string ID to UUID for database query
-  try:
-    transcription_uuid = UUID(transcription_id)
-  except ValueError:
-    logger.error(f"Invalid transcription ID format: {transcription_id}")
-    return
-  transcription = db.query(Transcription).filter(
-    Transcription.id == transcription_uuid
-  ).first()
-
-  if not transcription:
-    logger.error(f"转录 {transcription_id} 未找到")
-    return
-
-  try:
-    # Update status to generating
-    transcription.pptx_status = "generating"
-    transcription.pptx_error_message = None
-    db.commit()
-
-    if not transcription.text:
-      raise ValueError("转录内容为空")
-
-    # 获取摘要
-    summary_text = None
-    if transcription.summaries and len(transcription.summaries) > 0:
-      summary_text = transcription.summaries[0].summary_text
-
-    # 使用AI生成Marp Markdown结构
-    marp_service = get_marp_service()
-    markdown = await marp_service.generate_markdown(transcription, summary_text)
-
-    # 保存Markdown文件
-    md_path = marp_service.save_markdown(transcription_id, markdown)
-    logger.info(f"Markdown生成成功: {md_path}")
-
-    # 转换为PPTX
-    pptx_path = marp_service.convert_to_pptx(md_path)
-    logger.info(f"PPTX转换成功: {pptx_path}")
-
-    # Update status to ready
-    transcription.pptx_status = "ready"
-    transcription.pptx_error_message = None
-    db.commit()
-
-    logger.info(f"PPTX生成成功 (AI结构化): {transcription_id}.pptx")
-
-  except Exception as e:
-    # Update status to error
-    transcription.pptx_status = "error"
-    transcription.pptx_error_message = str(e)
-    db.commit()
-    logger.error(f"PPTX生成失败 {transcription_id}: {e}")
-
-
-@router.post("/{transcription_id}/generate-pptx")
-async def generate_pptx(
-  transcription_id: str,
-  background_tasks: BackgroundTasks,
-  db: Session = Depends(get_db),
-  current_user: dict = Depends(get_current_active_user)
-):
-  """
-  生成PowerPoint演示文稿 (使用Marp CLI)
-
-  在后台生成包含转录内容和AI摘要的PPTX文件。
-
-  Args:
-    transcription_id: 转录ID
-
-  Returns:
-    JSONResponse: 生成状态
-  """
-  # 验证转录所有权 - Convert string ID to UUID for database query
-  try:
-    transcription_uuid = UUID(transcription_id)
-  except ValueError:
-    raise HTTPException(status_code=422, detail="Invalid transcription ID format")
-  transcription = db.query(Transcription).filter(
-    Transcription.id == transcription_uuid,
-    Transcription.user_id == current_user.get("id")
-  ).first()
-
-  if not transcription:
-    raise HTTPException(status_code=404, detail="未找到转录")
-
-  if not transcription.text:
-    raise HTTPException(status_code=400, detail="转录内容为空，无法生成PPT")
-
-  # Check current status from database
-  current_status = transcription.pptx_status or "not-started"
-
-  # If already generating, return current status
-  if current_status == "generating":
-    return JSONResponse(
-      status_code=202,
-      content={
-        "status": "generating",
-        "message": "PPTX生成中..."
-      }
-    )
-
-  # If already ready, verify file exists
-  if current_status == "ready":
-    marp_service = get_marp_service()
-    if marp_service.pptx_exists(transcription_id):
-      return JSONResponse(
-        status_code=200,
-        content={
-          "status": "ready",
-          "message": "PPTX文件已存在"
-        }
-      )
-    # File missing, reset status
-    transcription.pptx_status = "not-started"
-    db.commit()
-
-  # If previous error, reset to allow retry
-  if current_status == "error":
-    transcription.pptx_status = "not-started"
-    transcription.pptx_error_message = None
-    db.commit()
-
-  # 添加后台任务
-  background_tasks.add_task(_generate_pptx_task, transcription_id, db)
-
-  return JSONResponse(
-    status_code=202,
-    content={
-      "status": "generating",
-      "message": "PPTX生成任务已启动"
-    }
-  )
-
-
-@router.get("/{transcription_id}/pptx-status")
-async def get_pptx_status(
-  transcription_id: str,
-  db: Session = Depends(get_db),
-  current_user: dict = Depends(get_current_active_user)
-):
-  """
-  检查PPTX文件生成状态
-
-  从数据库字段读取状态，而不是检查文件是否存在。
-
-  Args:
-    transcription_id: 转录ID
-
-  Returns:
-    JSONResponse: PPTX状态
-  """
-  # 验证转录所有权 - Convert string ID to UUID for database query
-  try:
-    transcription_uuid = UUID(transcription_id)
-  except ValueError:
-    raise HTTPException(status_code=422, detail="Invalid transcription ID format")
-  transcription = db.query(Transcription).filter(
-    Transcription.id == transcription_uuid,
-    Transcription.user_id == current_user.get("id")
-  ).first()
-
-  if not transcription:
-    raise HTTPException(status_code=404, detail="未找到转录")
-
-  # Read status from database field
-  status = transcription.pptx_status or "not-started"
-
-  # Also verify file exists for 'ready' status
-  marp_service = get_marp_service()
-  exists = marp_service.pptx_exists(transcription_id)
-
-  # If status says ready but file doesn't exist, reset to not-started
-  if status == "ready" and not exists:
-    status = "not-started"
-
-  return JSONResponse(
-    content={
-      "status": status,
-      "exists": exists
-    }
-  )
-
-
-@router.get("/{transcription_id}/markdown")
-async def get_markdown(
-  transcription_id: str,
-  db: Session = Depends(get_db),
-  current_user: dict = Depends(get_current_active_user)
-):
-  """
-  获取Marp Markdown内容
-
-  使用AI生成结构化的Markdown内容（包含主题、目录、总结、后续安排）。
-  如果markdown文件不存在，则重新生成。
-
-  Args:
-    transcription_id: 转录ID
-
-  Returns:
-    JSONResponse: Markdown内容
-  """
-  # 验证转录所有权 - Convert string ID to UUID for database query
-  try:
-    transcription_uuid = UUID(transcription_id)
-  except ValueError:
-    raise HTTPException(status_code=422, detail="Invalid transcription ID format")
-  transcription = db.query(Transcription).filter(
-    Transcription.id == transcription_uuid,
-    Transcription.user_id == current_user.get("id")
-  ).first()
-
-  if not transcription:
-    raise HTTPException(status_code=404, detail="未找到转录")
-
-  if not transcription.text:
-    raise HTTPException(status_code=400, detail="转录内容为空")
-
-  marp_service = get_marp_service()
-
-  # Check if markdown exists
-  if marp_service.markdown_exists(transcription_id):
-    md_path = marp_service.get_markdown_path(transcription_id)
-    markdown = md_path.read_text(encoding="utf-8")
-    return JSONResponse(
-      content={
-        "markdown": markdown,
-        "cached": True
-      }
-    )
-
-  # Generate new markdown
-  try:
-    # 获取摘要
-    summary_text = None
-    if transcription.summaries and len(transcription.summaries) > 0:
-      summary_text = transcription.summaries[0].summary_text
-
-    markdown = await marp_service.generate_markdown(transcription, summary_text)
-
-    # Save markdown for future use
-    marp_service.save_markdown(transcription_id, markdown)
-
-    return JSONResponse(
-      content={
-        "markdown": markdown,
-        "cached": False
-      }
-    )
-
-  except Exception as e:
-    logger.error(f"Markdown生成失败 {transcription_id}: {e}")
-    raise HTTPException(status_code=500, detail=f"Markdown生成失败: {str(e)}")
-
-
-@router.get("/{transcription_id}/download-markdown")
-async def download_markdown(
-  transcription_id: str,
-  db: Session = Depends(get_db),
-  current_user: dict = Depends(get_current_active_user)
-):
-  """
-  下载Marp Markdown文件
-
-  Args:
-    transcription_id: 转录ID
-
-  Returns:
-    FileResponse: Markdown文件下载
-  """
-  # 验证转录所有权 - Convert string ID to UUID for database query
-  try:
-    transcription_uuid = UUID(transcription_id)
-  except ValueError:
-    raise HTTPException(status_code=422, detail="Invalid transcription ID format")
-  transcription = db.query(Transcription).filter(
-    Transcription.id == transcription_uuid,
-    Transcription.user_id == current_user.get("id")
-  ).first()
-
-  if not transcription:
-    raise HTTPException(status_code=404, detail="未找到转录")
-
-  marp_service = get_marp_service()
-  md_path = marp_service.get_markdown_path(transcription_id)
-
-  # Generate if doesn't exist
-  if not md_path.exists():
-    try:
-      # 获取摘要
-      summary_text = None
-      if transcription.summaries and len(transcription.summaries) > 0:
-        summary_text = transcription.summaries[0].summary_text
-
-      markdown = await marp_service.generate_markdown(transcription, summary_text)
-      marp_service.save_markdown(transcription_id, markdown)
-    except Exception as e:
-      raise HTTPException(status_code=500, detail=f"Markdown生成失败: {str(e)}")
-
-  # 设置文件名
-  original_filename = Path(transcription.file_name).stem
-  download_filename = f"{original_filename}-marp.md"
-
-  return FileResponse(
-    path=md_path,
-    filename=download_filename,
-    media_type="text/markdown"
   )
 
 

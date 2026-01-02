@@ -203,52 +203,5 @@ def temp_output_dir() -> Generator[Path, None, None]:
 
 
 # ============================================================================
-# Marp Service Fixtures
-# ============================================================================
-
-@pytest.fixture(scope="function")
-def marp_service(temp_output_dir: Path):
-    """Create a MarpService instance with temporary output directory."""
-    from app.services.marp_service import MarpService
-    return MarpService(output_dir=temp_output_dir)
-
-
-@pytest.fixture(scope="function")
-def marp_service_with_real_path():
-    """Create a MarpService instance with real output path (for integration tests)."""
-    from app.services.marp_service import get_marp_service
-    service = get_marp_service()
-    # Ensure output directory exists
-    service.output_dir.mkdir(parents=True, exist_ok=True)
-    return service
-
-
-# ============================================================================
 # Utility Functions
 # ============================================================================
-
-def assert_valid_markdown(markdown: str) -> None:
-    """Assert that markdown string has valid Marp frontmatter."""
-    assert markdown.startswith("---")
-    assert "marp: true" in markdown
-    assert "---" in markdown[3:]  # Second frontmatter delimiter
-
-
-def count_slides(markdown: str) -> int:
-    """Count the number of slides in Marp markdown."""
-    # Slide separators are "---" that are not in the frontmatter
-    lines = markdown.split("\\n")
-    in_frontmatter = False
-    frontmatter_end = False
-    count = 1  # Always at least one slide
-    for line in lines:
-        stripped = line.strip()
-        if stripped == "---":
-            if not in_frontmatter and not frontmatter_end:
-                in_frontmatter = True
-            elif in_frontmatter:
-                frontmatter_end = True
-                in_frontmatter = False
-            else:
-                count += 1
-    return count

@@ -1,4 +1,4 @@
-# fastwhisper Base Image - CUDA cuDNN + Python + Node.js + Marp + Model
+# fastwhisper Base Image - CUDA cuDNN + Python + Model
 # Multi-stage build: Model downloaded in separate stage, then copied to base
 
 # ========================================
@@ -44,7 +44,7 @@ FROM nvidia/cuda:12.9.1-cudnn-runtime-ubuntu24.04
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PYTHONUNBUFFERED=1
 
-LABEL description="Base image with CUDA cuDNN, Python, Node.js, Marp, and faster-whisper model"
+LABEL description="Base image with CUDA cuDNN, Python, and faster-whisper model"
 LABEL version="1.0"
 
 # Install Python 3.12, curl, fonts (minimal - no pip/venv/dev)
@@ -74,34 +74,7 @@ RUN update-alternatives --install /usr/bin/python python /usr/bin/python3.12 1 &
     update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.12 1
 
 # ========================================
-# Stage 3: Install Node.js and Marp CLI
-# ========================================
-# Install Node.js 22 LTS
-RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
-    apt-get install -y nodejs && \
-    node --version && npm --version
-
-# Install Marp CLI globally
-RUN npm install -g @marp-team/marp-cli && \
-    marp --version
-
-# Install Chromium for Marp CLI (Puppeteer) - needed for PowerPoint generation
-RUN apt-get update && apt-get install -y \
-    wget gnupg \
-    && wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | gpg --dearmor -o /usr/share/keyrings/googlechrome-linux-keyring.gpg \
-    && sh -c 'echo "deb [arch=amd64 signed-by=/usr/share/keyrings/googlechrome-linux-keyring.gpg] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google.list' \
-    && apt-get update \
-    && apt-get install -y google-chrome-stable \
-    && rm -rf /var/lib/apt/lists/*
-
-# Set Chrome environment variables for Marp/Puppeteer
-ENV CHROME_PATH=/usr/bin/google-chrome
-ENV CHROME_BIN=/usr/bin/google-chrome
-ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
-ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome
-
-# ========================================
-# Stage 4: Copy Model from Downloader Stage
+# Stage 3: Copy Model from Downloader Stage
 # ========================================
 # Copy only the model files (not the venv or other build artifacts)
 COPY --from=model-downloader /tmp/whisper_models /tmp/whisper_models
@@ -122,8 +95,6 @@ EXPOSE 8000
 # ========================================
 RUN echo "=== Base Image Build Verification ===" && \
     echo "Python: $(python --version)" && \
-    echo "Node.js: $(node --version)" && \
-    echo "Marp: $(marp --version)" && \
     echo "Model files:" && \
     ls -lah /tmp/whisper_models/ && \
     echo "======================================="

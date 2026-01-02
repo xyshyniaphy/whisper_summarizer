@@ -9,8 +9,6 @@ The `whisper-summarizer-fastwhisper-base:latest` image contains:
 - **NVIDIA CUDA 12.9.1 cuDNN Runtime** - GPU acceleration support
 - **Python 3.12** with `uv` package manager
 - **faster-whisper** library with pre-downloaded `large-v3-turbo` model (~3GB)
-- **Node.js 22 LTS** with **Marp CLI** for PowerPoint generation
-- **Chromium** browser for Marp/Puppeteer
 - **CJK fonts** for Chinese/Japanese/Korean character support
 
 ## Build the Base Image
@@ -30,11 +28,11 @@ docker build -t whisper-summarizer-fastwhisper-base:latest -f fastwhisper/Docker
 
 ## Image Size
 
-Approximately **8-10 GB** (includes CUDA cuDNN runtime + 3GB model + Node.js + Chrome)
+Approximately **5-7 GB** (includes CUDA cuDNN runtime + 3GB model)
 
 ## Why a Separate Base Image?
 
-1. **Faster backend rebuilds**: Model and Marp are pre-installed, no need to download on each build
+1. **Faster backend rebuilds**: Model is pre-downloaded, no need to download on each build
 2. **Consistent environment**: Same base for development and production
 3. **Versioning**: Can tag different versions of the base image for rollbacks
 4. **Resource savings**: Model download happens once during base image build, not on every backend build

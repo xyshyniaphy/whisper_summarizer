@@ -107,7 +107,7 @@ MERGE_STRATEGY=lcs                # マージ戦略: lcs（テキストベース
 
 ### ベースイメージのビルド（初回のみ）
 
-**初回起動前に**、faster-whisperモデルとMarp CLIを含むベースイメージをビルドする必要があります:
+**初回起動前に**、faster-whisperモデルを含むベースイメージをビルドする必要があります:
 
 ```bash
 # ベースイメージをビルド (~10-15分、モデルダウンロード含む)
@@ -115,18 +115,16 @@ MERGE_STRATEGY=lcs                # マージ戦略: lcs（テキストベース
 
 # 出力例:
 # - Image: whisper-summarizer-fastwhisper-base:latest
-# - Size: ~8-10 GB (CUDA cuDNN + 3GB model + Marp + Chrome)
+# - Size: ~5-7 GB (CUDA cuDNN + 3GB model)
 ```
 
 **ベースイメージの内容:**
 - NVIDIA CUDA 12.9.1 cuDNN Runtime
 - Python 3.12 + uv + faster-whisper
 - **事前ダウンロード済み** `large-v3-turbo` モデル (~3GB)
-- Node.js 22 + Marp CLI + Chromium
 
 **ベースイメージの再ビルドが必要な場合:**
 - モデルの更新が必要な時
-- Marp CLIのバージョンを更新する時
 - 依存関係を大きく変更する時
 
 ```bash
@@ -490,10 +488,8 @@ npm run test:headed
 | GET | `/api/transcriptions` | 文字起こしリスト |
 | GET | `/api/transcriptions/{id}` | 文字起こし詳細 |
 | DELETE | `/api/transcriptions/{id}` | 文字起こし削除 (カスケード) |
-| POST | `/api/transcriptions/{id}/generate-pptx` | PPTX生成 (Marp) |
 | GET | `/api/transcriptions/{id}/download?format=txt` | テキストダウンロード |
 | GET | `/api/transcriptions/{id}/download?format=srt` | 字幕ダウンロード |
-| GET | `/api/transcriptions/{id}/download?format=pptx` | PowerPointダウンロード |
 
 ## Audio Chunking (長音声の高速文字起こし)
 

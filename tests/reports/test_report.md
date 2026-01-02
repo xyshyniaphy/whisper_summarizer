@@ -224,9 +224,8 @@ ALL TESTS PASSED ✓
 - `[CHUNK N]` logs: 36
 
 ### Log Output Limits Verified
-- ✅ All AI response logs < 5000 bytes (marp_service.py)
-- ✅ All Marp stdout logs < 1000 bytes (marp_service.py)
-- ✅ All stderr logs < 1000 bytes (marp_service.py)
+- ✅ All AI response logs < 5000 bytes
+- ✅ All GLM API logs properly truncated
 
 ---
 

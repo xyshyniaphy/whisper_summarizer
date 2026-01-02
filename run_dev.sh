@@ -75,7 +75,6 @@ if ! docker image inspect "$BASE_IMAGE" &> /dev/null; then
     echo ""
     echo "ベースイメージには以下が含まれます:"
     echo "  - faster-whisper large-v3-turbo モデル (~3GB)"
-    echo "  - Marp CLI + Chromium"
     echo "  - NVIDIA CUDA cuDNN Runtime"
     echo ""
     echo "ビルドには約10-15分かかります"

@@ -213,7 +213,7 @@ Use `run_test.sh` for all testing - this is the only supported way to run tests:
 ### Building
 
 ```bash
-# Step 1: Build the fastwhisper base image (first time only, or when model/Marp needs update)
+# Step 1: Build the fastwhisper base image (first time only, or when model needs update)
 ./build_fastwhisper_base.sh
 
 # Step 2: Build backend (uses base image, much faster)
@@ -230,7 +230,7 @@ docker-compose up -d --build
 ```
 
 **Base Image Notes:**
-- The `whisper-summarizer-fastwhisper-base` image contains: CUDA cuDNN, faster-whisper model (~3GB), Marp CLI, Chromium
+- The `whisper-summarizer-fastwhisper-base` image contains: CUDA cuDNN, faster-whisper model (~3GB)
 - Build takes ~10-15 minutes on first run (model download)
 - Subsequent backend builds are much faster since model is pre-downloaded
 - Rebuild base image with `./build_fastwhisper_base.sh` when updating model or dependencies
@@ -286,8 +286,7 @@ app/
 │   ├── storage_service.py      # Local filesystem storage (gzip)
 │   ├── whisper_service.py      # faster-whisper wrapper
 │   ├── transcription_processor.py  # Async transcription workflow
-│   ├── pptx_service.py          # PowerPoint generation
-│   └── marp_service.py          # Marp CLI integration
+│   └── pptx_service.py          # PowerPoint generation
 ├── models/           # SQLAlchemy ORM models
 ├── schemas/          # Pydantic request/response schemas
 ├── db/
@@ -434,7 +433,7 @@ CORS_ORIGINS=http://localhost:3000
 ## Important Notes
 
 1. **faster-whisper with cuDNN** runs in-process within the backend container
-2. **Base image**: `whisper-summarizer-fastwhisper-base` contains pre-downloaded model + Marp CLI
+2. **Base image**: `whisper-summarizer-fastwhisper-base` contains pre-downloaded model
 3. **First-time setup**: Run `./build_fastwhisper_base.sh` before building backend (takes ~10-15 min)
 4. **Hot reload**: Development uses volume mounts for instant code updates
 5. **Test coverage target**: 70%+ (currently 73.37% for backend)

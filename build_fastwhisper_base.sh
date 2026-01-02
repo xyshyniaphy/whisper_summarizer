@@ -1,6 +1,6 @@
 #!/bin/bash
 # Build script for fastwhisper base image
-# This builds the base image containing CUDA cuDNN, faster-whisper model, and Marp CLI
+# This builds the base image containing CUDA cuDNN and faster-whisper model
 # Build once, then backend builds will be much faster
 
 set -e
