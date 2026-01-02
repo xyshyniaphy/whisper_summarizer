@@ -40,21 +40,21 @@ describe('GoogleButton', () => {
   describe('Click Handler', () => {
     it('ボタンをクリックするとonClickが呼ばれる', async () => {
       const user = userEvent.setup()
-      render(<GoogleButton onClick={mockOnClick} />)
+      const { container } = render(<GoogleButton onClick={mockOnClick} />)
 
-      const button = screen.getByText(/使用 Google 继续/)
-      await user.click(button)
+      const button = container.querySelector('button')
+      await user.click(button!)
 
       expect(mockOnClick).toHaveBeenCalledTimes(1)
     })
 
     it('複数回クリックすると複数回onClickが呼ばれる', async () => {
       const user = userEvent.setup()
-      render(<GoogleButton onClick={mockOnClick} />)
+      const { container } = render(<GoogleButton onClick={mockOnClick} />)
 
-      const button = screen.getByText(/使用 Google 继续/)
-      await user.click(button)
-      await user.click(button)
+      const button = container.querySelector('button')
+      await user.click(button!)
+      await user.click(button!)
 
       expect(mockOnClick).toHaveBeenCalledTimes(2)
     })
@@ -62,18 +62,18 @@ describe('GoogleButton', () => {
 
   describe('Disabled State', () => {
     it('disabled=trueの場合、ボタンが無効になる', () => {
-      render(<GoogleButton onClick={mockOnClick} disabled={true} />)
+      const { container } = render(<GoogleButton onClick={mockOnClick} disabled={true} />)
 
-      const button = screen.getByText(/使用 Google 继续/)
+      const button = container.querySelector('button')
       expect(button).toBeDisabled()
     })
 
     it('disabled時、クリックしてもonClickが呼ばれない', async () => {
       const user = userEvent.setup()
-      render(<GoogleButton onClick={mockOnClick} disabled={true} />)
+      const { container } = render(<GoogleButton onClick={mockOnClick} disabled={true} />)
 
-      const button = screen.getByText(/使用 Google 继续/)
-      await user.click(button)
+      const button = container.querySelector('button')
+      await user.click(button!)
 
       expect(mockOnClick).not.toHaveBeenCalled()
     })
@@ -94,26 +94,26 @@ describe('GoogleButton', () => {
     })
 
     it('loading時、ボタンが無効になる', () => {
-      render(<GoogleButton onClick={mockOnClick} loading={true} />)
+      const { container } = render(<GoogleButton onClick={mockOnClick} loading={true} />)
 
-      const button = screen.getByText('连接中...')
+      const button = container.querySelector('button')
       expect(button).toBeDisabled()
     })
 
     it('loading時、クリックしてもonClickが呼ばれない', async () => {
       const user = userEvent.setup()
-      render(<GoogleButton onClick={mockOnClick} loading={true} />)
+      const { container } = render(<GoogleButton onClick={mockOnClick} loading={true} />)
 
-      const button = screen.getByText('连接中...')
-      await user.click(button)
+      const button = container.querySelector('button')
+      await user.click(button!)
 
       expect(mockOnClick).not.toHaveBeenCalled()
     })
 
     it('disabledとloadingの両方がtrueの場合、ボタンが無効になる', () => {
-      render(<GoogleButton onClick={mockOnClick} disabled={true} loading={true} />)
+      const { container } = render(<GoogleButton onClick={mockOnClick} disabled={true} loading={true} />)
 
-      const button = screen.getByText('连接中...')
+      const button = container.querySelector('button')
       expect(button).toBeDisabled()
     })
   })

@@ -172,7 +172,7 @@ describe('Chat Component', () => {
 
       await waitFor(() => {
         const input = screen.getByRole('textbox')
-        const button = screen.getByRole('button', { name: /send/i })
+        const button = screen.getByRole('button', { name: /发送/i })
         expect(input).toBeTruthy()
         expect(button).toBeTruthy()
       })
@@ -231,7 +231,7 @@ describe('Chat Component', () => {
       
       await user.type(input, 'Test message')
       
-      const button = screen.getByRole('button', { name: /send/i })
+      const button = screen.getByRole('button', { name: /发送/i })
       await user.click(button)
 
       await waitFor(() => {
@@ -253,11 +253,11 @@ describe('Chat Component', () => {
       render(<Chat {...defaultProps} />)
 
       await waitFor(() => {
-        const button = screen.getByRole('button', { name: /send/i })
+        const button = screen.getByRole('button', { name: /发送/i })
       })
 
       const user = userEvent.setup()
-      const button = screen.getByRole('button', { name: /send/i })
+      const button = screen.getByRole('button', { name: /发送/i })
       
       // Try to click with empty input
       await user.click(button)
@@ -290,7 +290,7 @@ describe('Chat Component', () => {
       
       await user.type(input, 'Test question')
       
-      const button = screen.getByRole('button', { name: /send/i })
+      const button = screen.getByRole('button', { name: /发送/i })
       await user.click(button)
 
       // Should show thinking indicator
@@ -325,7 +325,7 @@ describe('Chat Component', () => {
       
       await user.type(input, 'Test')
       
-      const button = screen.getByRole('button', { name: /send/i })
+      const button = screen.getByRole('button', { name: /发送/i })
       await user.click(button)
 
       // Initially shows thinking
@@ -368,7 +368,7 @@ describe('Chat Component', () => {
       
       await user.type(input, 'Test')
       
-      const button = screen.getByRole('button', { name: /send/i })
+      const button = screen.getByRole('button', { name: /发送/i })
       await user.click(button)
 
       // Should show full response at the end
@@ -399,7 +399,7 @@ describe('Chat Component', () => {
       
       await user.type(input, 'Test')
       
-      const button = screen.getByRole('button', { name: /send/i })
+      const button = screen.getByRole('button', { name: /发送/i })
       await user.click(button)
 
       await waitFor(() => {
@@ -433,7 +433,7 @@ describe('Chat Component', () => {
       
       await user.type(input, 'Test')
       
-      const button = screen.getByRole('button', { name: /send/i })
+      const button = screen.getByRole('button', { name: /发送/i })
       await user.click(button)
 
       // Should show error message
@@ -464,7 +464,7 @@ describe('Chat Component', () => {
       const originalMessage = 'Test message'
       await user.type(input, originalMessage)
       
-      const button = screen.getByRole('button', { name: /send/i })
+      const button = screen.getByRole('button', { name: /发送/i })
       await user.click(button)
 
       // Input should be restored with original message

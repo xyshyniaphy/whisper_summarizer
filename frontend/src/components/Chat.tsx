@@ -195,6 +195,7 @@ export function Chat({ transcriptionId, disabled = false }: ChatProps) {
                   onClick={() => setThinkingCollapsed(!thinkingCollapsed)}
                   className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-purple-100 dark:hover:bg-purple-900/30 transition-colors"
                   aria-expanded={!thinkingCollapsed}
+                  aria-label="AI思考状态"
                 >
                   <Brain className="w-4 h-4 text-purple-600 dark:text-purple-400 flex-shrink-0" />
                   <span className="text-sm font-medium text-purple-700 dark:text-purple-300">
@@ -246,6 +247,7 @@ export function Chat({ transcriptionId, disabled = false }: ChatProps) {
         <button
           type="submit"
           disabled={!input.trim() || isLoading || disabled}
+          aria-label={isLoading ? "发送中..." : "发送"}
           className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
           {isLoading ? (

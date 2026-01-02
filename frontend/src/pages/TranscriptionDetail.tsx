@@ -219,8 +219,9 @@ export function TranscriptionDetail() {
         )
     }
 
-    const displayText = transcription.text
-        ? getDisplayText(transcription.text, 100)
+    // Use AI-formatted text if available, otherwise fall back to original text
+    const displayText = (transcription.formatted_text || transcription.text)
+        ? getDisplayText(transcription.formatted_text || transcription.text, 100)
         : '转录完成后将自动生成。'
 
     const handleDownload = async (format: 'txt' | 'srt') => {

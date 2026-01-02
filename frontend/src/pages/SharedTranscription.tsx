@@ -7,21 +7,30 @@
 
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { AlertCircle, Loader2, Download, ChevronDown, File, FileText } from 'lucide-react'
+import { AlertCircle, Loader2, Download, ChevronDown, File, FileText, MessageCircle, Lock, Send } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { api } from '../services/api'
 import { Badge } from '../components/ui/Badge'
 import { Button } from '../components/ui/Button'
 import { cn } from '../utils/cn'
+import { MarkdownRenderer } from '../components/MarkdownRenderer'
 
 interface SharedTranscriptionData {
     id: string
     file_name: string
     text: string
+    formatted_text: string  // AI-formatted transcription text
     summary: string | null
     language: string | null
     duration_seconds: number | null
+    created_at: string
+}
+
+interface ChatMessage {
+    id: string
+    role: 'user' | 'assistant'
+    content: string
     created_at: string
 }
 
@@ -77,6 +86,24 @@ export function SharedTranscription() {
     const [pptxStatus, setPptxStatus] = useState<PptxStatus>('not-started')
     const pptxPollingRef = useRef(false)
 
+    // Chat history state (for AI 问答 section)
+    const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
+    const [isLoadingChat, setIsLoadingChat] = useState(false)
+
+    // Load chat history
+    const loadChatHistory = async (transcriptionId: string) => {
+        try {
+            setIsLoadingChat(true)
+            const response = await api.getChatHistory(transcriptionId)
+            setChatMessages(response.messages || [])
+        } catch (error) {
+            console.error('Failed to load chat history:', error)
+            setChatMessages([])
+        } finally {
+            setIsLoadingChat(false)
+        }
+    }
+
     // Check PPTX status
     const checkPptxStatus = useCallback(async (transcriptionId: string) => {
         if (pptxPollingRef.current) return
@@ -104,6 +131,9 @@ export function SharedTranscription() {
 
             // Check PPTX status when loading transcription
             checkPptxStatus(response.id)
+
+            // Load chat history
+            loadChatHistory(response.id)
         } catch (err: any) {
             console.error('Failed to load shared transcription:', err)
             if (err.response?.status === 404) {
@@ -257,7 +287,8 @@ export function SharedTranscription() {
         )
     }
 
-    const displayText = data.text ? getDisplayText(data.text, 100) : ''
+    // Use AI-formatted text if available, otherwise fall back to original text
+    const displayText = (data.formatted_text || data.text) ? getDisplayText(data.formatted_text || data.text, 100) : ''
 
     // Format duration as MM:SS
     const formatDuration = (seconds: number) => {
@@ -414,6 +445,85 @@ export function SharedTranscription() {
                         </div>
                     </CollapsibleSection>
                 )}
+
+                {/* AI Chat Section - Read Only */}
+                <CollapsibleSection
+                    title="AI 问答"
+                    defaultOpen={true}
+                    headerContent={
+                        <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 rounded-lg text-sm">
+                            <Lock className="w-4 h-4" />
+                            <span>只读模式</span>
+                        </div>
+                    }
+                >
+                    {isLoadingChat ? (
+                        <div className="flex items-center justify-center py-8">
+                            <Loader2 className="w-6 h-6 text-blue-500 dark:text-blue-400 animate-spin" />
+                        </div>
+                    ) : chatMessages.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center py-12 text-center">
+                            <MessageCircle className="w-12 h-12 text-gray-400 dark:text-gray-600 mb-4" />
+                            <p className="text-gray-500 dark:text-gray-400 mb-2">
+                                暂无问答记录
+                            </p>
+                            <p className="text-sm text-gray-400 dark:text-gray-500 max-w-md">
+                                这是转录的AI问答历史记录。登录后可以对此转录进行AI问答。
+                            </p>
+                        </div>
+                    ) : (
+                        <div className="space-y-4">
+                            {chatMessages.map((message) => (
+                                <div
+                                    key={message.id}
+                                    className={`flex ${
+                                        message.role === 'user' ? 'justify-end' : 'justify-start'
+                                    }`}
+                                >
+                                    <div
+                                        className={`max-w-[80%] rounded-lg px-4 py-3 ${
+                                            message.role === 'user'
+                                                ? 'bg-blue-500 text-white'
+                                                : 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100 border border-gray-200 dark:border-gray-700'
+                                        }`}
+                                    >
+                                        {message.role === 'assistant' ? (
+                                            <div className="prose prose-sm dark:prose-invert max-w-none">
+                                                <MarkdownRenderer content={message.content} />
+                                            </div>
+                                        ) : (
+                                            <p className="text-sm whitespace-pre-wrap break-words">
+                                                <span className="font-medium opacity-70">Q: </span>
+                                                {message.content}
+                                            </p>
+                                        )}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
+                    {/* Disabled input area - shows functionality is hidden */}
+                    <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                        <div className="flex gap-2 opacity-50">
+                            <input
+                                type="text"
+                                disabled
+                                placeholder="登录后可以提问..."
+                                className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-800 text-gray-500 cursor-not-allowed"
+                            />
+                            <button
+                                disabled
+                                className="px-4 py-2 bg-gray-300 dark:bg-gray-700 text-gray-500 rounded-lg cursor-not-allowed"
+                            >
+                                <Send className="w-5 h-5" />
+                            </button>
+                        </div>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-2 text-center">
+                            请先登录以使用AI问答功能
+                        </p>
+                    </div>
+                </CollapsibleSection>
             </div>
 
             {/* Footer */}

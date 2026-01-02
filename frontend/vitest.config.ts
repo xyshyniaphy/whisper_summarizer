@@ -8,13 +8,13 @@ export default defineConfig({
   test: {
     // テスト環境 (jsdom: ブラウザ環境をシミュレート)
     environment: 'jsdom',
-    
+
     // グローバルなテストユーティリティ
     globals: true,
-    
+
     // セットアップファイル
-    setupFiles: ['../tests/frontend/setup.ts'],
-    
+    setupFiles: ['./tests/setup.ts'],
+
     // カバレッジ設定
     coverage: {
       provider: 'v8',
@@ -25,6 +25,7 @@ export default defineConfig({
         '**/*.d.ts',
         '**/*.config.*',
         '**/dist/**',
+        'src/main.tsx',
       ],
       // 最低カバレッジ閾値
       thresholds: {

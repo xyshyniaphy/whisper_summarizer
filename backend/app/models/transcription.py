@@ -59,6 +59,27 @@ class Transcription(Base):
             return ""
 
     @property
+    def formatted_text(self) -> str:
+        """
+        Get the AI-formatted transcription text from local filesystem.
+
+        Returns the formatted text with punctuation and paragraphs added by the LLM.
+        Falls back to original text if formatted version doesn't exist.
+        """
+        try:
+            from app.services.storage_service import get_storage_service
+            storage_service = get_storage_service()
+            if storage_service.formatted_text_exists(str(self.id)):
+                return storage_service.get_formatted_text(str(self.id))
+            # Fall back to original text if formatted version doesn't exist
+            return self.text
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).error(f"Failed to load formatted text from storage: {e}")
+            # Fall back to original text on error
+            return self.text
+
+    @property
     def time_remaining(self) -> timedelta:
         """
         Calculate remaining time before auto-deletion.

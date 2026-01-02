@@ -4,6 +4,8 @@ export interface Transcription {
   file_path?: string;
   // text is a @property that reads from local filesystem, not a database column
   text: string;
+  // formatted_text is AI-formatted transcription with punctuation and paragraphs
+  formatted_text?: string;
   stage: 'uploading' | 'transcribing' | 'summarizing' | 'completed' | 'failed';
   language?: string;
   duration_seconds?: number;

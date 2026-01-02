@@ -1200,9 +1200,11 @@ async def create_share_link(
     ).first()
 
     if existing_link:
-        # Return existing link with updated URL
-        existing_link.share_url = f"/shared/{existing_link.share_token}"
-        return existing_link
+        # Return existing link with URL
+        from app.schemas.share import ShareLink as ShareLinkSchema
+        schema_data = ShareLinkSchema.model_validate(existing_link).model_dump()
+        schema_data['share_url'] = f"/shared/{existing_link.share_token}"
+        return ShareLinkSchema(**schema_data)
 
     # Create new share link
     share_token = _generate_share_token()
@@ -1214,7 +1216,8 @@ async def create_share_link(
     db.commit()
     db.refresh(share_link)
 
-    # Add the share_url
-    share_link.share_url = f"/shared/{share_token}"
-
-    return share_link
+    # Return schema with share_url
+    from app.schemas.share import ShareLink as ShareLinkSchema
+    schema_data = ShareLinkSchema.model_validate(share_link).model_dump()
+    schema_data['share_url'] = f"/shared/{share_token}"
+    return ShareLinkSchema(**schema_data)
