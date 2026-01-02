@@ -76,9 +76,11 @@ def authenticated_client(client: TestClient) -> Generator[TestClient, None, None
     """Create a test client with mocked authentication."""
     from app.core.supabase import get_current_active_user
     from datetime import datetime
+    from uuid import UUID
 
-    # Mock authenticated user - Return UUID object directly, not string
-    test_user_id = uuid4()
+    # Mock authenticated user - Use fixed UUID for consistent testing
+    # This matches TEST_USER_ID in test_notebooklm_api.py
+    test_user_id = UUID("123e4567-e89b-42d3-a456-426614174000")
     mock_user = {
         "id": test_user_id,  # UUID object (SQLAlchemy needs it), converted to string in users.py
         "email": "test@example.com",
