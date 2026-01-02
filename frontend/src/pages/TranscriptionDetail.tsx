@@ -9,6 +9,7 @@ import { Button } from '../components/ui/Button'
 import { Card, CardContent } from '../components/ui/Card'
 import { Badge } from '../components/ui/Badge'
 import { Chat } from '../components/Chat'
+import { Modal } from '../components/ui/Modal'
 import { cn } from '../utils/cn'
 
 // Stage display mapping
@@ -88,6 +89,12 @@ export function TranscriptionDetail() {
     const [shareUrl, setShareUrl] = useState<string>('')
     const [shareCopied, setShareCopied] = useState(false)
     const [shareLoading, setShareLoading] = useState(false)
+
+    // NotebookLM guideline error modal state
+    const [notebooklmErrorModal, setNotebooklmErrorModal] = useState<{
+        isOpen: boolean
+        message: string
+    }>({ isOpen: false, message: '' })
 
     const loadTranscription = useCallback(async (transcriptionId: string) => {
         // Prevent duplicate calls (React 18 StrictMode)
@@ -185,6 +192,26 @@ export function TranscriptionDetail() {
         } catch (error) {
             console.error('DOCX download failed:', error)
             alert('DOCX下载失败')
+        }
+    }
+
+    const handleDownloadNotebookLMGuideline = async () => {
+        if (!id) return
+
+        try {
+            const blob = await api.downloadNotebookLMGuideline(id)
+            const link = document.createElement('a')
+            link.href = URL.createObjectURL(blob)
+            link.download = `${transcription?.file_name.replace(/\.[^/.]+$/, '')}-notebooklm.txt`
+            document.body.appendChild(link)
+            link.click()
+            document.body.removeChild(link)
+            URL.revokeObjectURL(link.href)
+        } catch (error: any) {
+            console.error('NotebookLM guideline download failed:', error)
+            // Show friendly error modal
+            const errorMessage = error?.response?.data?.detail || '下载失败，请稍后再试'
+            setNotebooklmErrorModal({ isOpen: true, message: errorMessage })
         }
     }
 
@@ -331,6 +358,15 @@ export function TranscriptionDetail() {
                                     <File className="w-4 h-4" />
                                     下载DOCX
                                 </button>
+                                {/* Download NotebookLM guideline button */}
+                                <button
+                                    onClick={() => handleDownloadNotebookLMGuideline()}
+                                    className="inline-flex items-center gap-1 px-3 py-1.5 text-sm bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 rounded-lg hover:bg-purple-200 dark:hover:bg-purple-900/50 transition-colors"
+                                    title="下载NotebookLM演示文稿指南"
+                                >
+                                    <FileText className="w-4 h-4" />
+                                    获取 NotebookLM 指南
+                                </button>
                             </div>
                         )
                     }
@@ -391,6 +427,31 @@ export function TranscriptionDetail() {
                     </Card>
                 )}
             </div>
+
+            {/* NotebookLM Guideline Error Modal */}
+            <Modal
+                isOpen={notebooklmErrorModal.isOpen}
+                onClose={() => setNotebooklmErrorModal({ isOpen: false, message: '' })}
+                title="提示"
+            >
+                <div className="flex items-start gap-3">
+                    <AlertCircle className="w-5 h-5 text-yellow-500 flex-shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                        <p className="text-gray-700 dark:text-gray-300">{notebooklmErrorModal.message}</p>
+                        <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
+                            NotebookLM指南会在转录完成后自动生成。如果转录已完成但指南未生成，可能是生成失败，请重新尝试转录。
+                        </p>
+                    </div>
+                </div>
+                <div className="flex justify-end mt-4">
+                    <Button
+                        onClick={() => setNotebooklmErrorModal({ isOpen: false, message: '' })}
+                        className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+                    >
+                        确定
+                    </Button>
+                </div>
+            </Modal>
         </div>
     )
 }

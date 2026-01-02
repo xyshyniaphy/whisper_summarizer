@@ -507,6 +507,130 @@ class StorageService:
         except Exception:
             return False
 
+    # ========================================================================
+    # NotebookLM Guideline Storage
+    # ========================================================================
+
+    def save_notebooklm_guideline(
+        self,
+        transcription_id: str,
+        text: str,
+        compression_level: int = 6
+    ) -> str:
+        """
+        Save NotebookLM guideline text to gzip-compressed file.
+
+        Args:
+            transcription_id: Transcription UUID
+            text: Guideline text to save
+            compression_level: Gzip compression level (1-9, default 6)
+
+        Returns:
+            str: Relative storage path (e.g., "{transcription_id}.notebooklm.txt.gz")
+
+        Raises:
+            Exception: If save fails
+        """
+        try:
+            # Compress text
+            text_bytes = text.encode('utf-8')
+            compressed_bytes = gzip.compress(text_bytes, compresslevel=compression_level)
+
+            # Create storage path
+            storage_path = f"{transcription_id}.notebooklm.txt.gz"
+            file_path = TRANSCRIPTIONS_DIR / storage_path
+
+            # Write to local filesystem
+            logger.info(f"Saving NotebookLM guideline: {storage_path} ({len(compressed_bytes)} bytes compressed)")
+            file_path.write_bytes(compressed_bytes)
+            logger.info(f"Successfully saved NotebookLM guideline: {storage_path}")
+            return storage_path
+
+        except Exception as e:
+            logger.error(f"Failed to save NotebookLM guideline: {e}")
+            raise
+
+    def get_notebooklm_guideline(self, transcription_id: str) -> str:
+        """
+        Read and decompress NotebookLM guideline from local filesystem.
+
+        Args:
+            transcription_id: Transcription UUID
+
+        Returns:
+            str: Decompressed guideline text
+
+        Raises:
+            Exception: If read or decompression fails
+        """
+        try:
+            storage_path = f"{transcription_id}.notebooklm.txt.gz"
+            file_path = TRANSCRIPTIONS_DIR / storage_path
+
+            logger.debug(f"Reading NotebookLM guideline from local storage: {storage_path}")
+
+            # Read from local filesystem
+            compressed_bytes = file_path.read_bytes()
+
+            # Decompress
+            decompressed_bytes = gzip.decompress(compressed_bytes)
+            text = decompressed_bytes.decode('utf-8')
+
+            logger.debug(f"Read NotebookLM guideline: {len(text)} chars from {storage_path}")
+            return text
+
+        except FileNotFoundError:
+            logger.error(f"NotebookLM guideline file not found: {storage_path}")
+            raise
+        except Exception as e:
+            logger.error(f"Failed to read NotebookLM guideline: {e}")
+            raise
+
+    def delete_notebooklm_guideline(self, transcription_id: str) -> bool:
+        """
+        Delete NotebookLM guideline from local filesystem.
+
+        Args:
+            transcription_id: Transcription UUID
+
+        Returns:
+            bool: True if deleted, False if not found
+        """
+        try:
+            storage_path = f"{transcription_id}.notebooklm.txt.gz"
+            file_path = TRANSCRIPTIONS_DIR / storage_path
+
+            logger.info(f"Deleting NotebookLM guideline: {storage_path}")
+
+            # Delete from local filesystem
+            file_path.unlink()
+            logger.info(f"Deleted NotebookLM guideline: {storage_path}")
+            return True
+
+        except FileNotFoundError:
+            logger.warning(f"NotebookLM guideline file not found (may not exist): {storage_path}")
+            return False
+        except Exception as e:
+            logger.warning(f"Failed to delete NotebookLM guideline: {e}")
+            return False
+
+    def notebooklm_guideline_exists(self, transcription_id: str) -> bool:
+        """
+        Check if NotebookLM guideline exists in local filesystem.
+
+        Args:
+            transcription_id: Transcription UUID
+
+        Returns:
+            bool: True if guideline file exists
+        """
+        try:
+            storage_path = f"{transcription_id}.notebooklm.txt.gz"
+            file_path = TRANSCRIPTIONS_DIR / storage_path
+            return file_path.exists()
+        except Exception:
+            return False
+
 
 # Singleton instance
 _storage_service: Optional[StorageService] = None

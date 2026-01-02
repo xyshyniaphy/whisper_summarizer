@@ -109,6 +109,13 @@ export const api = {
     return response.data;
   },
 
+  downloadNotebookLMGuideline: async (transcriptionId: string): Promise<Blob> => {
+    const response = await apiClient.get(`/transcriptions/${transcriptionId}/download-notebooklm`, {
+      responseType: 'blob'
+    });
+    return response.data;
+  },
+
   // Chat endpoints
   getChatHistory: async (transcriptionId: string): Promise<{ messages: Array<{
     id: string;

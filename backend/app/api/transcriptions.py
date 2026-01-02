@@ -152,6 +152,7 @@ async def delete_all_transcriptions(
                     storage_service.delete_transcription_segments(str(transcription.id))
                     storage_service.delete_original_output(str(transcription.id))
                     storage_service.delete_formatted_text(str(transcription.id))
+                    storage_service.delete_notebooklm_guideline(str(transcription.id))
                     logger.info(f"[DELETE ALL] Deleted from storage: {transcription.storage_path}")
                 except Exception as e:
                     logger.warning(f"[DELETE ALL] Failed to delete from storage: {e}")
@@ -248,6 +249,7 @@ async def delete_transcription(
                 storage_service.delete_transcription_segments(str(transcription.id))
                 storage_service.delete_original_output(str(transcription.id))
                 storage_service.delete_formatted_text(str(transcription.id))
+                storage_service.delete_notebooklm_guideline(str(transcription.id))
                 logger.info(f"[DELETE] Deleted from storage: {transcription.storage_path}")
             except Exception as e:
                 logger.warning(f"[DELETE] Failed to delete from storage: {e}")
@@ -554,6 +556,79 @@ async def download_summary_docx(
     except Exception as e:
         logger.error(f"DOCX生成失败 {transcription_id}: {e}")
         raise HTTPException(status_code=500, detail=f"DOCX生成失败: {str(e)}")
+
+
+@router.get("/{transcription_id}/download-notebooklm")
+async def download_notebooklm_guideline(
+    transcription_id: str,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_active_user)
+):
+    """
+    下载NotebookLM演示文稿指南
+
+    返回基于转录内容生成的NotebookLM指南文本文件。
+    该指南可用于NotebookLM生成演示文稿幻灯片。
+
+    Args:
+        transcription_id: 转录ID
+
+    Returns:
+        StreamingResponse: 下载文件
+
+    Raises:
+        HTTPException: 404 - 未找到指南文件
+    """
+    # 验证转录所有权
+    try:
+        transcription_uuid = UUID(transcription_id)
+    except ValueError:
+        raise HTTPException(status_code=422, detail="Invalid transcription ID format")
+
+    transcription = db.query(Transcription).filter(
+        Transcription.id == transcription_uuid,
+        Transcription.user_id == current_user.get("id")
+    ).first()
+
+    if not transcription:
+        raise HTTPException(status_code=404, detail="未找到转录")
+
+    # Check if guideline exists
+    from app.services.storage_service import get_storage_service
+    storage_service = get_storage_service()
+
+    if not storage_service.notebooklm_guideline_exists(transcription_id):
+        raise HTTPException(
+            status_code=404,
+            detail="NotebookLM指南文件不存在。转录完成后会自动生成，请稍后再试。"
+        )
+
+    try:
+        # Read guideline from storage
+        content = storage_service.get_notebooklm_guideline(transcription_id)
+
+        # Generate filename
+        original_filename = Path(transcription.file_name).stem
+        download_filename = f"{original_filename}-notebooklm.txt"
+
+        from fastapi.responses import StreamingResponse
+        from io import StringIO
+
+        buffer = StringIO(content)
+
+        return StreamingResponse(
+            buffer,
+            media_type="text/plain; charset=utf-8",
+            headers={
+                "Content-Disposition": f'attachment; filename="{download_filename}"'
+            }
+        )
+
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="指南文件不存在")
+    except Exception as e:
+        logger.error(f"NotebookLM指南下载失败 {transcription_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"指南下载失败: {str(e)}")
 
 
 # ==================== Chat Endpoints ====================

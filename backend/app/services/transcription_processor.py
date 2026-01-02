@@ -318,6 +318,13 @@ class TranscriptionProcessor:
                     if not self._summarize_with_retry(transcription, db):
                         raise Exception("Summarization failed after retries")
 
+                    # Step 3.5: Generate NotebookLM guideline (parallel, non-critical)
+                    # Run in background, don't wait for completion
+                    try:
+                        self._generate_notebooklm_guideline(transcription, db)
+                    except Exception as e:
+                        logger.warning(f"NotebookLM guideline generation skipped: {e}")
+
                     # Mark as completed
                     transcription.stage = STAGE_COMPLETED
                     transcription.completed_at = datetime.utcnow()
@@ -617,6 +624,62 @@ class TranscriptionProcessor:
             transcription.error_message = f"Summarization failed: {str(e)}"
             db.commit()
             raise
+
+    def _generate_notebooklm_guideline(self, transcription: Transcription, db: Session) -> bool:
+        """
+        Generate NotebookLM guideline for presentation slides.
+
+        This is called after summary generation to create a guideline
+        that can be used with NotebookLM to generate presentation slides.
+
+        Args:
+            transcription: Transcription model instance
+            db: Database session
+
+        Returns:
+            bool: True if successful, False otherwise (non-critical)
+        """
+        from app.services.storage_service import get_storage_service
+        from app.services.notebooklm_service import get_notebooklm_service
+
+        # Check if guideline already exists
+        storage_service = get_storage_service()
+        if storage_service.notebooklm_guideline_exists(str(transcription.id)):
+            logger.info(f"NotebookLM guideline already exists for: {transcription.id}")
+            return True
+
+        text = transcription.text
+        if not text or len(text.strip()) < 100:
+            logger.info(f"Text too short for NotebookLM guideline: {transcription.id}")
+            return False  # Not an error, just skip
+
+        logger.info(f"Generating NotebookLM guideline for: {transcription.id}")
+
+        try:
+            notebooklm_service = get_notebooklm_service()
+            guideline = notebooklm_service.generate_guideline(
+                transcription_text=text,
+                file_name=transcription.file_name
+            )
+
+            # Save guideline to storage
+            guideline_path = storage_service.save_notebooklm_guideline(
+                transcription_id=str(transcription.id),
+                text=guideline
+            )
+
+            logger.info(
+                f"NotebookLM guideline generated: {transcription.id} | "
+                f"Path: {guideline_path} | "
+                f"Length: {len(guideline)} chars"
+            )
+            return True
+
+        except Exception as e:
+            # Don't fail the entire workflow if guideline generation fails
+            logger.error(f"NotebookLM guideline generation failed (non-critical): {e}")
+            logger.info("Continuing without NotebookLM guideline")
+            return False
 
 
 def should_allow_delete(transcription: Transcription) -> bool:
