@@ -5,7 +5,7 @@
 
 import { useAtom } from 'jotai'
 import { Moon, Sun } from 'lucide-react'
-import { themeWithPersistenceAtom, type Theme } from '../atoms/theme'
+import { themeWithPersistenceAtom } from '../atoms/theme'
 
 export function ThemeToggle() {
   const [theme, setTheme] = useAtom(themeWithPersistenceAtom)

@@ -223,9 +223,6 @@ export function TranscriptionDetail() {
         ? getDisplayText(transcription.text, 100)
         : '转录完成后将自动生成。'
 
-    const downloadUrlTxt = api.getDownloadUrl(transcription.id, 'txt')
-    const downloadUrlSrt = api.getDownloadUrl(transcription.id, 'srt')
-
     const handleDownload = async (format: 'txt' | 'srt') => {
         try {
             const blob = await api.downloadFile(transcription.id, format)
@@ -459,10 +456,10 @@ export function TranscriptionDetail() {
                                     ul: ({node, ...props}) => <ul className="list-disc list-inside mb-3 space-y-1" {...props} />,
                                     ol: ({node, ...props}) => <ol className="list-decimal list-inside mb-3 space-y-1" {...props} />,
                                     li: ({node, ...props}) => <li className="ml-4" {...props} />,
-                                    code: ({node, inline, ...props}) =>
-                                        inline
-                                            ? <code className="px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-sm font-mono text-pink-600 dark:text-pink-400" {...props} />
-                                            : <code className="block p-3 rounded-lg bg-gray-100 dark:bg-gray-800 text-sm font-mono overflow-x-auto" {...props} />,
+                                    code: ({node, className, ...props}) =>
+                                        className
+                                            ? <code className="block p-3 rounded-lg bg-gray-100 dark:bg-gray-800 text-sm font-mono overflow-x-auto" {...props} />
+                                            : <code className="px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-800 text-sm font-mono text-pink-600 dark:text-pink-400" {...props} />,
                                     pre: ({node, ...props}) => <pre className="bg-gray-100 dark:bg-gray-800 p-3 rounded-lg overflow-x-auto mb-3" {...props} />,
                                     blockquote: ({node, ...props}) => <blockquote className="border-l-4 border-gray-300 dark:border-gray-600 pl-4 italic text-gray-600 dark:text-gray-400 my-3" {...props} />,
                                     a: ({node, ...props}) => <a className="text-blue-600 dark:text-blue-400 hover:underline" target="_blank" rel="noopener noreferrer" {...props} />,

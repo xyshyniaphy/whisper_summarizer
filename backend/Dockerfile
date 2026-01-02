@@ -96,6 +96,9 @@ ENV PATH="/opt/venv/bin:$PATH"
 
 WORKDIR /app
 
+# Copy venv from builder stage
+COPY --from=builder /opt/venv /opt/venv
+
 # Install pip and python-docx system-wide (base image doesn't have pip in venv)
 RUN apt-get update && apt-get install -y python3-pip && \
     pip3 install --no-cache-dir --break-system-packages python-docx && \

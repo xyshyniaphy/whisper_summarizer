@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { supabase } from './supabase';
-import { Transcription, Summary } from '../types';
+import { Transcription } from '../types';
 
 // API URL - relative path works with both Vite dev proxy and Nginx production proxy
 const API_URL = '/api';

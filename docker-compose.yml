@@ -1,5 +1,29 @@
 services:
-  # FastAPIバックエンド (faster-whisper + Supabase PostgreSQL)
+  # PostgreSQL 18 (Local Database)
+  postgres:
+    image: postgres:18-alpine
+    container_name: whisper_postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-whisper_summarizer}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - whisper_network
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # FastAPIバックエンド (faster-whisper + Supabase Auth + Local PostgreSQL)
   backend:
     build:
       context: ./backend
@@ -7,8 +31,8 @@ services:
     image: whisper-summarizer-backend:latest
     container_name: whisper_backend
     environment:
-      # Database (Supabase PostgreSQL)
-      DATABASE_URL: ${DATABASE_URL}
+      # Database (Local PostgreSQL)
+      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-whisper_summarizer}
 
       # Supabase
       SUPABASE_URL: ${SUPABASE_URL}
@@ -18,7 +42,7 @@ services:
       # GLM API (OpenAI-compatible)
       GLM_API_KEY: ${GLM_API_KEY}
       GLM_MODEL: ${GLM_MODEL:-GLM-4.5-Air}
-      GLM_BASE_URL: ${GLM_BASE_URL:-https://open.bigmodel.cn/api/paas/v4}
+      GLM_BASE_URL: ${GLM_BASE_URL:-https://api.z.ai/api/paas/v4/}
       REVIEW_LANGUAGE: ${REVIEW_LANGUAGE:-zh}
 
       # Backend Config
@@ -35,6 +59,19 @@ services:
       # Audio Processing
       AUDIO_PARALLELISM: ${AUDIO_PARALLELISM:-1}
 
+      # Audio Chunking (for faster transcription of long audio)
+      ENABLE_CHUNKING: ${ENABLE_CHUNKING:-true}
+      CHUNK_SIZE_MINUTES: ${CHUNK_SIZE_MINUTES:-10}
+      CHUNK_OVERLAP_SECONDS: ${CHUNK_OVERLAP_SECONDS:-15}
+      MAX_CONCURRENT_CHUNKS: ${MAX_CONCURRENT_CHUNKS:-2}
+      USE_VAD_SPLIT: ${USE_VAD_SPLIT:-false}
+      VAD_SILENCE_THRESHOLD: ${VAD_SILENCE_THRESHOLD:--30}
+      VAD_MIN_SILENCE_DURATION: ${VAD_MIN_SILENCE_DURATION:-0.5}
+      MERGE_STRATEGY: ${MERGE_STRATEGY:-lcs}
+
+      # Testing
+      DISABLE_AUTH: ${DISABLE_AUTH:-false}
+
       # Logging
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
     volumes:
@@ -50,6 +87,9 @@ services:
               capabilities: [gpu]
     networks:
       - whisper_network
+    depends_on:
+      postgres:
+        condition: service_healthy
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
@@ -95,6 +135,8 @@ services:
         max-file: "3"
 
 volumes:
+  postgres_data:
+    driver: local
   backend_data:
     driver: local
   backend_output:

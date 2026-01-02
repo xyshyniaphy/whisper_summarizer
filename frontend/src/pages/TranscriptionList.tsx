@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState, useRef } from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Trash2, AlertCircle, Loader2, Clock } from 'lucide-react'
 import { api } from '../services/api'
@@ -26,7 +26,6 @@ interface DeleteConfirmState {
 export function TranscriptionList() {
     const [transcriptions, setTranscriptions] = useState<Transcription[]>([])
     const [isLoading, setIsLoading] = useState(true)
-    const [hasLoaded, setHasLoaded] = useState(false)
     const [deleteConfirm, setDeleteConfirm] = useState<DeleteConfirmState>({
         isOpen: false,
         id: null,
@@ -42,7 +41,6 @@ export function TranscriptionList() {
             console.error(e)
         } finally {
             setIsLoading(false)
-            setHasLoaded(true)
         }
     }, [])
 

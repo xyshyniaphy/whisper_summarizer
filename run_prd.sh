@@ -49,7 +49,7 @@ if [ ! -f .env ]; then
     print_warning ".env file not found!"
     print_warning "Please create .env with required variables:"
     echo "  SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY"
-    echo "  DATABASE_URL, SECRET_KEY, GLM_API_KEY"
+    echo "  DATABASE_URL, GLM_API_KEY"
     read -p "Continue anyway? (y/N) " -n 1 -r
     echo
     if [[ ! $REPLY =~ ^[Yy]$ ]]; then
@@ -58,6 +58,39 @@ if [ ! -f .env ]; then
 else
     print_success ".env file found"
 fi
+
+# Validate required environment variables
+source .env
+
+missing_vars=()
+
+if [ -z "$SUPABASE_URL" ]; then
+    missing_vars+=("SUPABASE_URL")
+fi
+
+if [ -z "$SUPABASE_ANON_KEY" ]; then
+    missing_vars+=("SUPABASE_ANON_KEY")
+fi
+
+if [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then
+    missing_vars+=("SUPABASE_SERVICE_ROLE_KEY")
+fi
+
+if [ -z "$GLM_API_KEY" ]; then
+    missing_vars+=("GLM_API_KEY")
+fi
+
+if [ ${#missing_vars[@]} -gt 0 ]; then
+    print_error "Missing required environment variables:"
+    for var in "${missing_vars[@]}"; do
+        echo "  - $var"
+    done
+    echo ""
+    echo "Please set these variables in .env file"
+    exit 1
+fi
+
+print_success "Environment variables validated"
 
 # ========================================
 # Step 2: Build Production Images (with lint stages)
@@ -101,8 +134,7 @@ print_section "Step 4: Health Check"
 echo "Waiting for services to be ready..."
 sleep 5
 
-# Check backend health
-BACKEND_URL="http://localhost:${BACKEND_PORT:-3080}"
+# Check backend health (internal container - no port exposed)
 FRONTEND_URL="http://localhost:${FRONTEND_PORT:-80}"
 
 # Try up to 30 times (1 minute total)
@@ -113,7 +145,7 @@ while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
     ATTEMPT=$((ATTEMPT + 1))
     echo -n "Checking backend health ($ATTEMPT/$MAX_ATTEMPTS)... "
 
-    if curl -sf "$BACKEND_URL/health" > /dev/null 2>&1; then
+    if docker exec whisper_backend curl -sf http://localhost:8000/health > /dev/null 2>&1; then
         print_success "Backend is healthy!"
         break
     fi
@@ -142,9 +174,11 @@ echo -e "${GREEN}  Production Deployment Complete!${NC}"
 echo -e "${GREEN}========================================${NC}"
 echo ""
 echo "Services running:"
-echo "  - Frontend:  http://localhost:${FRONTEND_PORT:-80}"
-echo "  - Backend:   http://localhost:${BACKEND_PORT:-3080}"
-echo "  - API Docs:  http://localhost:${BACKEND_PORT:-3080}/docs"
+echo "  - Frontend & API: http://localhost:${FRONTEND_PORT:-80}"
+echo "  - Backend:       internal only (accessed via nginx proxy)"
+echo ""
+echo "API endpoints are routed through nginx:"
+echo "  http://localhost:${FRONTEND_PORT:-80}/api/*"
 echo ""
 echo "Useful commands:"
 echo "  docker compose logs -f          # View all logs"

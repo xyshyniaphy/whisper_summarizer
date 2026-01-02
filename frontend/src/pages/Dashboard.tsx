@@ -3,7 +3,7 @@ import { Button } from '../components/ui/Button'
 import { ConfirmDialog } from '../components/ui/ConfirmDialog'
 import { api } from '../services/api'
 import { Trash2, Loader2 } from 'lucide-react'
-import { useState, useCallback } from 'react'
+import { useState } from 'react'
 
 interface DeleteAllConfirmState {
   isOpen: boolean
