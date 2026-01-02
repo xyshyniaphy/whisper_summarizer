@@ -42,6 +42,7 @@ COPY pyproject.toml .
 # Note: faster-whisper is in base image, but we include it here for consistency
 RUN uv venv /opt/venv && \
     . /opt/venv/bin/activate && \
+    uv pip install python-docx && \
     uv pip install APScheduler>=3.10.0 && \
     uv pip install -r requirements.txt
 
@@ -98,14 +99,6 @@ WORKDIR /app
 
 # Copy venv from builder stage
 COPY --from=builder /opt/venv /opt/venv
-
-# Install pip and python-docx system-wide (base image doesn't have pip in venv)
-RUN apt-get update && apt-get install -y python3-pip && \
-    pip3 install --no-cache-dir --break-system-packages python-docx && \
-    apt-get clean && rm -rf /var/lib/apt/lists/*
-
-# Add system dist-packages to Python path so venv can find python-docx
-ENV PYTHONPATH="/usr/local/lib/python3.12/dist-packages:/opt/venv/lib/python3.12/site-packages:$PYTHONPATH"
 
 # アプリケーションコードをコピー
 COPY . .
