@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { supabase } from './supabase';
-import { Transcription } from '../types';
+import { Transcription, PaginatedResponse } from '../types';
 
 // API URL - relative path works with both Vite dev proxy and Nginx production proxy
 const API_URL = '/api';
@@ -71,8 +71,12 @@ export const api = {
     return response.data;
   },
 
-  getTranscriptions: async (): Promise<Transcription[]> => {
-    const response = await apiClient.get<Transcription[]>('/transcriptions');
+  getTranscriptions: async (page: number = 1, page_size?: number): Promise<PaginatedResponse<Transcription>> => {
+    const params: Record<string, number> = { page };
+    if (page_size !== undefined) {
+      params.page_size = page_size;
+    }
+    const response = await apiClient.get<PaginatedResponse<Transcription>>('/transcriptions', { params });
     return response.data;
   },
 

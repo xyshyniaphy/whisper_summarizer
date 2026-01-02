@@ -24,4 +24,12 @@ export interface Summary {
   created_at: string;
 }
 
+export interface PaginatedResponse<T> {
+  total: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
+  data: T[];
+}
+
 export interface UploadResponse extends Transcription {}

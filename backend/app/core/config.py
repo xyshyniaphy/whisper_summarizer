@@ -52,6 +52,10 @@ class Settings(BaseSettings):
     MAX_KEEP_DAYS: int = 30  # Maximum days to keep transcriptions before auto-delete
     CLEANUP_HOUR: int = 9  # Hour to run daily cleanup (24-hour format, default: 9 AM)
 
+    # Pagination
+    DEFAULT_PAGE_SIZE: int = 10  # Default number of items per page for pagination
+    MAX_PAGE_SIZE: int = 100  # Maximum allowed page size
+
     # Text Formatting (LLM-based)
     MAX_FORMAT_CHUNK: int = 10000  # Maximum chunk size in bytes for LLM text formatting
 

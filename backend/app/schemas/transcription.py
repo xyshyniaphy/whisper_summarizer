@@ -1,6 +1,19 @@
 from pydantic import BaseModel, UUID4, ConfigDict, field_serializer
-from typing import Optional, List
+from typing import Optional, List, Generic, TypeVar
 from datetime import datetime, timedelta
+
+# Generic type for paginated response
+T = TypeVar('T')
+
+class PaginatedResponse(BaseModel, Generic[T]):
+    """Generic paginated response schema."""
+    total: int  # Total number of items
+    page: int  # Current page number (1-indexed)
+    page_size: int  # Number of items per page
+    total_pages: int  # Total number of pages
+    data: List[T]  # List of items for the current page
+
+    model_config = ConfigDict(from_attributes=True)
 
 class SummaryBase(BaseModel):
     summary_text: str

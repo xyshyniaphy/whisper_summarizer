@@ -8,11 +8,12 @@ import secrets
 import base64
 from app.api.deps import get_db
 from app.core.supabase import get_current_active_user
+from app.core.config import settings
 from app.models.transcription import Transcription
 from app.models.summary import Summary
 from app.models.chat_message import ChatMessage
 from app.models.share_link import ShareLink
-from app.schemas.transcription import Transcription as TranscriptionSchema
+from app.schemas.transcription import Transcription as TranscriptionSchema, PaginatedResponse
 from app.schemas.summary import Summary as SummarySchema
 from app.schemas.chat import ChatMessage as ChatMessageSchema, ChatHistoryResponse
 from app.schemas.share import ShareLink as ShareLinkSchema
@@ -57,24 +58,45 @@ def _format_fake_srt(text: str) -> str:
 # API Endpoints
 # ============================================================================
 
-@router.get("", response_model=List[TranscriptionSchema])
+@router.get("", response_model=PaginatedResponse[TranscriptionSchema])
 async def list_transcriptions(
-    limit: int = Query(10, ge=1, le=100),
-    offset: int = Query(0, ge=0),
+    page: int = Query(1, ge=1, description="Page number (1-indexed)"),
+    page_size: int = Query(None, ge=1, le=settings.MAX_PAGE_SIZE, description="Number of items per page"),
     stage: str = Query(None, description="Filter by stage: uploading, transcribing, summarizing, completed, failed"),
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_active_user)
 ):
     """
     文字起こしリストを取得 (現在のユーザーのもののみ)
+    Returns paginated list of transcriptions.
     """
+    # Use default page size from config if not specified
+    if page_size is None:
+        page_size = settings.DEFAULT_PAGE_SIZE
+
+    # Build base query
     query = db.query(Transcription).filter(Transcription.user_id == current_user.get("id"))
 
     if stage:
         query = query.filter(Transcription.stage == stage)
-    
-    transcriptions = query.order_by(Transcription.created_at.desc()).offset(offset).limit(limit).all()
-    return transcriptions
+
+    # Get total count
+    total = query.count()
+
+    # Calculate offset and apply pagination
+    offset = (page - 1) * page_size
+    transcriptions = query.order_by(Transcription.created_at.desc()).offset(offset).limit(page_size).all()
+
+    # Calculate total pages
+    total_pages = (total + page_size - 1) // page_size if total > 0 else 0
+
+    return PaginatedResponse(
+        total=total,
+        page=page,
+        page_size=page_size,
+        total_pages=total_pages,
+        data=transcriptions
+    )
 
 
 @router.get("/{transcription_id}", response_model=TranscriptionSchema)
