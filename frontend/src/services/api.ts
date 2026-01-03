@@ -10,14 +10,50 @@ const apiClient = axios.create({
   baseURL: API_URL,
 });
 
+// Helper function to get access token from localStorage as fallback
+const getAccessTokenFromStorage = (): string | null => {
+  try {
+    // Find the Supabase auth token key
+    const keys = Object.keys(localStorage);
+    const authKey = keys.find(k => k.startsWith('sb-') && k.includes('-auth-token'));
+
+    if (!authKey) return null;
+
+    const tokenData = JSON.parse(localStorage.getItem(authKey));
+    return tokenData?.currentSession?.access_token || tokenData?.access_token || null;
+  } catch {
+    return null;
+  }
+};
+
 // Request interceptor to add auth token
 apiClient.interceptors.request.use(
   async (config) => {
-    // Get current session from Supabase
-    const { data: { session } } = await supabase.auth.getSession();
+    // Get current session from Supabase with timeout fallback
+    let accessToken: string | null = null;
 
-    if (session?.access_token) {
-      config.headers.Authorization = `Bearer ${session.access_token}`;
+    try {
+      // Add a timeout fallback in case supabase.auth.getSession() hangs
+      const sessionPromise = supabase.auth.getSession();
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Session retrieval timeout')), 2000)
+      );
+
+      const result = await Promise.race([sessionPromise, timeoutPromise]) as any;
+      accessToken = result.data?.session?.access_token || null;
+    } catch (e) {
+      // If getSession fails or times out, fall back to localStorage
+      console.warn('[API interceptor] getSession failed, using localStorage fallback:', (e as Error).message);
+      accessToken = getAccessTokenFromStorage();
+    }
+
+    // Fallback to localStorage if getSession returned null
+    if (!accessToken) {
+      accessToken = getAccessTokenFromStorage();
+    }
+
+    if (accessToken) {
+      config.headers.Authorization = `Bearer ${accessToken}`;
     }
 
     return config;
@@ -271,6 +307,12 @@ export const api = {
     channel_ids: string[];
   }> => {
     const response = await apiClient.post(`/transcriptions/${transcriptionId}/channels`, { channel_ids });
+    return response.data;
+  },
+
+  // Generic GET method for custom endpoints
+  get: async (url: string, config?: any) => {
+    const response = await apiClient.get(url, config);
     return response.data;
   },
 };

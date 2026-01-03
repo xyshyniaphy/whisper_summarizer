@@ -53,24 +53,33 @@ const mockUser: User = {
 
 // Fetch extended user data from backend (includes is_active, is_admin)
 const fetchUserData = async (user: User | null): Promise<ExtendedUser | null> => {
-  if (!user) return null
+  console.log('[fetchUserData] Starting with user:', user?.email || 'no user')
+  if (!user) {
+    console.log('[fetchUserData] No user, returning null')
+    return null
+  }
 
   try {
+    console.log('[fetchUserData] Calling api.get("/users/me")')
     const response = await api.get('/users/me')
+    console.log('[fetchUserData] API response:', response)
+    // api.get() already returns response.data, so response is the data object
     return {
       ...user,
-      ...response.data,
+      ...response,
     }
   } catch (error) {
-    console.error('Error fetching user data from backend:', error)
+    console.error('[fetchUserData] Error fetching user data from backend:', error)
     // If backend returns 403 (inactive account), still return user with is_active=false
     if (error instanceof Error && 'status' in error && (error as any).status === 403) {
+      console.log('[fetchUserData] 403 error, returning inactive user')
       return {
         ...user,
         is_active: false,
         is_admin: false,
       }
     }
+    console.log('[fetchUserData] Other error, returning original user')
     return user
   }
 }
@@ -101,23 +110,90 @@ export function useAuth(): [
 
     // 現在のセッションを取得
     const getSession = async () => {
-      const { data: { session }, error } = await supabase.auth.getSession()
-      if (error) {
-        console.error('Error getting session:', error.message)
+      console.log('[getSession] Starting...')
+      let session
+      let error
+
+      // Try to get session from Supabase with a timeout fallback
+      try {
+        console.log('[getSession] Calling supabase.auth.getSession()')
+        // Add a timeout fallback in case supabase.auth.getSession() hangs
+        const sessionPromise = supabase.auth.getSession()
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Session retrieval timeout')), 3000)
+        )
+
+        const result = await Promise.race([sessionPromise, timeoutPromise]) as any
+        session = result.data?.session
+        error = result.error
+        console.log('[getSession] Supabase result:', { hasSession: !!session, hasError: !!error })
+      } catch (e: any) {
+        console.warn('[getSession] Supabase getSession() failed, trying localStorage fallback:', e?.message)
+        // Fallback: read session directly from localStorage
+        try {
+          const keys = Object.keys(localStorage)
+          const authKey = keys.find(k => k.startsWith('sb-') && k.includes('-auth-token'))
+          console.log('[getSession] Found auth key:', !!authKey)
+          if (authKey) {
+            const tokenData = JSON.parse(localStorage.getItem(authKey))
+            const accessToken = tokenData?.currentSession?.access_token || tokenData?.access_token
+            console.log('[getSession] Has access token:', !!accessToken)
+
+            if (accessToken) {
+              // Decode JWT to get user info
+              const parts = accessToken.split('.')
+              if (parts.length === 3) {
+                const payload = JSON.parse(atob(parts[1]))
+                console.log('[getSession] Decoded user from JWT:', payload.email)
+                session = {
+                  user: {
+                    id: payload.sub,
+                    email: payload.email,
+                    email_confirmed_at: payload.email_verified ? new Date().toISOString() : null,
+                    user_metadata: payload.user_metadata || {},
+                    app_metadata: payload.app_metadata || {},
+                  }
+                }
+                console.log('[getSession] Created session from localStorage')
+              }
+            }
+          }
+        } catch (localStorageError) {
+          console.error('[getSession] LocalStorage fallback also failed:', localStorageError)
+        }
       }
 
+      if (error) {
+        console.error('[getSession] Error getting session:', error.message)
+      }
+
+      console.log('[getSession] Final session state:', { hasSession: !!session, hasUser: !!session?.user, userEmail: session?.user?.email })
+
       if (session?.user) {
-        const userData = await fetchUserData(session.user)
-        setUser(userData)
-        setSession(session)
-        setRole(userData?.is_admin ? 'admin' : 'user')
-        setIsActive(userData?.is_active ?? false)
+        try {
+          console.log('[getSession] Calling fetchUserData for:', session.user.email)
+          const userData = await fetchUserData(session.user)
+          console.log('[getSession] fetchUserData returned:', userData?.email, 'is_active:', userData?.is_active, 'is_admin:', userData?.is_admin)
+          setUser(userData)
+          setSession(session)
+          setRole(userData?.is_admin ? 'admin' : 'user')
+          setIsActive(userData?.is_active ?? false)
+        } catch (fetchError) {
+          console.error('[getSession] Error in fetchUserData:', fetchError)
+          // Set user with session data even if fetchUserData fails
+          setUser(session.user as any)
+          setSession(session)
+          setRole('user')
+          setIsActive(false)
+        }
       } else {
+        console.log('[getSession] No session.user, clearing auth state')
         setUser(null)
         setSession(null)
         setRole(null)
         setIsActive(false)
       }
+      console.log('[getSession] Setting loading=false')
       setLoading(false)
     }
 
@@ -125,13 +201,25 @@ export function useAuth(): [
 
     // 認証状態の変更を監視
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      console.log('[onAuthStateChange] Event:', _event, 'hasSession:', !!session, 'userEmail:', session?.user?.email)
       if (session?.user) {
-        const userData = await fetchUserData(session.user)
-        setUser(userData)
-        setSession(session)
-        setRole(userData?.is_admin ? 'admin' : 'user')
-        setIsActive(userData?.is_active ?? false)
+        try {
+          const userData = await fetchUserData(session.user)
+          console.log('[onAuthStateChange] fetchUserData returned:', userData?.email, 'is_active:', userData?.is_active, 'is_admin:', userData?.is_admin)
+          setUser(userData)
+          setSession(session)
+          setRole(userData?.is_admin ? 'admin' : 'user')
+          setIsActive(userData?.is_active ?? false)
+        } catch (fetchError) {
+          console.error('[onAuthStateChange] Error in fetchUserData:', fetchError)
+          // Set user with session data even if fetchUserData fails
+          setUser(session.user as any)
+          setSession(session)
+          setRole('user')
+          setIsActive(false)
+        }
       } else {
+        console.log('[onAuthStateChange] No session.user, clearing auth state')
         setUser(null)
         setSession(null)
         setRole(null)
