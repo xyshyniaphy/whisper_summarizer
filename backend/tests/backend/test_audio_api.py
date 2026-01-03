@@ -26,11 +26,11 @@ from sqlalchemy import exc as sqlalchemy_exc
 class TestAudioUploadEndpoint:
     """Tests for the audio upload endpoint."""
 
-    def test_upload_audio_requires_authentication(self, client):
+    def test_upload_audio_requires_authentication(self, test_client):
         """Test that upload requires authentication."""
         audio_content = b"fake audio content"
 
-        response = client.post(
+        response = test_client.post(
             "/api/audio/upload",
             files={"file": ("test.mp3", audio_content, "audio/mpeg")}
         )
@@ -41,12 +41,12 @@ class TestAudioUploadEndpoint:
             http_status.HTTP_403_FORBIDDEN
         ]
 
-    def test_upload_audio_rejects_invalid_extension(self, authenticated_client):
+    def test_upload_audio_rejects_invalid_extension(self, real_auth_client):
         """Test that upload rejects files with invalid extensions."""
         # Try to upload a .exe file
         invalid_content = b"fake content"
 
-        response = authenticated_client.post(
+        response = real_auth_client.post(
             "/api/audio/upload",
             files={"file": ("test.exe", invalid_content, "application/octet-stream")}
         )
@@ -59,12 +59,12 @@ class TestAudioUploadEndpoint:
             http_status.HTTP_403_FORBIDDEN
         ]
 
-    def test_upload_audio_endpoint_exists(self, authenticated_client):
+    def test_upload_audio_endpoint_exists(self, real_auth_client):
         """Test that upload endpoint exists (minimal test)."""
         # Just verify the endpoint is reachable
         audio_content = b"fake audio content"
         try:
-            response = authenticated_client.post(
+            response = real_auth_client.post(
                 "/api/audio/upload",
                 files={"file": ("test.mp3", audio_content, "audio/mpeg")}
             )
@@ -87,11 +87,11 @@ class TestAudioUploadEndpoint:
 class TestAudioRetrievalEndpoint:
     """Tests for the audio retrieval endpoint."""
 
-    def test_get_audio_placeholder_returns_200(self, authenticated_client):
+    def test_get_audio_placeholder_returns_200(self, real_auth_client):
         """Test that audio endpoint returns 200 (placeholder)."""
         test_id = uuid4()
 
-        response = authenticated_client.get(f"/api/audio/{test_id}")
+        response = real_auth_client.get(f"/api/audio/{test_id}")
 
         # The placeholder endpoint currently just returns None/200
         # Or might return 401/403/404 for auth issues
@@ -102,11 +102,11 @@ class TestAudioRetrievalEndpoint:
             http_status.HTTP_404_NOT_FOUND
         ]
 
-    def test_get_audio_requires_authentication(self, client):
+    def test_get_audio_requires_authentication(self, test_client):
         """Test that audio retrieval requires authentication."""
         test_id = uuid4()
 
-        response = client.get(f"/api/audio/{test_id}")
+        response = test_client.get(f"/api/audio/{test_id}")
 
         # The placeholder endpoint may not require auth and return 200
         # If auth was required, would return 401/403
@@ -116,10 +116,10 @@ class TestAudioRetrievalEndpoint:
             http_status.HTTP_403_FORBIDDEN
         ]
 
-    def test_get_audio_with_invalid_id(self, authenticated_client):
+    def test_get_audio_with_invalid_id(self, real_auth_client):
         """Test audio endpoint with invalid ID format."""
         # The endpoint is a placeholder, so this test documents current behavior
-        response = authenticated_client.get("/api/audio/invalid-uuid")
+        response = real_auth_client.get("/api/audio/invalid-uuid")
 
         # Should either return 404 or handle the invalid ID
         assert response.status_code in [

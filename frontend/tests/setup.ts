@@ -9,6 +9,9 @@ expect.extend(matchers)
 // Mock Jotai atoms - create mock atoms for testing
 const mockAtom = <T>(initialValue: T) => atom(initialValue)
 
+// Store for atom values that can be modified in tests
+const atomStore = new Map<any, any>()
+
 // Create mock Jotai atoms that components use
 export const mockAtoms = {
   // Auth atoms
@@ -32,28 +35,39 @@ export const mockAtoms = {
   dashboardView: mockAtom('users' as const),
 }
 
+// Initialize atom store
+Object.entries(mockAtoms).forEach(([key, value]) => {
+  atomStore.set(value, key === 'theme' ? 'light' : key === 'isAuthenticated' ? false : null)
+})
+
+// Helper to set atom value in tests
+export function setAtomValue(atomKey: string, value: any) {
+  if (mockAtoms[atomKey as keyof typeof mockAtoms]) {
+    atomStore.set(mockAtoms[atomKey as keyof typeof mockAtoms], value)
+  }
+}
+
 // Mock useAtom hook
 vi.mock('jotai', () => ({
-  atom: vi.fn((initialValue) => initialValue),
+  atom: vi.fn((initialValue) => {
+    const newAtom = initialValue
+    atomStore.set(newAtom, initialValue)
+    return newAtom
+  }),
   useAtom: vi.fn((atomToUse) => {
-    // Find the corresponding mock atom value
-    const atomKey = Object.keys(mockAtoms).find(key => mockAtoms[key as keyof typeof mockAtoms] === atomToUse)
-    if (atomKey) {
-      const value = mockAtoms[atomKey as keyof typeof mockAtoms]
-      return [value, vi.fn()]
-    }
-    // Default fallback
-    return [null, vi.fn()]
+    const value = atomStore.get(atomToUse)
+    const setValue = vi.fn((newValue: any) => {
+      atomStore.set(atomToUse, newValue)
+    })
+    return [value, setValue]
   }),
   useAtomValue: vi.fn((atomToUse) => {
-    const atomKey = Object.keys(mockAtoms).find(key => mockAtoms[key as keyof typeof mockAtoms] === atomToUse)
-    if (atomKey) {
-      return mockAtoms[atomKey as keyof typeof mockAtoms]
-    }
-    return null
+    return atomStore.get(atomToUse)
   }),
   useSetAtom: vi.fn((atomToUse) => {
-    return vi.fn()
+    return vi.fn((newValue: any) => {
+      atomStore.set(atomToUse, newValue)
+    })
   }),
   useAtomDevtools: vi.fn(),
   Provider: ({ children }: { children: React.ReactNode }) => children,
@@ -78,28 +92,21 @@ vi.mock('react-router-dom', async () => {
 })
 
 // Mock API calls to prevent network errors
-vi.mock('@/services/api', () => ({
-  api: {
-    get: vi.fn(() => Promise.resolve({ data: [] })),
-    post: vi.fn(() => Promise.resolve({ data: {} })),
-    put: vi.fn(() => Promise.resolve({ data: {} })),
-    delete: vi.fn(() => Promise.resolve({ data: {} })),
-    patch: vi.fn(() => Promise.resolve({ data: {} })),
-    sendChatMessageStream: vi.fn(async () => ({
-      done: true,
-    })),
-  },
-  getTranscriptions: vi.fn(() => Promise.resolve([])),
-  getTranscription: vi.fn(() => Promise.resolve({})),
-  createTranscription: vi.fn(() => Promise.resolve({})),
-  deleteTranscription: vi.fn(() => Promise.resolve({})),
-  updateTranscription: vi.fn(() => Promise.resolve({})),
-  generateSummary: vi.fn(() => Promise.resolve({})),
-  getChatHistory: vi.fn(() => Promise.resolve([])),
-  sendChatMessage: vi.fn(() => Promise.resolve({})),
-  sendChatMessageStream: vi.fn(async () => ({
-    done: true,
-  })),
+// Note: We mock axios instead since api.ts uses it internally
+vi.mock('axios', () => ({
+  default: {
+    create: vi.fn(() => ({
+      get: vi.fn(() => Promise.resolve({ data: [] })),
+      post: vi.fn(() => Promise.resolve({ data: {} })),
+      put: vi.fn(() => Promise.resolve({ data: {} })),
+      delete: vi.fn(() => Promise.resolve({ data: {} })),
+      patch: vi.fn(() => Promise.resolve({ data: {} })),
+      interceptors: {
+        request: { use: vi.fn() },
+        response: { use: vi.fn() }
+      }
+    }))
+  }
 }))
 
 // Cleanup after each test

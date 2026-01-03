@@ -7,11 +7,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { Button } from '../../../src/components/ui/Button'
-import { Card, CardContent, CardHeader, CardTitle } from '../../../src/components/ui/Card'
-import { Badge } from '../../../src/components/ui/Badge'
-import { Modal } from '../../../src/components/ui/Modal'
-import { Accordion, AccordionItem } from '../../../src/components/ui/Accordion'
+import { Button } from '@/components/ui/Button'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card'
+import { Badge } from '@/components/ui/Badge'
+import { Modal } from '@/components/ui/Modal'
+import { Accordion, AccordionItem } from '@/components/ui/Accordion'
 
 describe('Button Component', () => {
   describe('Rendering', () => {

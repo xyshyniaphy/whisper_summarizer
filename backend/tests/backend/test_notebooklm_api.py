@@ -109,7 +109,7 @@ class TestNotebookLMAPI:
             guideline_path.unlink()
 
     def test_download_notebooklm_guideline_success(
-        self, authenticated_client: TestClient, db_session
+        self, real_auth_client: TestClient, db_session, real_auth_user: dict
     ) -> None:
         """Successful NotebookLM guideline download test."""
         guideline_text = """**角色设定：**
@@ -127,9 +127,9 @@ class TestNotebookLMAPI:
 讲座中详细讲解了如何通过禅修实践来体悟空性。
 """
 
-        trans_id = self.setup_transcription_with_guideline(db_session, TEST_USER_ID, guideline_text)
+        trans_id = self.setup_transcription_with_guideline(db_session, real_auth_user["id"], guideline_text)
         try:
-            response = authenticated_client.get(f"/api/transcriptions/{trans_id}/download-notebooklm")
+            response = real_auth_client.get(f"/api/transcriptions/{trans_id}/download-notebooklm")
             assert response.status_code == 200
             assert "text/plain" in response.headers["content-type"]
             assert f"test_notebooklm_{trans_id}-notebooklm.txt" in response.headers["content-disposition"]
@@ -144,7 +144,7 @@ class TestNotebookLMAPI:
             self.teardown_transcription_with_guideline(db_session, trans_id)
 
     def test_download_notebooklm_guideline_chinese_full(
-        self, authenticated_client: TestClient, db_session
+        self, real_auth_client: TestClient, db_session, real_auth_user: dict
     ) -> None:
         """Full Chinese guideline content test."""
         guideline_text = """# 演示文稿大纲
@@ -161,9 +161,9 @@ class TestNotebookLMAPI:
 详细讲解了金刚经中关于空性的智慧。
 """
 
-        trans_id = self.setup_transcription_with_guideline(db_session, TEST_USER_ID, guideline_text)
+        trans_id = self.setup_transcription_with_guideline(db_session, real_auth_user["id"], guideline_text)
         try:
-            response = authenticated_client.get(f"/api/transcriptions/{trans_id}/download-notebooklm")
+            response = real_auth_client.get(f"/api/transcriptions/{trans_id}/download-notebooklm")
             assert response.status_code == 200
 
             content = response.content.decode('utf-8')
@@ -175,21 +175,21 @@ class TestNotebookLMAPI:
             self.teardown_transcription_with_guideline(db_session, trans_id)
 
     def test_download_notebooklm_guideline_invalid_uuid(
-        self, authenticated_client: TestClient, db_session
+        self, real_auth_client: TestClient, db_session
     ) -> None:
         """422 test for invalid UUID format."""
-        response = authenticated_client.get("/api/transcriptions/invalid-uuid/download-notebooklm")
+        response = real_auth_client.get("/api/transcriptions/invalid-uuid/download-notebooklm")
         assert response.status_code == 422
 
     def test_download_notebooklm_guideline_content_disposition(
-        self, authenticated_client: TestClient, db_session
+        self, real_auth_client: TestClient, db_session, real_auth_user: dict
     ) -> None:
         """Test Content-Disposition header format."""
         guideline_text = "Test guideline for content disposition check."
 
-        trans_id = self.setup_transcription_with_guideline(db_session, TEST_USER_ID, guideline_text)
+        trans_id = self.setup_transcription_with_guideline(db_session, real_auth_user["id"], guideline_text)
         try:
-            response = authenticated_client.get(f"/api/transcriptions/{trans_id}/download-notebooklm")
+            response = real_auth_client.get(f"/api/transcriptions/{trans_id}/download-notebooklm")
 
             if response.status_code == 200:
                 content_disposition = response.headers.get("content-disposition", "")
@@ -200,7 +200,7 @@ class TestNotebookLMAPI:
             self.teardown_transcription_with_guideline(db_session, trans_id)
 
     def test_download_notebooklm_guideline_long_content(
-        self, authenticated_client: TestClient, db_session
+        self, real_auth_client: TestClient, db_session, real_auth_user: dict
     ) -> None:
         """Test with long guideline content (10+ slides)."""
         # Generate content for 12 slides
@@ -221,9 +221,9 @@ class TestNotebookLMAPI:
 {"".join(slides)}
 """
 
-        trans_id = self.setup_transcription_with_guideline(db_session, TEST_USER_ID, guideline_text)
+        trans_id = self.setup_transcription_with_guideline(db_session, real_auth_user["id"], guideline_text)
         try:
-            response = authenticated_client.get(f"/api/transcriptions/{trans_id}/download-notebooklm")
+            response = real_auth_client.get(f"/api/transcriptions/{trans_id}/download-notebooklm")
             assert response.status_code == 200
 
             content = response.content.decode('utf-8')

@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { api } from '../../../src/services/api'
+import { api } from '@/services/api'
 import axios from 'axios'
 
 // Mock axios
@@ -17,7 +17,7 @@ const mockSession = {
   refresh_token: 'mock-refresh-token'
 }
 
-vi.mock('../../../src/services/supabase', () => ({
+vi.mock('@/services/supabase', () => ({
   supabase: {
     auth: {
       getSession: vi.fn(() => Promise.resolve({

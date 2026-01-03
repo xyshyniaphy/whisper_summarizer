@@ -9,9 +9,11 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Provider } from 'jotai'
 import { renderHook, act } from '@testing-library/react'
+import { useAtom } from 'jotai'
 import { ChannelBadge, Channel } from '../../../../src/components/channel/ChannelBadge'
 import { ChannelFilter } from '../../../../src/components/channel/ChannelFilter'
 import { ChannelAssignModal } from '../../../../src/components/channel/ChannelAssignModal'
+import { channelFilterAtom } from '../../../../src/atoms/channels'
 
 // Mock adminApi
 vi.mock('../../../../src/services/api', () => ({
@@ -140,7 +142,7 @@ describe('ChannelFilter Component', () => {
 
   it('フィルター変更時にatomが更新される', async () => {
     const user = userEvent.setup()
-    const { result } = renderHook(() => import('../../../../src/atoms/channels').then(m => useAtom(m.channelFilterAtom)), { wrapper })
+    const { result } = renderHook(() => useAtom(channelFilterAtom), { wrapper })
 
     render(<ChannelFilter />, { wrapper })
 

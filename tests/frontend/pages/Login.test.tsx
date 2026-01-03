@@ -10,11 +10,11 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { BrowserRouter } from 'react-router-dom'
 import { Provider } from 'jotai'
-import Login from '../../src/pages/Login'
+import Login from '@/pages/Login'
 
 // Mock Supabase client
 const mockSignInWithOAuth = vi.fn()
-vi.mock('../../src/services/supabase', () => ({
+vi.mock('@/services/supabase', () => ({
   supabase: {
     auth: {
       signInWithOAuth: () => mockSignInWithOAuth()

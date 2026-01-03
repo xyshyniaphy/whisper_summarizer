@@ -10,11 +10,11 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { BrowserRouter } from 'react-router-dom'
 import { Provider } from 'jotai'
-import Dashboard from '../../../src/pages/Dashboard'
+import Dashboard from '@/pages/Dashboard'
 
 // Mock API service
 const mockDeleteAllTranscriptions = vi.fn()
-vi.mock('../../../src/services/api', () => ({
+vi.mock('@/services/api', () => ({
   api: {
     deleteAllTranscriptions: () => mockDeleteAllTranscriptions()
   }
@@ -28,7 +28,7 @@ const mockUser = {
   user_metadata: { role: 'user', full_name: 'Test User' }
 }
 
-vi.mock('../../../src/hooks/useAuth', () => ({
+vi.mock('@/hooks/useAuth', () => ({
   useAuth: () => [
     { user: mockUser, session: null, role: 'user', loading: false },
     { signOut: mockSignOut }

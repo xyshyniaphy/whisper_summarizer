@@ -40,21 +40,21 @@ describe('GoogleButton', () => {
   describe('Click Handler', () => {
     it('ボタンをクリックするとonClickが呼ばれる', async () => {
       const user = userEvent.setup()
-      const { container } = render(<GoogleButton onClick={mockOnClick} />)
+      render(<GoogleButton onClick={mockOnClick} />)
 
-      const button = container.querySelector('button')
-      await user.click(button!)
+      const button = screen.getByRole('button')
+      await user.click(button)
 
       expect(mockOnClick).toHaveBeenCalledTimes(1)
     })
 
     it('複数回クリックすると複数回onClickが呼ばれる', async () => {
       const user = userEvent.setup()
-      const { container } = render(<GoogleButton onClick={mockOnClick} />)
+      render(<GoogleButton onClick={mockOnClick} />)
 
-      const button = container.querySelector('button')
-      await user.click(button!)
-      await user.click(button!)
+      const button = screen.getByRole('button')
+      await user.click(button)
+      await user.click(button)
 
       expect(mockOnClick).toHaveBeenCalledTimes(2)
     })
@@ -62,27 +62,27 @@ describe('GoogleButton', () => {
 
   describe('Disabled State', () => {
     it('disabled=trueの場合、ボタンが無効になる', () => {
-      const { container } = render(<GoogleButton onClick={mockOnClick} disabled={true} />)
+      render(<GoogleButton onClick={mockOnClick} disabled={true} />)
 
-      const button = container.querySelector('button')
+      const button = screen.getByRole('button')
       expect(button).toBeDisabled()
     })
 
     it('disabled時、クリックしてもonClickが呼ばれない', async () => {
       const user = userEvent.setup()
-      const { container } = render(<GoogleButton onClick={mockOnClick} disabled={true} />)
+      render(<GoogleButton onClick={mockOnClick} disabled={true} />)
 
-      const button = container.querySelector('button')
-      await user.click(button!)
+      const button = screen.getByRole('button')
+      await user.click(button)
 
       expect(mockOnClick).not.toHaveBeenCalled()
     })
 
     it('disabled時、スタイルが変化する', () => {
-      const { container } = render(<GoogleButton onClick={mockOnClick} disabled={true} />)
+      render(<GoogleButton onClick={mockOnClick} disabled={true} />)
 
-      const button = container.querySelector('button')
-      expect(button?.className).toContain('disabled')
+      const button = screen.getByRole('button')
+      expect(button.className).toContain('disabled')
     })
   })
 
@@ -94,44 +94,44 @@ describe('GoogleButton', () => {
     })
 
     it('loading時、ボタンが無効になる', () => {
-      const { container } = render(<GoogleButton onClick={mockOnClick} loading={true} />)
+      render(<GoogleButton onClick={mockOnClick} loading={true} />)
 
-      const button = container.querySelector('button')
+      const button = screen.getByRole('button')
       expect(button).toBeDisabled()
     })
 
     it('loading時、クリックしてもonClickが呼ばれない', async () => {
       const user = userEvent.setup()
-      const { container } = render(<GoogleButton onClick={mockOnClick} loading={true} />)
+      render(<GoogleButton onClick={mockOnClick} loading={true} />)
 
-      const button = container.querySelector('button')
-      await user.click(button!)
+      const button = screen.getByRole('button')
+      await user.click(button)
 
       expect(mockOnClick).not.toHaveBeenCalled()
     })
 
     it('disabledとloadingの両方がtrueの場合、ボタンが無効になる', () => {
-      const { container } = render(<GoogleButton onClick={mockOnClick} disabled={true} loading={true} />)
+      render(<GoogleButton onClick={mockOnClick} disabled={true} loading={true} />)
 
-      const button = container.querySelector('button')
+      const button = screen.getByRole('button')
       expect(button).toBeDisabled()
     })
   })
 
   describe('Styling', () => {
     it('正しいCSSクラスが適用される', () => {
-      const { container } = render(<GoogleButton onClick={mockOnClick} />)
+      render(<GoogleButton onClick={mockOnClick} />)
 
-      const button = container.querySelector('button')
+      const button = screen.getByRole('button')
       expect(button).toBeTruthy()
-      expect(button?.className).toContain('border')
+      expect(button.className).toContain('border')
     })
 
     it('ダークモード対応のクラスが含まれる', () => {
-      const { container } = render(<GoogleButton onClick={mockOnClick} />)
+      render(<GoogleButton onClick={mockOnClick} />)
 
-      const button = container.querySelector('button')
-      expect(button?.className).toMatch(/dark:/)
+      const button = screen.getByRole('button')
+      expect(button.className).toMatch(/dark:/)
     })
   })
 
@@ -153,27 +153,27 @@ describe('GoogleButton', () => {
 
   describe('Button Type', () => {
     it('buttonタイプが"type=button"である', () => {
-      const { container } = render(<GoogleButton onClick={mockOnClick} />)
+      render(<GoogleButton onClick={mockOnClick} />)
 
-      const button = container.querySelector('button')
-      expect(button?.getAttribute('type')).toBe('button')
+      const button = screen.getByRole('button')
+      expect(button.getAttribute('type')).toBe('button')
     })
   })
 
   describe('Icon and Text Layout', () => {
     it('アイコンとテキストが正しく配置される', () => {
-      const { container } = render(<GoogleButton onClick={mockOnClick} />)
+      render(<GoogleButton onClick={mockOnClick} />)
 
-      const button = container.querySelector('button')
-      expect(button?.className).toContain('items-center')
-      expect(button?.className).toContain('justify-center')
+      const button = screen.getByRole('button')
+      expect(button.className).toContain('items-center')
+      expect(button.className).toContain('justify-center')
     })
 
     it('アイコンとテキストの間にギャップがある', () => {
-      const { container } = render(<GoogleButton onClick={mockOnClick} />)
+      render(<GoogleButton onClick={mockOnClick} />)
 
-      const button = container.querySelector('button')
-      expect(button?.className).toContain('gap')
+      const button = screen.getByRole('button')
+      expect(button.className).toContain('gap')
     })
   })
 })

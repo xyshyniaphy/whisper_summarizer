@@ -19,12 +19,12 @@ from fastapi import status as http_status
 class TestLogoutEndpoint:
     """Tests for the user logout endpoint."""
 
-    def test_logout_returns_200_on_success(self, client):
+    def test_logout_returns_200_on_success(self, test_client):
         """Test that logout returns 200 on successful logout."""
         with patch("app.api.auth.sign_out", new_callable=AsyncMock) as mock_signout:
             mock_signout.return_value = {"message": "Successfully logged out"}
 
-            response = client.post("/api/auth/logout")
+            response = test_client.post("/api/auth/logout")
 
             # Should return 200
             assert response.status_code in [
@@ -36,13 +36,13 @@ class TestLogoutEndpoint:
                 data = response.json()
                 assert "message" in data
 
-    def test_logout_handles_errors_gracefully(self, client):
+    def test_logout_handles_errors_gracefully(self, test_client):
         """Test that logout handles errors gracefully."""
         with patch("app.api.auth.sign_out", new_callable=AsyncMock) as mock_signout:
             # Simulate Supabase error
             mock_signout.side_effect = Exception("Logout failed")
 
-            response = client.post("/api/auth/logout")
+            response = test_client.post("/api/auth/logout")
 
             # Should return 500 for internal error
             assert response.status_code == http_status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -79,9 +79,9 @@ class TestGoogleOAuthWorkflow:
 class TestRemovedEndpoints:
     """Tests for removed endpoints - document expected 404 responses."""
 
-    def test_signup_endpoint_removed(self, client):
+    def test_signup_endpoint_removed(self, test_client):
         """Test that signup endpoint no longer exists."""
-        response = client.post(
+        response = test_client.post(
             "/api/auth/signup",
             json={
                 "email": "test@example.com",
@@ -95,9 +95,9 @@ class TestRemovedEndpoints:
             http_status.HTTP_405_METHOD_NOT_ALLOWED
         ]
 
-    def test_login_endpoint_removed(self, client):
+    def test_login_endpoint_removed(self, test_client):
         """Test that login endpoint no longer exists."""
-        response = client.post(
+        response = test_client.post(
             "/api/auth/login",
             json={
                 "email": "test@example.com",

@@ -64,7 +64,7 @@ describe('GoogleButton', () => {
     it('disabled=trueの場合、ボタンが無効になる', () => {
       render(<GoogleButton onClick={mockOnClick} disabled={true} />)
 
-      const button = screen.getByText(/使用 Google 继续/)
+      const button = screen.getByRole('button')
       expect(button).toBeDisabled()
     })
 
@@ -96,7 +96,7 @@ describe('GoogleButton', () => {
     it('loading時、ボタンが無効になる', () => {
       render(<GoogleButton onClick={mockOnClick} loading={true} />)
 
-      const button = screen.getByText('连接中...')
+      const button = screen.getByRole('button')
       expect(button).toBeDisabled()
     })
 
@@ -104,7 +104,7 @@ describe('GoogleButton', () => {
       const user = userEvent.setup()
       render(<GoogleButton onClick={mockOnClick} loading={true} />)
 
-      const button = screen.getByText('连接中...')
+      const button = screen.getByRole('button')
       await user.click(button)
 
       expect(mockOnClick).not.toHaveBeenCalled()
@@ -113,7 +113,7 @@ describe('GoogleButton', () => {
     it('disabledとloadingの両方がtrueの場合、ボタンが無効になる', () => {
       render(<GoogleButton onClick={mockOnClick} disabled={true} loading={true} />)
 
-      const button = screen.getByText('连接中...')
+      const button = screen.getByRole('button')
       expect(button).toBeDisabled()
     })
   })
