@@ -3,8 +3,10 @@
 """
 
 from fastapi import APIRouter, Depends
+from sqlalchemy.orm import Session
 from app.schemas.schemas import UserResponse
-from app.core.supabase import get_current_active_user
+from app.api.deps import get_db, get_current_db_user, require_active
+from app.models.user import User
 import logging
 
 logger = logging.getLogger(__name__)
@@ -12,40 +14,37 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-@router.get("/me", response_model=UserResponse)
-async def get_me(current_user: dict = Depends(get_current_active_user)):
+@router.get("/me")
+async def get_me(
+    current_db_user: User = Depends(require_active)
+):
     """
     現在のユーザー情報を取得
-    
-    Args:
-        current_user: 認証されたユーザー
-    
-    Returns:
-        UserResponse: ユーザー情報
+
+    Returns user info from local database including activation status.
     """
-    return UserResponse(
-        id=str(current_user["id"]),
-        email=current_user["email"],
-        full_name=current_user.get("user_metadata", {}).get("full_name"),
-        email_confirmed_at=current_user.get("email_confirmed_at"),
-        created_at=current_user["created_at"]
-    )
+    # Combine Supabase auth data with local database data
+    return {
+        "id": str(current_db_user.id),
+        "email": current_db_user.email,
+        "is_active": current_db_user.is_active,
+        "is_admin": current_db_user.is_admin,
+        "activated_at": current_db_user.activated_at,
+        "created_at": current_db_user.created_at
+    }
 
 
 @router.put("/me")
 async def update_me(
     full_name: str,
-    current_user: dict = Depends(get_current_active_user)
+    db: Session = Depends(get_db),
+    current_db_user: User = Depends(require_active)
 ):
     """
-    ユーザー情報を更新
-    
-    Args:
-        full_name: フルネーム
-        current_user: 認証されたユーザー
-    
-    Returns:
-        message: 更新メッセージ
+    ユーザー情報を更新 (currently a placeholder)
+
+    Note: Full name is stored in Supabase Auth, not local database.
+    This endpoint is reserved for future use.
     """
-    # TODO: Supabase Auth APIでユーザー情報を更新
+    # TODO: Update user metadata in Supabase if needed
     return {"message": "ユーザー情報を更新しました"}

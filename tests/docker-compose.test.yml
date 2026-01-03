@@ -82,6 +82,8 @@ services:
       - ../frontend/tsconfig.node.json:/app/tsconfig.node.json
       # テストコードをマウント
       - ./frontend:/app/tests/frontend
+      # セットアップファイルをマウント (vitestが ./tests/setup.ts を探すため)
+      - ../frontend/tests:/app/tests
       # node_modulesを除外
       - /app/node_modules
     working_dir: /app

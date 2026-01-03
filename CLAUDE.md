@@ -381,6 +381,260 @@ The app includes a fixed top navigation bar with:
 - `SUPABASE_ANON_KEY` - Frontend client, bypasses RLS for public policies
 - `SUPABASE_SERVICE_ROLE_KEY` - Backend admin operations, bypasses all RLS
 
+### User & Channel Management
+
+The system includes comprehensive user management and channel-based content organization.
+
+#### User Activation Flow
+
+**Important**: New user registrations create **inactive** accounts by default. Admin approval is required.
+
+1. **User Registration** (Google OAuth)
+   - User signs up with Google OAuth
+   - Account created with `is_active=FALSE`, `is_admin=FALSE`
+   - User redirected to `/pending-activation` page
+
+2. **Admin Activation**
+   - Admin accesses `/dashboard` → "用户管理" tab
+   - Admin clicks "激活" button to activate user
+   - User can now log in and use the system
+
+3. **Access Control**
+   - **Inactive users**: Cannot access app features, see pending activation page
+   - **Active regular users**: See own content + content from channels they're assigned to
+   - **Admin users**: See ALL content + access to dashboard for management
+
+#### Admin Dashboard (`/dashboard`)
+
+**Admin-only access** - Non-admins are redirected to `/transcriptions`.
+
+The dashboard has three main tabs:
+
+**User Management Tab** (`frontend/src/components/dashboard/UserManagementTab.tsx`):
+- List all users with status badges (待机中/已激活) and admin badges
+- Actions:
+  - **激活**: Activate inactive users (sets `is_active=TRUE`, `activated_at=NOW()`)
+  - **设为管理员/取消管理员**: Toggle admin status
+    - Cannot modify own admin status
+    - Cannot remove admin status from the last admin
+  - **删除**: Soft delete user (sets `deleted_at`, transfers ownership to admin)
+    - Cannot delete self
+    - Cannot delete the last admin
+
+**Channel Management Tab** (`frontend/src/components/dashboard/ChannelManagementTab.tsx`):
+- List all channels with member counts
+- Create/edit/delete channels
+- **Admin-only member control**: Only admins can assign users to channels
+  - Users cannot self-join or self-leave channels
+  - Use member dropdown to add users to a channel
+
+**Audio Management Tab** (`frontend/src/components/dashboard/AudioManagementTab.tsx`):
+- List all transcriptions in the system (admin sees all)
+- Assign audio to multiple channels
+- View current channel assignments per audio file
+
+#### Channel-Based Content Filtering
+
+**Access Rules**:
+| Role | Content Visibility |
+|------|-------------------|
+| **Admin** | ALL content (bypasses channel filters) |
+| **Regular User** | Own content + content from assigned channels |
+
+**Backend Implementation** (`backend/app/api/transcriptions.py:45-65`):
+```python
+if current_db_user.is_admin:
+    # Admin sees everything
+    query = db.query(Transcription)
+else:
+    # Regular users: own OR in assigned channels
+    user_channel_ids = db.query(ChannelMembership.channel_id).filter(
+        ChannelMembership.user_id == current_db_user.id
+    ).all()
+    channel_transcription_ids = db.query(TranscriptionChannel.transcription_id).filter(
+        TranscriptionChannel.channel_id.in_(user_channel_ids)
+    ).all()
+    query = db.query(Transcription).filter(
+        or_(
+            Transcription.user_id == current_db_user.id,
+            Transcription.id.in_(channel_transcription_ids)
+        )
+    )
+```
+
+#### First-Time Admin Setup
+
+**Script**: `scripts/set_first_admin.sh`
+
+After the first user signs up with Google OAuth, promote them to admin:
+
+```bash
+# Development (Docker)
+chmod +x scripts/set_first_admin.sh
+./scripts/set_first_admin.sh user@example.com
+
+# Production (with DATABASE_URL)
+DATABASE_URL="postgresql://..." ./scripts/set_first_admin.sh user@example.com
+```
+
+This script:
+- Sets `is_admin=TRUE` and `is_active=TRUE` for the specified user
+- Supports both dev (Docker exec) and production (DATABASE_URL)
+
+#### Admin API Endpoints
+
+All admin endpoints require `require_admin` decorator.
+
+**User Management** (`/api/admin/users`):
+- `GET /api/admin/users` - List all users
+- `PUT /api/admin/users/{user_id}/activate` - Activate user account
+- `PUT /api/admin/users/{user_id}/admin` - Toggle admin status
+- `DELETE /api/admin/users/{user_id}` - Delete user (soft delete + transfer ownership)
+
+**Channel Management** (`/api/admin/channels`):
+- `GET /api/admin/channels` - List all channels
+- `POST /api/admin/channels` - Create channel
+- `PUT /api/admin/channels/{channel_id}` - Update channel
+- `DELETE /api/admin/channels/{channel_id}` - Delete channel (cascades to memberships/assignments)
+- `GET /api/admin/channels/{channel_id}` - Get channel detail with members
+- `POST /api/admin/channels/{channel_id}/members` - Assign user to channel
+- `DELETE /api/admin/channels/{channel_id}/members/{user_id}` - Remove user from channel
+
+**Audio Management** (`/api/admin/audio`):
+- `GET /api/admin/audio` - List all audio (admin sees all)
+- `POST /api/admin/audio/{audio_id}/channels` - Assign audio to channels
+- `GET /api/admin/audio/{audio_id}/channels` - Get audio's channel assignments
+
+#### Database Schema
+
+**users table** (extended fields):
+```sql
+is_active BOOLEAN NOT NULL DEFAULT FALSE  -- Account activation status
+is_admin BOOLEAN NOT NULL DEFAULT FALSE   -- Admin privilege
+activated_at TIMESTAMP                     -- When account was activated
+deleted_at TIMESTAMP                       -- Soft delete timestamp
+```
+
+**channels table** (new):
+```sql
+id UUID PRIMARY KEY DEFAULT gen_random_uuid()
+name VARCHAR(255) NOT NULL UNIQUE          -- Channel name (unique)
+description TEXT                           -- Optional description
+created_by UUID REFERENCES users(id)      -- Creator user ID
+created_at TIMESTAMP DEFAULT NOW()
+updated_at TIMESTAMP DEFAULT NOW()
+```
+
+**channel_memberships** (junction table - users ↔ channels):
+```sql
+channel_id UUID REFERENCES channels(id) ON DELETE CASCADE
+user_id UUID REFERENCES users(id) ON DELETE CASCADE
+assigned_at TIMESTAMP DEFAULT NOW()
+assigned_by UUID REFERENCES users(id)      -- Admin who assigned
+PRIMARY KEY (channel_id, user_id)
+```
+
+**transcription_channels** (junction table - transcriptions ↔ channels):
+```sql
+transcription_id UUID REFERENCES transcriptions(id) ON DELETE CASCADE
+channel_id UUID REFERENCES channels(id) ON DELETE CASCADE
+assigned_at TIMESTAMP DEFAULT NOW()
+assigned_by UUID REFERENCES users(id)      -- Admin who assigned
+PRIMARY KEY (transcription_id, channel_id)
+```
+
+#### Frontend State Management
+
+**Jotai Atoms**:
+- `frontend/src/atoms/auth.ts`: Extended user state with `is_active`, `is_admin`
+- `frontend/src/atoms/channels.ts`: Channel list, filters, selected channels
+- `frontend/src/atoms/dashboard.ts`: Dashboard active tab, sidebar collapse state
+
+**API Service** (`frontend/src/services/api.ts`):
+- `adminApi`: All admin endpoints (user management, channel management, audio management)
+- `api.getTranscriptionChannels()`: Get channels for a transcription
+- `api.assignTranscriptionToChannels()`: Assign transcription to channels
+
+**Pages**:
+- `frontend/src/pages/Dashboard.tsx`: Admin dashboard with sidebar and tabs
+- `frontend/src/pages/PendingActivation.tsx`: Pending activation page for inactive users
+
+#### Channel UI Components
+
+The frontend includes reusable channel components for displaying and managing channel assignments.
+
+**ChannelBadge Component** (`frontend/src/components/channel/ChannelBadge.tsx`):
+- Displays channel assignments as clickable badges
+- **Single channel**: Shows channel name with blue styling
+- **Multiple channels**: Shows first N channels with "+N more" indicator
+- **Personal content**: Shows gray "个人" badge for unassigned content
+- **Clickable**: Badges can be clicked to filter the transcription list
+
+```typescript
+interface ChannelBadgeProps {
+  channels: Channel[]          // Array of channel objects
+  isPersonal?: boolean         // True if unassigned content
+  maxDisplay?: number          // Max channels to show (default: 2)
+  onClick?: (id: string) => void  // Click handler
+  className?: string           // Additional CSS classes
+}
+```
+
+**ChannelFilter Component** (`frontend/src/components/channel/ChannelFilter.tsx`):
+- Dropdown filter for selecting channels on transcription list page
+- **Filter options**:
+  - "全部内容" (All Content) - shows all accessible content
+  - "个人内容" (Personal) - shows only own uploads
+  - Channel list - shows content assigned to specific channel
+- Integrates with `channelFilterAtom` for state persistence
+
+**ChannelAssignModal Component** (`frontend/src/components/channel/ChannelAssignModal.tsx`):
+- Modal for assigning transcriptions to multiple channels
+- **Features**:
+  - Multi-select checkboxes for all channels
+  - Search/filter channels by name
+  - "Select All" / "Deselect All" functionality
+  - Shows current assignments on open
+  - Loading state during save operation
+
+```typescript
+interface ChannelAssignModalProps {
+  isOpen: boolean                    // Modal visibility
+  onClose: () => void                // Close handler
+  onConfirm: (channelIds: string[]) => Promise<void>  // Save handler
+  transcriptionId: string            // Transcription to assign
+  currentChannelIds?: string[]       // Currently assigned channels
+  loading?: boolean                  // Loading state
+}
+```
+
+**Integration with Transcription Pages**:
+
+**TranscriptionList** (`frontend/src/pages/TranscriptionList.tsx`):
+- Displays `ChannelFilter` dropdown in page header
+- Shows `ChannelBadge` for each transcription item in table
+- Filter state persisted via `channelFilterAtom`
+- API call passes `channel_id` parameter to filter results
+
+**TranscriptionDetail** (`frontend/src/pages/TranscriptionDetail.tsx`):
+- Displays current channel badges with "管理频道" button
+- Opens `ChannelAssignModal` on button click
+- Loads and displays current channel assignments
+- Refreshes data after assignment is saved
+
+**Channel Type Definitions** (`frontend/src/types/index.ts`):
+```typescript
+export interface Channel {
+  id: string;
+  name: string;
+  description?: string;
+}
+
+export interface TranscriptionChannel extends Channel {
+  // Extends Channel for use in transcription context
+}
+```
+
 ### Environment Variables
 
 Required in `.env`:

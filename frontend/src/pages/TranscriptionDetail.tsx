@@ -1,15 +1,16 @@
 import { useCallback, useEffect, useState, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { Download, AlertCircle, FileText, Loader2, File, Share2, Check, ChevronDown } from 'lucide-react'
+import { Download, AlertCircle, FileText, Loader2, File, Share2, Check, ChevronDown, FolderOpen } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { api } from '../services/api'
-import { Transcription, Summary } from '../types'
+import { Transcription, Summary, TranscriptionChannel } from '../types'
 import { Button } from '../components/ui/Button'
 import { Card, CardContent } from '../components/ui/Card'
 import { Badge } from '../components/ui/Badge'
 import { Chat } from '../components/Chat'
 import { Modal } from '../components/ui/Modal'
+import { ChannelAssignModal, ChannelBadge } from '../components/channel'
 import { cn } from '../utils/cn'
 
 // Stage display mapping
@@ -95,6 +96,10 @@ export function TranscriptionDetail() {
         isOpen: boolean
         message: string
     }>({ isOpen: false, message: '' })
+
+    // Channel assignment state
+    const [channelAssignModalOpen, setChannelAssignModalOpen] = useState(false)
+    const [transcriptionChannels, setTranscriptionChannels] = useState<TranscriptionChannel[]>([])
 
     const loadTranscription = useCallback(async (transcriptionId: string) => {
         // Prevent duplicate calls (React 18 StrictMode)
@@ -242,6 +247,45 @@ export function TranscriptionDetail() {
         }
     }
 
+    // Load transcription channels
+    const loadTranscriptionChannels = useCallback(async (transcriptionId: string) => {
+        if (!transcriptionId) return
+        try {
+            const channels = await api.getTranscriptionChannels(transcriptionId)
+            setTranscriptionChannels(channels)
+        } catch (error) {
+            console.error('Failed to load transcription channels:', error)
+        }
+    }, [])
+
+    // Open channel assignment modal
+    const handleOpenChannelAssign = async () => {
+        await loadTranscriptionChannels(id || '')
+        setChannelAssignModalOpen(true)
+    }
+
+    // Handle channel assignment
+    const handleAssignChannels = async (channelIds: string[]) => {
+        if (!id) return
+        try {
+            await api.assignTranscriptionToChannels(id, channelIds)
+            // Reload channels
+            await loadTranscriptionChannels(id)
+            // Reload transcription to update UI
+            await loadTranscription(id)
+        } catch (error) {
+            console.error('Failed to assign channels:', error)
+            throw error
+        }
+    }
+
+    // Load channels when transcription loads
+    useEffect(() => {
+        if (transcription && id) {
+            loadTranscriptionChannels(id)
+        }
+    }, [transcription, id, loadTranscriptionChannels])
+
     const getBadgeVariant = (stage: string): 'success' | 'error' | 'info' | 'warning' => {
         if (stage === 'completed') return 'success'
         if (stage === 'failed') return 'error'
@@ -260,7 +304,24 @@ export function TranscriptionDetail() {
             </Button>
 
             <div className="flex justify-between items-center mb-6">
-                <h2 className="text-2xl font-bold">{transcription.file_name}</h2>
+                <div className="flex-1">
+                    <h2 className="text-2xl font-bold">{transcription.file_name}</h2>
+                    {/* Display channel badges */}
+                    <div className="mt-2 flex items-center gap-2">
+                        <span className="text-sm text-gray-500 dark:text-gray-400">频道:</span>
+                        <ChannelBadge
+                            channels={transcriptionChannels}
+                            isPersonal={transcription.is_personal}
+                        />
+                        <button
+                            onClick={handleOpenChannelAssign}
+                            className="text-xs text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 flex items-center gap-1"
+                        >
+                            <FolderOpen className="w-3 h-3" />
+                            管理频道
+                        </button>
+                    </div>
+                </div>
                 <div className="flex gap-2 items-center">
                     <Badge variant={getBadgeVariant(transcription.stage)}>
                         {STAGE_LABELS[transcription.stage] || transcription.stage}
@@ -452,6 +513,15 @@ export function TranscriptionDetail() {
                     </Button>
                 </div>
             </Modal>
+
+            {/* Channel Assignment Modal */}
+            <ChannelAssignModal
+                isOpen={channelAssignModalOpen}
+                onClose={() => setChannelAssignModalOpen(false)}
+                onConfirm={handleAssignChannels}
+                transcriptionId={id || ''}
+                currentChannelIds={transcriptionChannels.map((c) => c.id)}
+            />
         </div>
     )
 }

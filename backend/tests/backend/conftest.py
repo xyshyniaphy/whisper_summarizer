@@ -1,209 +1,231 @@
 """
-Pytest configuration and shared fixtures for backend tests.
-"""
-import os
-import sys
-import tempfile
-from pathlib import Path
-from typing import Generator
-from unittest.mock import MagicMock
-from uuid import uuid4
+Pytest設定とフィクスチャ定義
 
+テスト用のSupabaseモック、FastAPI TestClient、
+その他共通フィクスチャを提供する。
+"""
+
+import os
+from typing import Generator
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import Session, sessionmaker
+from unittest.mock import MagicMock, AsyncMock
 
-# Add app directory to path
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-
-from app.core.config import settings
-from app.db.base_class import Base
-from app.main import app
+# 環境変数をテスト用に設定（既に設定されている場合は上書きしない）
+# 統合テストでは実際の.envファイルの値を使用する
+os.environ.setdefault("SUPABASE_URL", "http://test-supabase-url.com")
+os.environ.setdefault("SUPABASE_ANON_KEY", "test-anon-key")
+os.environ.setdefault("SUPABASE_SERVICE_ROLE_KEY", "test-service-role-key")
+os.environ.setdefault("DATABASE_URL", "postgresql://test:test@localhost:5432/test_db")
+os.environ.setdefault("GLM_API_KEY", "test-glm-api-key")
+os.environ.setdefault("GLM_API_ENDPOINT", "http://test-glm-endpoint.com")
+os.environ.setdefault("GLM_MODEL", "test-model")
+os.environ.setdefault("GEMINI_API_KEY", "test-gemini-api-key")
+os.environ.setdefault("GEMINI_API_ENDPOINT", "")  # 空文字列で公式SDKを使用
+os.environ.setdefault("GEMINI_MODEL", "gemini-2.0-flash-exp")
+os.environ.setdefault("REVIEW_LANGUAGE", "zh")
 
 
 # ============================================================================
-# Database Fixtures
+# Database Initialization
 # ============================================================================
 
-@pytest.fixture(scope="function")
-def db_engine():
-    """Create a test database engine."""
-    # Use in-memory SQLite for faster tests
-    engine = create_engine(
-        "sqlite:///:memory:",
-        connect_args={"check_same_thread": False}
-    )
+@pytest.fixture(scope="session", autouse=True)
+def init_test_database():
+    """
+    Initialize database tables for tests.
+    This runs once at the beginning of the test session.
+    """
+    from app.db.base_class import Base
+    from app.db.session import engine
+
+    # Create all tables
     Base.metadata.create_all(bind=engine)
-    yield engine
-    engine.dispose()
+    yield
+    # Optional: drop tables after tests (commented out to keep data for inspection)
+    # Base.metadata.drop_all(bind=engine)
 
 
-@pytest.fixture(scope="function")
-def db_session(db_engine) -> Generator[Session, None, None]:
-    """Create a test database session."""
-    TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=db_engine)
-    session = TestingSessionLocal()
-    try:
-        yield session
-    finally:
-        session.close()
+@pytest.fixture
+def test_client() -> Generator[TestClient, None, None]:
+  """
+  FastAPI TestClientフィクスチャ
+  
+  Returns:
+    TestClient: テスト用クライアント
+  """
+  from app.main import app
+  
+  with TestClient(app) as client:
+    yield client
 
-
-# ============================================================================
-# FastAPI Test Client Fixtures
-# ============================================================================
-
-@pytest.fixture(scope="function")
-def client(db_session: Session) -> Generator[TestClient, None, None]:
-    """Create a FastAPI test client with database dependency override."""
-    from app.api.deps import get_db
-
-    def _get_db():
-        try:
-            yield db_session
-        finally:
-            pass
-
-    app.dependency_overrides[get_db] = _get_db
-    with TestClient(app) as test_client:
-        yield test_client
-    app.dependency_overrides.clear()
-
-
-@pytest.fixture(scope="function")
-def authenticated_client(client: TestClient) -> Generator[TestClient, None, None]:
-    """Create a test client with mocked authentication."""
-    from app.core.supabase import get_current_active_user
-    from datetime import datetime
-    from uuid import UUID
-
-    # Mock authenticated user - Use fixed UUID for consistent testing
-    # This matches TEST_USER_ID in test_notebooklm_api.py
-    test_user_id = UUID("123e4567-e89b-42d3-a456-426614174000")
-    mock_user = {
-        "id": test_user_id,  # UUID object (SQLAlchemy needs it), converted to string in users.py
-        "email": "test@example.com",
-        "user_metadata": {"role": "user", "full_name": "Test User"},
-        "email_confirmed_at": datetime.utcnow(),
-        "created_at": datetime.utcnow(),
-        "phone": None,
-        "last_sign_in_at": None,
-        "updated_at": datetime.utcnow(),
-        "app_metadata": {},
+@pytest.fixture
+def real_auth_user() -> dict:
+    """
+    実テスト用のユーザー情報フィクスチャ
+    """
+    import uuid
+    uid = uuid.uuid4()
+    return {
+        "id": str(uid),
+        "email": f"test-real-{str(uid)[:8]}@example.com",
+        "raw_uuid": uid
     }
 
-    def _get_current_user():
-        return mock_user
 
-    app.dependency_overrides[get_current_active_user] = _get_current_user
-    yield client
-    app.dependency_overrides.clear()
+@pytest.fixture
+def real_auth_client(real_auth_user: dict) -> Generator[TestClient, None, None]:
+    """
+    実DBと認証バイパスを使用したTestClient
+    
+    DBにテストユーザーを作成し、認証をそのユーザーでバイパスする。
+    テスト終了後にユーザーと関連データを削除する。
+    """
+    from app.main import app
+    from app.core.supabase import get_current_active_user
+    from app.db.session import SessionLocal
+    from app.models.user import User
+    from app.models.transcription import Transcription
+    from app.models.summary import Summary
 
+    async def override_auth():
+        return {
+            "id": real_auth_user["id"],
+            "email": real_auth_user["email"],
+            "email_confirmed_at": "2025-01-01T00:00:00Z"
+        }
 
-# ============================================================================
-# Model Mock Fixtures
-# ============================================================================
+    # ユーザー作成
+    db = SessionLocal()
+    try:
+        user = User(id=real_auth_user["raw_uuid"], email=real_auth_user["email"])
+        db.add(user)
+        db.commit()
+    except Exception:
+        db.rollback()
+    finally:
+        db.close()
 
-@pytest.fixture(scope="function")
-def mock_transcription():
-    """Create a mock Transcription object."""
-    class MockTranscription:
-        def __init__(self):
-            self.id = uuid4()
-            self.user_id = uuid4()
-            self.file_name = "test_audio.mp3"
-            self.file_path = "/tmp/uploads/test_audio.mp3"
-            self.storage_path = None
-            self.text = "This is a test transcription.\\n\\nIt has multiple paragraphs."
-            self.language = "en"
-            self.duration_seconds = 300.0
-            self.stage = "completed"
-            self.error_message = None
-            self.retry_count = 0
-            self.completed_at = None
-            self.pptx_status = "not-started"
-            self.pptx_error_message = None
-            self.created_at = None
-            self.updated_at = None
-            self.summaries = []
+    app.dependency_overrides[get_current_active_user] = override_auth
 
-    return MockTranscription()
+    with TestClient(app) as client:
+        yield client
 
-
-@pytest.fixture(scope="function")
-def mock_transcription_with_summary():
-    """Create a mock Transcription object with summary."""
-    class MockSummary:
-        def __init__(self):
-            self.summary_text = "This is a test summary.\\n\\nIt has key points."
-
-    class MockTranscription:
-        def __init__(self):
-            self.id = uuid4()
-            self.user_id = uuid4()
-            self.file_name = "test_audio.mp3"
-            self.file_path = "/tmp/uploads/test_audio.mp3"
-            self.storage_path = None
-            self.text = "This is a test transcription.\\n\\nIt has multiple paragraphs."
-            self.language = "en"
-            self.duration_seconds = 300.0
-            self.stage = "completed"
-            self.error_message = None
-            self.retry_count = 0
-            self.completed_at = None
-            self.pptx_status = "not-started"
-            self.pptx_error_message = None
-            self.created_at = None
-            self.updated_at = None
-            self.summaries = [MockSummary()]
-
-    return MockTranscription()
+    # クリーンアップ
+    app.dependency_overrides = {}
+    db = SessionLocal()
+    try:
+        # 関連データの削除
+        db.query(Summary).filter(Summary.transcription_id.in_(
+            db.query(Transcription.id).filter(Transcription.user_id == real_auth_user["id"])
+        )).delete(synchronize_session=False)
+        db.query(Transcription).filter(Transcription.user_id == real_auth_user["id"]).delete(synchronize_session=False)
+        db.query(User).filter(User.id == real_auth_user["raw_uuid"]).delete()
+        db.commit()
+    except Exception:
+        db.rollback()
+    finally:
+        db.close()
 
 
-@pytest.fixture(scope="function")
-def mock_long_transcription():
-    """Create a mock Transcription with very long content."""
-    # Create content that spans multiple slides
-    long_text = "\\n\\n".join([
-        f"This is paragraph {i} with some content to test chunking."
-        for i in range(100)
-    ])
+@pytest.fixture
+def mock_supabase_client() -> MagicMock:
+  """
+  Supabaseクライアントモック
+  
+  Returns:
+    MagicMock: モックされたSupabaseクライアント
+  """
+  mock_client = MagicMock()
+  
+  # auth.sign_upメソッドのモック
+  mock_client.auth.sign_up = AsyncMock(return_value={
+    "user": {
+      "id": "test-user-id",
+      "email": "test@example.com"
+    },
+    "session": {
+      "access_token": "test-access-token",
+      "refresh_token": "test-refresh-token"
+    }
+  })
+  
+  # auth.sign_in_with_passwordメソッドのモック
+  mock_client.auth.sign_in_with_password = AsyncMock(return_value={
+    "user": {
+      "id": "test-user-id",
+      "email": "test@example.com"
+    },
+    "session": {
+      "access_token": "test-access-token",
+      "refresh_token": "test-refresh-token"
+    }
+  })
+  
+  # auth.get_userメソッドのモック
+  mock_client.auth.get_user = AsyncMock(return_value={
+    "user": {
+      "id": "test-user-id",
+      "email": "test@example.com"
+    }
+  })
+  
+  return mock_client
 
-    class MockTranscription:
-        def __init__(self):
-            self.id = uuid4()
-            self.user_id = uuid4()
-            self.file_name = "long_audio.mp3"
-            self.file_path = "/tmp/uploads/long_audio.mp3"
-            self.storage_path = None
-            self.text = long_text
-            self.language = "en"
-            self.duration_seconds = 3600.0
-            self.stage = "completed"
-            self.error_message = None
-            self.retry_count = 0
-            self.completed_at = None
-            self.pptx_status = "not-started"
-            self.pptx_error_message = None
-            self.created_at = None
-            self.updated_at = None
-            self.summaries = []
 
-    return MockTranscription()
-
-
-# ============================================================================
-# Temporary Directory Fixtures
-# ============================================================================
-
-@pytest.fixture(scope="function")
-def temp_output_dir() -> Generator[Path, None, None]:
-    """Create a temporary output directory for tests."""
-    with tempfile.TemporaryDirectory() as tmpdir:
-        yield Path(tmpdir)
+@pytest.fixture
+def sample_audio_file() -> bytes:
+    """
+    テスト用音声ファイルデータ（有効な1秒間の無音WAVファイル）
+    
+    Returns:
+        bytes: 音声ファイルバイナリデータ
+    """
+    import wave
+    import io
+    
+    with io.BytesIO() as buffer:
+        with wave.open(buffer, 'wb') as wav_file:
+            # モノラル, 16bit, 16kHz
+            wav_file.setnchannels(1)
+            wav_file.setsampwidth(2)
+            wav_file.setframerate(16000)
+            # 1秒分の無音データ (16000フレーム * 2バイト)
+            wav_file.writeframes(b'\x00' * 32000)
+        return buffer.getvalue()
 
 
-# ============================================================================
-# Utility Functions
-# ============================================================================
+@pytest.fixture
+def sample_transcription_response() -> dict:
+  """
+  テスト用文字起こし結果
+
+  Returns:
+    dict: 文字起こし結果のサンプルデータ
+  """
+  return {
+    "id": "test-transcription-id",
+    "audio_id": "test-audio-id",
+    "user_id": "test-user-id",
+    "text": "これはテストの文字起こし結果です。",
+    "language": "ja",
+    "duration": 10.5,
+    "created_at": "2025-12-30T08:00:00Z"
+  }
+
+
+@pytest.fixture
+def db_session() -> Generator:
+  """
+  テスト用データベースセッション
+
+  Returns:
+    Session: SQLAlchemy セッション
+  """
+  from app.db.session import SessionLocal
+
+  db = SessionLocal()
+  try:
+    yield db
+  finally:
+    db.close()

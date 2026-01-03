@@ -12,8 +12,11 @@ import {
   userAtom,
   sessionAtom,
   roleAtom,
+  isActiveAtom,
   loadingAtom,
+  type ExtendedUser,
 } from '../atoms/auth'
+import { api } from '../services/api'
 
 interface AuthActions {
   signInWithGoogle: () => Promise<{ error: AuthError | null }>
@@ -48,13 +51,45 @@ const mockUser: User = {
   app_metadata: {},
 }
 
+// Fetch extended user data from backend (includes is_active, is_admin)
+const fetchUserData = async (user: User | null): Promise<ExtendedUser | null> => {
+  if (!user) return null
+
+  try {
+    const response = await api.get('/users/me')
+    return {
+      ...user,
+      ...response.data,
+    }
+  } catch (error) {
+    console.error('Error fetching user data from backend:', error)
+    // If backend returns 403 (inactive account), still return user with is_active=false
+    if (error instanceof Error && 'status' in error && (error as any).status === 403) {
+      return {
+        ...user,
+        is_active: false,
+        is_admin: false,
+      }
+    }
+    return user
+  }
+}
+
 export function useAuth(): [
-  { user: User | null; session: Session | null; loading: boolean; role: 'user' | 'admin' | null },
+  {
+    user: ExtendedUser | null
+    session: Session | null
+    loading: boolean
+    role: 'user' | 'admin' | null
+    is_active: boolean
+    is_admin: boolean
+  },
   AuthActions
 ] {
   const [user, setUser] = useAtom(userAtom)
   const [session, setSession] = useAtom(sessionAtom)
   const [role, setRole] = useAtom(roleAtom)
+  const [isActive, setIsActive] = useAtom(isActiveAtom)
   const [loading, setLoading] = useAtom(loadingAtom)
 
   useEffect(() => {
@@ -70,30 +105,50 @@ export function useAuth(): [
       if (error) {
         console.error('Error getting session:', error.message)
       }
-      setUser(session?.user ?? null)
-      setSession(session)
-      setRole(session?.user?.user_metadata?.role ?? 'user')
+
+      if (session?.user) {
+        const userData = await fetchUserData(session.user)
+        setUser(userData)
+        setSession(session)
+        setRole(userData?.is_admin ? 'admin' : 'user')
+        setIsActive(userData?.is_active ?? false)
+      } else {
+        setUser(null)
+        setSession(null)
+        setRole(null)
+        setIsActive(false)
+      }
       setLoading(false)
     }
 
     getSession()
 
     // 認証状態の変更を監視
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null)
-      setSession(session)
-      setRole(session?.user?.user_metadata?.role ?? 'user')
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      if (session?.user) {
+        const userData = await fetchUserData(session.user)
+        setUser(userData)
+        setSession(session)
+        setRole(userData?.is_admin ? 'admin' : 'user')
+        setIsActive(userData?.is_active ?? false)
+      } else {
+        setUser(null)
+        setSession(null)
+        setRole(null)
+        setIsActive(false)
+      }
       setLoading(false)
     })
 
     return () => subscription.unsubscribe()
-  }, [setUser, setSession, setRole, setLoading])
+  }, [setUser, setSession, setRole, setIsActive, setLoading])
 
   // Google OAuthサインイン
   const signInWithGoogle = useCallback(async () => {
     if (isE2ETestMode()) {
-      setUser(mockUser)
+      setUser(mockUser as ExtendedUser)
       setRole('user')
+      setIsActive(true)
       return { error: null }
     }
 
@@ -117,6 +172,7 @@ export function useAuth(): [
       setUser(null)
       setSession(null)
       setRole(null)
+      setIsActive(false)
       return { error: null }
     }
 
@@ -124,11 +180,12 @@ export function useAuth(): [
     setUser(null)
     setSession(null)
     setRole(null)
+    setIsActive(false)
     return { error }
-  }, [setUser, setSession, setRole])
+  }, [setUser, setSession, setRole, setIsActive])
 
   return [
-    { user, session, loading, role },
+    { user, session, loading, role, is_active: isActive, is_admin: role === 'admin' },
     { signInWithGoogle, signOut },
   ]
 }

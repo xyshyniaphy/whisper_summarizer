@@ -1,22 +1,26 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from sqlalchemy.orm import Session
+from sqlalchemy import or_
 from typing import List, Optional
 from pathlib import Path
 from uuid import UUID
 import secrets
 import base64
-from app.api.deps import get_db
+from app.api.deps import get_db, get_current_db_user, require_active, require_admin
 from app.core.supabase import get_current_active_user
 from app.core.config import settings
 from app.models.transcription import Transcription
+from app.models.user import User
 from app.models.summary import Summary
 from app.models.chat_message import ChatMessage
 from app.models.share_link import ShareLink
+from app.models.channel import Channel, ChannelMembership, TranscriptionChannel
 from app.schemas.transcription import Transcription as TranscriptionSchema, PaginatedResponse
 from app.schemas.summary import Summary as SummarySchema
 from app.schemas.chat import ChatMessage as ChatMessageSchema, ChatHistoryResponse
 from app.schemas.share import ShareLink as ShareLinkSchema
+from app.schemas.admin import TranscriptionChannelAssignmentRequest, ChannelResponse
 
 import logging
 import asyncio
@@ -63,19 +67,61 @@ async def list_transcriptions(
     page: int = Query(1, ge=1, description="Page number (1-indexed)"),
     page_size: int = Query(None, ge=1, le=settings.MAX_PAGE_SIZE, description="Number of items per page"),
     stage: str = Query(None, description="Filter by stage: uploading, transcribing, summarizing, completed, failed"),
+    channel_id: str = Query(None, description="Filter by channel ID (regular users only)"),
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_active_user)
+    current_db_user: User = Depends(get_current_db_user)
 ):
     """
-    文字起こしリストを取得 (現在のユーザーのもののみ)
-    Returns paginated list of transcriptions.
+    文字起こしリストを取得
+
+    - Regular users: own content + content from assigned channels
+    - Admin users: all content (bypasses channel filters)
     """
     # Use default page size from config if not specified
     if page_size is None:
         page_size = settings.DEFAULT_PAGE_SIZE
 
     # Build base query
-    query = db.query(Transcription).filter(Transcription.user_id == current_user.get("id"))
+    # Admin sees everything, regular users see own + channel-assigned
+    if current_db_user.is_admin:
+        query = db.query(Transcription)
+    else:
+        # Get user's channel IDs
+        user_channel_ids = db.query(ChannelMembership.channel_id).filter(
+            ChannelMembership.user_id == current_db_user.id
+        ).all()
+        user_channel_ids = [c[0] for c in user_channel_ids]
+
+        # Get transcription IDs from user's channels
+        channel_transcription_ids = db.query(TranscriptionChannel.transcription_id).filter(
+            TranscriptionChannel.channel_id.in_(user_channel_ids)
+        ).all()
+        channel_transcription_ids = [t[0] for t in channel_transcription_ids]
+
+        # Query: own OR in channels
+        query = db.query(Transcription).filter(
+            or_(
+                Transcription.user_id == current_db_user.id,
+                Transcription.id.in_(channel_transcription_ids)
+            )
+        )
+
+        # Optional channel filter (for regular users)
+        if channel_id:
+            # Verify user is member of this channel
+            is_member = db.query(ChannelMembership).filter(
+                ChannelMembership.channel_id == channel_id,
+                ChannelMembership.user_id == current_db_user.id
+            ).first()
+            if not is_member:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Not a member of this channel"
+                )
+            # Filter to only show content from this channel
+            query = query.join(TranscriptionChannel).filter(
+                TranscriptionChannel.channel_id == channel_id
+            )
 
     if stage:
         query = query.filter(Transcription.stage == stage)
@@ -978,3 +1024,131 @@ async def create_share_link(
     schema_data = ShareLinkSchema.model_validate(share_link).model_dump()
     schema_data['share_url'] = f"/shared/{share_token}"
     return ShareLinkSchema(**schema_data)
+
+
+# ========================================
+# Channel Assignment Endpoints
+# ========================================
+
+@router.post("/{transcription_id}/channels")
+async def assign_transcription_to_channels(
+    transcription_id: str,
+    assignment: TranscriptionChannelAssignmentRequest,
+    db: Session = Depends(get_db),
+    current_db_user: User = Depends(get_current_db_user)
+):
+    """
+    Assign transcription to channels (owner or admin only).
+
+    Clears existing channel assignments and replaces with new ones.
+    """
+    try:
+        transcription_uuid = UUID(transcription_id)
+    except ValueError:
+        raise HTTPException(status_code=422, detail="Invalid transcription ID format")
+
+    transcription = db.query(Transcription).filter(
+        Transcription.id == transcription_uuid
+    ).first()
+
+    if not transcription:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Transcription not found"
+        )
+
+    # Only owner or admin can assign channels
+    if transcription.user_id != current_db_user.id and not current_db_user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to modify this transcription"
+        )
+
+    # Verify all channels exist
+    channel_ids = [str(cid) for cid in assignment.channel_ids]
+    channels = db.query(Channel).filter(Channel.id.in_(channel_ids)).all()
+    if len(channels) != len(channel_ids):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="One or more channels not found"
+        )
+
+    # Remove existing assignments
+    db.query(TranscriptionChannel).filter(
+        TranscriptionChannel.transcription_id == transcription_id
+    ).delete()
+
+    # Add new assignments
+    for channel_id in channel_ids:
+        ta = TranscriptionChannel(
+            transcription_id=transcription_id,
+            channel_id=channel_id,
+            assigned_by=current_db_user.id
+        )
+        db.add(ta)
+
+    db.commit()
+
+    logger.info(
+        f"Transcription {transcription_id} assigned to {len(channel_ids)} channels "
+        f"by user {current_db_user.email}"
+    )
+    return {
+        "message": f"Assigned to {len(channel_ids)} channels",
+        "channel_ids": channel_ids
+    }
+
+
+@router.get("/{transcription_id}/channels", response_model=List[ChannelResponse])
+async def get_transcription_channels(
+    transcription_id: str,
+    db: Session = Depends(get_db),
+    current_db_user: User = Depends(get_current_db_user)
+):
+    """
+    Get channels assigned to a transcription.
+
+    Returns channels the transcription is assigned to.
+    Admin can see any transcription's channels, regular users only their own.
+    """
+    try:
+        transcription_uuid = UUID(transcription_id)
+    except ValueError:
+        raise HTTPException(status_code=422, detail="Invalid transcription ID format")
+
+    transcription = db.query(Transcription).filter(
+        Transcription.id == transcription_uuid
+    ).first()
+
+    if not transcription:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Transcription not found"
+        )
+
+    # Check access: owner or admin, or member of assigned channel
+    if transcription.user_id != current_db_user.id and not current_db_user.is_admin:
+        # Check if user is member of any channel this transcription is assigned to
+        is_member = db.query(TranscriptionChannel).join(
+            ChannelMembership,
+            TranscriptionChannel.channel_id == ChannelMembership.channel_id
+        ).filter(
+            TranscriptionChannel.transcription_id == transcription_id,
+            ChannelMembership.user_id == current_db_user.id
+        ).first()
+        if not is_member:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not authorized to view this transcription"
+            )
+
+    # Get channel assignments
+    assignments = db.query(TranscriptionChannel).filter(
+        TranscriptionChannel.transcription_id == transcription_id
+    ).all()
+
+    channel_ids = [a.channel_id for a in assignments]
+    channels = db.query(Channel).filter(Channel.id.in_(channel_ids)).all()
+
+    # Convert SQLAlchemy models to Pydantic schemas
+    return [ChannelResponse.model_validate(c) for c in channels]

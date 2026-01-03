@@ -1,3 +1,9 @@
+export interface TranscriptionChannel {
+  id: string;
+  name: string;
+  description?: string;
+}
+
 export interface Transcription {
   id: string;
   file_name: string;
@@ -14,6 +20,8 @@ export interface Transcription {
   updated_at: string;
   time_remaining?: number;  // Seconds remaining before auto-delete (negative if expired)
   summaries?: Summary[];
+  channels?: TranscriptionChannel[];  // Channel assignments
+  is_personal?: boolean;  // True if owned by current user
 }
 
 export interface Summary {

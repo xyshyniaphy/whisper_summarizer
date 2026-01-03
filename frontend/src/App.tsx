@@ -3,6 +3,7 @@ import { useAuth } from './hooks/useAuth'
 import { NavBar } from './components/NavBar'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
+import PendingActivation from './pages/PendingActivation'
 import { TranscriptionList } from './pages/TranscriptionList'
 import { TranscriptionDetail } from './pages/TranscriptionDetail'
 import { SharedTranscription } from './pages/SharedTranscription'
@@ -20,8 +21,8 @@ function ProtectedLayout({ children }: { children: React.ReactNode }) {
 }
 
 // Protected route wrapper component
-function ProtectedRoute({ children }: { children: React.ReactNode }) {
-    const [{ user, loading }] = useAuth()
+function ProtectedRoute({ children, requireAdmin = false }: { children: React.ReactNode; requireAdmin?: boolean }) {
+    const [{ user, is_active, is_admin, loading }] = useAuth()
 
     if (loading) {
         return (
@@ -33,6 +34,16 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
     if (!user) {
         return <Navigate to="/login" replace />
+    }
+
+    // Check if account is active (except for the pending activation page itself)
+    if (!is_active) {
+        return <Navigate to="/pending-activation" replace />
+    }
+
+    // Check admin requirement
+    if (requireAdmin && !is_admin) {
+        return <Navigate to="/transcriptions" replace />
     }
 
     return <ProtectedLayout>{children}</ProtectedLayout>
@@ -52,7 +63,13 @@ function App() {
             {/* Public route - shared transcription (no auth required) */}
             <Route path="/shared/:shareToken" element={<SharedTranscription />} />
 
-            {/* Protected routes - require authentication */}
+            {/* Pending activation page - authenticated but inactive users */}
+            <Route
+                path="/pending-activation"
+                element={<PendingActivation />}
+            />
+
+            {/* Protected routes - require authentication AND active account */}
             <Route
                 path="/"
                 element={
@@ -80,7 +97,7 @@ function App() {
             <Route
                 path="/dashboard"
                 element={
-                    <ProtectedRoute>
+                    <ProtectedRoute requireAdmin={true}>
                         <Dashboard />
                     </ProtectedRoute>
                 }

@@ -71,10 +71,13 @@ export const api = {
     return response.data;
   },
 
-  getTranscriptions: async (page: number = 1, page_size?: number): Promise<PaginatedResponse<Transcription>> => {
-    const params: Record<string, number> = { page };
+  getTranscriptions: async (page: number = 1, page_size?: number, channel_id?: string): Promise<PaginatedResponse<Transcription>> => {
+    const params: Record<string, number | string> = { page };
     if (page_size !== undefined) {
       params.page_size = page_size;
+    }
+    if (channel_id !== undefined) {
+      params.channel_id = channel_id;
     }
     const response = await apiClient.get<PaginatedResponse<Transcription>>('/transcriptions', { params });
     return response.data;
@@ -251,5 +254,114 @@ export const api = {
   }> => {
     const response = await axios.get(`${API_URL}/shared/${shareToken}`);
     return response.data;
-  }
+  },
+
+  // Channel endpoints
+  getTranscriptionChannels: async (transcriptionId: string): Promise<Array<{
+    id: string;
+    name: string;
+    description?: string;
+  }>> => {
+    const response = await apiClient.get(`/transcriptions/${transcriptionId}/channels`);
+    return response.data;
+  },
+
+  assignTranscriptionToChannels: async (transcriptionId: string, channelIds: string[]): Promise<{
+    message: string;
+    channel_ids: string[];
+  }> => {
+    const response = await apiClient.post(`/transcriptions/${transcriptionId}/channels`, { channel_ids });
+    return response.data;
+  },
+};
+
+// Admin API endpoints
+export const adminApi = {
+  // User management
+  listUsers: async (): Promise<Array<{
+    id: string;
+    email: string;
+    is_active: boolean;
+    is_admin: boolean;
+    activated_at: string | null;
+    created_at: string;
+  }>> => {
+    const response = await apiClient.get('/admin/users');
+    return response.data;
+  },
+
+  activateUser: async (userId: string): Promise<any> => {
+    const response = await apiClient.put(`/admin/users/${userId}/activate`);
+    return response.data;
+  },
+
+  toggleUserAdmin: async (userId: string, is_admin: boolean): Promise<any> => {
+    const response = await apiClient.put(`/admin/users/${userId}/admin`, { is_admin });
+    return response.data;
+  },
+
+  deleteUser: async (userId: string): Promise<any> => {
+    const response = await apiClient.delete(`/admin/users/${userId}`);
+    return response.data;
+  },
+
+  // Channel management
+  listChannels: async (): Promise<Array<{
+    id: string;
+    name: string;
+    description?: string;
+    created_by?: string;
+    created_at: string;
+    updated_at: string;
+    member_count?: number;
+  }>> => {
+    const response = await apiClient.get('/admin/channels');
+    return response.data;
+  },
+
+  createChannel: async (data: { name: string; description?: string }): Promise<any> => {
+    const response = await apiClient.post('/admin/channels', data);
+    return response.data;
+  },
+
+  updateChannel: async (channelId: string, data: { name?: string; description?: string }): Promise<any> => {
+    const response = await apiClient.put(`/admin/channels/${channelId}`, data);
+    return response.data;
+  },
+
+  deleteChannel: async (channelId: string): Promise<any> => {
+    const response = await apiClient.delete(`/admin/channels/${channelId}`);
+    return response.data;
+  },
+
+  assignUserToChannel: async (channelId: string, userId: string): Promise<any> => {
+    const response = await apiClient.post(`/admin/channels/${channelId}/members`, { user_id: userId });
+    return response.data;
+  },
+
+  removeUserFromChannel: async (channelId: string, userId: string): Promise<any> => {
+    const response = await apiClient.delete(`/admin/channels/${channelId}/members/${userId}`);
+    return response.data;
+  },
+
+  getChannelDetail: async (channelId: string): Promise<any> => {
+    const response = await apiClient.get(`/admin/channels/${channelId}`);
+    return response.data;
+  },
+
+  // Audio management
+  listAllAudio: async (): Promise<any> => {
+    const response = await apiClient.get('/admin/audio');
+    return response.data;
+  },
+
+  assignAudioToChannels: async (audioId: string, channelIds: string[]): Promise<any> => {
+    const response = await apiClient.post(`/admin/audio/${audioId}/channels`, { channel_ids: channelIds });
+    return response.data;
+  },
+
+  getAudioChannels: async (audioId: string): Promise<any[]> => {
+    const response = await apiClient.get(`/admin/audio/${audioId}/channels`);
+    return response.data;
+  },
 };

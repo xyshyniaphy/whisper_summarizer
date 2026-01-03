@@ -1,12 +1,16 @@
 import React, { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Trash2, AlertCircle, Loader2, Clock, ChevronLeft, ChevronRight } from 'lucide-react'
+import { useAtom } from 'jotai'
 import { api } from '../services/api'
 import { Transcription, PaginatedResponse } from '../types'
 import { AudioUploader } from '../components/AudioUploader'
 import { Card } from '../components/ui/Card'
 import { Badge } from '../components/ui/Badge'
 import { ConfirmDialog } from '../components/ui/ConfirmDialog'
+import { ChannelFilter } from '../components/channel'
+import { ChannelBadge } from '../components/channel'
+import { channelFilterAtom } from '../atoms/channels'
 
 // Stage display mapping
 const STAGE_LABELS: Record<string, string> = {
@@ -32,12 +36,18 @@ export function TranscriptionList() {
     id: null,
     stage: ''
   })
+  const [channelFilter] = useAtom(channelFilterAtom)
   const navigate = useNavigate()
 
   const loadTranscriptions = useCallback(async (page: number = currentPage) => {
     try {
       setIsLoading(true)
-      const data = await api.getTranscriptions(page)
+      // Pass channel filter as query parameter
+      const params: { page: number; channel_id?: string } = { page }
+      if (channelFilter) {
+        params.channel_id = channelFilter
+      }
+      const data = await api.getTranscriptions(page, undefined, params.channel_id)
       setPaginationData(data)
       setCurrentPage(data.page)
     } catch (e) {
@@ -45,7 +55,7 @@ export function TranscriptionList() {
     } finally {
       setIsLoading(false)
     }
-  }, [currentPage])
+  }, [currentPage, channelFilter])
 
   useEffect(() => {
     loadTranscriptions()
@@ -195,14 +205,17 @@ export function TranscriptionList() {
       <h2 className="text-2xl font-bold mb-6">新建转录</h2>
       <AudioUploader />
 
-      <h2 className="text-2xl font-bold mb-4 mt-8">
-        转录历史
-        {paginationData && paginationData.total > 0 && (
-          <span className="ml-3 text-lg font-normal text-gray-500 dark:text-gray-400">
-            共 {paginationData.total} 条
-          </span>
-        )}
-      </h2>
+      <div className="flex items-center justify-between mt-8 mb-4">
+        <h2 className="text-2xl font-bold">
+          转录历史
+          {paginationData && paginationData.total > 0 && (
+            <span className="ml-3 text-lg font-normal text-gray-500 dark:text-gray-400">
+              共 {paginationData.total} 条
+            </span>
+          )}
+        </h2>
+        <ChannelFilter />
+      </div>
 
       <Card>
         {isLoading ? (
@@ -221,6 +234,9 @@ export function TranscriptionList() {
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                       状态
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                      频道
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                       创建时间
@@ -271,6 +287,13 @@ export function TranscriptionList() {
                             重试 {item.retry_count} 次
                           </span>
                         )}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <ChannelBadge
+                          channels={item.channels || []}
+                          isPersonal={item.is_personal}
+                          maxDisplay={2}
+                        />
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
                         {new Date(item.created_at).toLocaleString('zh-CN')}

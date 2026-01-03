@@ -199,7 +199,7 @@ def sample_audio_file() -> bytes:
 def sample_transcription_response() -> dict:
   """
   テスト用文字起こし結果
-  
+
   Returns:
     dict: 文字起こし結果のサンプルデータ
   """
@@ -212,3 +212,20 @@ def sample_transcription_response() -> dict:
     "duration": 10.5,
     "created_at": "2025-12-30T08:00:00Z"
   }
+
+
+@pytest.fixture
+def db_session() -> Generator:
+  """
+  テスト用データベースセッション
+
+  Returns:
+    Session: SQLAlchemy セッション
+  """
+  from app.db.session import SessionLocal
+
+  db = SessionLocal()
+  try:
+    yield db
+  finally:
+    db.close()
