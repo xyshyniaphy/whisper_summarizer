@@ -96,7 +96,7 @@ class TestSendChatMessageEndpoint:
         assert response.status_code == 404
 
     def test_send_chat_message_empty_content(self, real_auth_client: TestClient, real_auth_user: dict) -> None:
-        """空のメッセージで422エラーを返すテスト"""
+        """空のメッセージで400エラーを返すテスト"""
         # テスト用データ作成
         db = SessionLocal()
         trans_id = str(uuid.uuid4())
@@ -115,7 +115,7 @@ class TestSendChatMessageEndpoint:
                 f"/api/transcriptions/{trans_id}/chat",
                 json={"content": ""}
             )
-            assert response.status_code == 422
+            assert response.status_code == 400
         finally:
             db.query(Transcription).filter(Transcription.id == trans_id).delete()
             db.commit()
@@ -199,13 +199,14 @@ class TestStreamChatMessageEndpoint:
             db.commit()
 
             # GLM APIをモック
-            with patch("app.services.api.glm_client") as mock_glm:
-                mock_glm.chat_stream = AsyncMock()
+            with patch("app.core.glm.get_glm_client") as mock_get_glm:
+                mock_client = AsyncMock()
                 # ジェネレータを作成
                 async def mock_generator():
                     yield {"content": "Streaming", "done": False}
                     yield {"content": " response", "done": True}
-                mock_glm.chat_stream.return_value = mock_generator()
+                mock_client.chat_stream = mock_generator
+                mock_get_glm.return_value = mock_client
 
                 response = real_auth_client.post(
                     f"/api/transcriptions/{trans_id}/chat/stream",

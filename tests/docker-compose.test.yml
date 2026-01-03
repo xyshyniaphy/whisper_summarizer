@@ -28,8 +28,8 @@ services:
       PYTHONPATH: /app
       # Database (Test PostgreSQL)
       DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres-test:5432/${POSTGRES_DB:-whisper_summarizer}
-      # Enable authentication for tests
-      DISABLE_AUTH: "false"
+      # Disable authentication for tests (uses test user bypass)
+      DISABLE_AUTH: "true"
       # faster-whisper Config (GPU-accelerated transcription)
       FASTER_WHISPER_DEVICE: ${FASTER_WHISPER_DEVICE:-cuda}
       FASTER_WHISPER_COMPUTE_TYPE: ${FASTER_WHISPER_COMPUTE_TYPE:-int8_float16}

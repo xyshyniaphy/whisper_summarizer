@@ -43,18 +43,26 @@ class TestSummarizeAPI:
 
     def setup_transcription(self, user_id: str, file_name: str = "test.wav", text: str = FIXED_TEST_TRANSCRIPTION) -> str:
         """テスト用の文字起こしデータを作成するヘルパー"""
+        from app.services.storage_service import get_storage_service
+
+        trans_id = str(uuid.uuid4())
         db = SessionLocal()
         try:
             transcription = Transcription(
-                id=str(uuid.uuid4()),
+                id=trans_id,
                 user_id=user_id,
                 file_name=file_name,
-                original_text=text,
-                status="completed"
+                stage="completed"
             )
             db.add(transcription)
             db.commit()
             db.refresh(transcription)
+
+            # Save transcription text to storage
+            if text:
+                storage_service = get_storage_service()
+                storage_service.save_transcription_text(trans_id, text)
+
             return transcription.id
         finally:
             db.close()
@@ -64,7 +72,7 @@ class TestSummarizeAPI:
         trans_id = self.setup_transcription(real_auth_user["id"])
         
         # GeminiClientのモック
-        with patch("app.core.gemini.GeminiClient.generate_summary", new_callable=AsyncMock) as mock_generate:
+        with patch("app.core.glm.GLMClient.generate_summary", new_callable=AsyncMock) as mock_generate:
             mock_generate.return_value = EXPECTED_SUMMARY
             
             response = real_auth_client.post(f"/api/transcriptions/{trans_id}/summarize")
@@ -91,7 +99,7 @@ class TestSummarizeAPI:
         """既存の要約がある場合それを返すテスト"""
         trans_id = self.setup_transcription(real_auth_user["id"])
         
-        with patch("app.core.gemini.GeminiClient.generate_summary", new_callable=AsyncMock) as mock_generate:
+        with patch("app.core.glm.GLMClient.generate_summary", new_callable=AsyncMock) as mock_generate:
             mock_generate.return_value = EXPECTED_SUMMARY
             
             # 1回目
@@ -110,7 +118,7 @@ class TestSummarizeAPI:
         expected_zh = "# 概述\n..."
         
         # 環境変数を上書きするか、GeminiClientの呼び出しをモックして言語パラメータを確認する
-        with patch("app.core.gemini.GeminiClient.generate_summary", new_callable=AsyncMock) as mock_generate:
+        with patch("app.core.glm.GLMClient.generate_summary", new_callable=AsyncMock) as mock_generate:
             mock_generate.return_value = expected_zh
             
             # REVIEW_LANGUAGE環境変数はconftest.pyで設定されている("zh")

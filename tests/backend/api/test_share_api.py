@@ -8,6 +8,7 @@ import pytest
 import uuid
 from fastapi.testclient import TestClient
 from app.models.transcription import Transcription
+from app.models.user import User
 from app.models.share_link import ShareLink
 from app.db.session import SessionLocal
 
@@ -35,7 +36,7 @@ class TestCreateShareLinkEndpoint:
         try:
             transcription = Transcription(
                 id=trans_id,
-                user_id=real_auth_user["id"],
+                user_id=real_auth_user["raw_uuid"],
                 file_name="test.wav",
                 storage_path=f"{trans_id}.txt.gz",
                 stage="completed"
@@ -61,7 +62,7 @@ class TestCreateShareLinkEndpoint:
         try:
             transcription = Transcription(
                 id=trans_id,
-                user_id=real_auth_user["id"],
+                user_id=real_auth_user["raw_uuid"],
                 file_name="test.wav",
                 storage_path=f"{trans_id}.txt.gz",
                 stage="completed"
@@ -110,9 +111,18 @@ class TestAccessSharedTranscriptionEndpoint:
         db = SessionLocal()
         trans_id = str(uuid.uuid4())
         try:
+            # Create user first (real_auth_user fixture only returns dict, doesn't create DB entry)
+            user = User(
+                id=real_auth_user["raw_uuid"],
+                email=real_auth_user["email"],
+                is_active=True
+            )
+            db.add(user)
+            db.commit()
+
             transcription = Transcription(
                 id=trans_id,
-                user_id=real_auth_user["id"],
+                user_id=real_auth_user["raw_uuid"],
                 file_name="test.wav",
                 storage_path=f"{trans_id}.txt.gz",
                 stage="completed"
@@ -138,6 +148,7 @@ class TestAccessSharedTranscriptionEndpoint:
         finally:
             db.query(ShareLink).filter(ShareLink.transcription_id == trans_id).delete()
             db.query(Transcription).filter(Transcription.id == trans_id).delete()
+            db.query(User).filter(User.id == real_auth_user["raw_uuid"]).delete()
             db.commit()
             db.close()
 
@@ -148,9 +159,18 @@ class TestAccessSharedTranscriptionEndpoint:
         db = SessionLocal()
         trans_id = str(uuid.uuid4())
         try:
+            # Create user first
+            user = User(
+                id=real_auth_user["raw_uuid"],
+                email=real_auth_user["email"],
+                is_active=True
+            )
+            db.add(user)
+            db.commit()
+
             transcription = Transcription(
                 id=trans_id,
-                user_id=real_auth_user["id"],
+                user_id=real_auth_user["raw_uuid"],
                 file_name="test.wav",
                 storage_path=f"{trans_id}.txt.gz",
                 stage="completed"
@@ -173,5 +193,6 @@ class TestAccessSharedTranscriptionEndpoint:
         finally:
             db.query(ShareLink).filter(ShareLink.transcription_id == trans_id).delete()
             db.query(Transcription).filter(Transcription.id == trans_id).delete()
+            db.query(User).filter(User.id == real_auth_user["raw_uuid"]).delete()
             db.commit()
             db.close()

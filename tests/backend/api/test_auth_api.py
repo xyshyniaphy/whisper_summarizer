@@ -12,8 +12,13 @@ from app.main import app
 from types import SimpleNamespace
 
 
+@pytest.mark.skip(reason="Auth is now handled by Supabase - custom auth endpoints removed")
 class TestAuthAPI:
-    """認証APIのテスト"""
+    """認証APIのテスト
+
+    Note: These tests are skipped because authentication is now handled by Supabase.
+    The custom signup/signin endpoints have been removed in favor of Supabase OAuth.
+    """
   
     @pytest.mark.integration
     def test_signup_success(self, test_client: TestClient) -> None:
