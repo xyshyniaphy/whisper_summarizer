@@ -104,8 +104,7 @@ COPY . .
 # データディレクトリを作成 (already in base image, but ensuring)
 RUN mkdir -p /tmp/uploads /app/data /app/output
 
-# ポート公開
-EXPOSE 8000
+# DO not expose port for FastAPI, use vite proxy
 
 # エントリーポイントとコマンドを明示的に設定
 ENTRYPOINT []

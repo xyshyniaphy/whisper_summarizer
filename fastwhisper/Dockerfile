@@ -87,8 +87,8 @@ WORKDIR /app
 # Create data directories
 RUN mkdir -p /tmp/uploads /app/data /app/output
 
-# Expose port for FastAPI
-EXPOSE 8000
+# DO not expose port for FastAPI, use vite proxy
+
 
 # ========================================
 # Verification
