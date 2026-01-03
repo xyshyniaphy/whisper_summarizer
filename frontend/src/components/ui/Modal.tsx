@@ -26,9 +26,8 @@ export function Modal({ isOpen, onClose, title, children, className }: ModalProp
     }
   }, [isOpen])
 
-  if (!isOpen) return null
-
-  return (
+  // Use conditional return instead of early return to avoid hooks violation
+  return isOpen ? (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       {/* Overlay */}
       <div
@@ -61,5 +60,5 @@ export function Modal({ isOpen, onClose, title, children, className }: ModalProp
         </div>
       </div>
     </div>
-  )
+  ) : null
 }

@@ -306,6 +306,25 @@ import { Loader2 } from 'lucide-react'
 )}
 ```
 
+### React Hooks Rules
+
+**CRITICAL**: Always use conditional returns, NOT early returns, for components with hooks:
+
+```tsx
+// ❌ WRONG - Early return after hook causes Hooks violation
+export function Modal({ isOpen, ... }) {
+  useEffect(() => { ... }, [isOpen])  // Hook called
+  if (!isOpen) return null            // Early return breaks hook order
+  return ( ... )
+}
+
+// ✅ CORRECT - Conditional return preserves hook order
+export function Modal({ isOpen, ... }) {
+  useEffect(() => { ... }, [isOpen])  // Hook always called
+  return isOpen ? ( ... ) : null      // Conditional return
+}
+```
+
 ## E2E Testing with File Uploads
 
 **CRITICAL**: NEVER click upload buttons - opens native file picker, blocks automation.
