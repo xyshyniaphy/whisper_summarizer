@@ -4,7 +4,7 @@
 # ========================================
 # Stage 1: Dependencies Installer
 # ========================================
-FROM node:20-alpine AS deps
+FROM oven/bun:1-alpine AS deps
 
 WORKDIR /app
 
@@ -12,10 +12,10 @@ WORKDIR /app
 COPY frontend/package.json ./
 
 # 依存関係をインストール
-RUN npm install
+RUN bun install
 
 # テスト用パッケージを追加インストール
-RUN npm install --save-dev \
+RUN bun add --dev \
     vitest@^2.1.8 \
     @testing-library/react@^16.1.0 \
     @testing-library/jest-dom@^6.6.3 \
@@ -27,7 +27,7 @@ RUN npm install --save-dev \
 # ========================================
 # Stage 2: Test Runtime
 # ========================================
-FROM node:20-alpine AS test
+FROM oven/bun:1-alpine AS test
 
 WORKDIR /app
 
@@ -37,4 +37,4 @@ COPY frontend/ .
 
 EXPOSE 3000
 
-CMD ["npm", "run", "test"]
+CMD ["bun", "run", "test"]

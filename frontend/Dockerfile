@@ -8,26 +8,26 @@ ARG VITE_SUPABASE_ANON_KEY
 # ========================================
 # Stage 1: Dependencies Installer
 # ========================================
-FROM node:20-alpine AS deps
+FROM oven/bun:1-alpine AS deps
 
 WORKDIR /app
 
 # package.jsonをコピー
-COPY package.json package-lock.json* ./
+COPY package.json bun.lockb* ./
 
-# 依存関係をインストール (npm install since no lockfile)
-RUN npm install
+# 依存関係をインストール (bun install)
+RUN bun install
 
 # ========================================
 # Stage 2: Lint Stage (Quality Check)
 # ========================================
-FROM node:20-alpine AS lint
+FROM oven/bun:1-alpine AS lint
 
 WORKDIR /app
 
 # 依存関係をコピー
 COPY --from=deps /app/node_modules ./node_modules
-COPY package.json package-lock.json* ./
+COPY package.json bun.lockb* ./
 COPY eslint.config.ts ./
 COPY tsconfig.json ./
 COPY tsconfig.node.json ./
@@ -36,13 +36,13 @@ COPY tsconfig.node.json ./
 COPY src ./src
 
 # ESLintとTypeScriptチェックを実行
-RUN npm run lint
-RUN npm run type-check
+RUN bun run lint
+RUN bun run type-check
 
 # ========================================
 # Stage 3: Builder (本番用)
 # ========================================
-FROM node:20-alpine AS builder
+FROM oven/bun:1-alpine AS builder
 
 # Declare build args again for this stage
 ARG VITE_SUPABASE_URL
@@ -59,7 +59,7 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
 # Viteビルド
-RUN npm run build
+RUN bun run build
 
 # ========================================
 # Stage 4: Production Runtime (Nginx)
@@ -79,7 +79,7 @@ CMD ["nginx", "-g", "daemon off;"]
 # ========================================
 # Stage 5: Development Runtime (Vite Dev Server)
 # ========================================
-FROM node:20-alpine AS development
+FROM oven/bun:1-alpine AS development
 
 WORKDIR /app
 
@@ -89,4 +89,4 @@ COPY . .
 
 EXPOSE 3000
 
-CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
+CMD ["bun", "run", "dev", "--", "--host", "0.0.0.0"]

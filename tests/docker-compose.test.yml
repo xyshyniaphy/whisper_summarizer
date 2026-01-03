@@ -87,7 +87,7 @@ services:
       # node_modulesを除外
       - /app/node_modules
     working_dir: /app
-    command: npm run test -- --run
+    command: bun run test -- --run
     networks:
       - whisper_test_network
 
@@ -107,7 +107,7 @@ services:
       - ../testdata:/app/testdata
       - /app/node_modules
     working_dir: /app
-    command: npx playwright test
+    command: bun run test
     # depends_on:
     #   - backend-test
     #   - frontend-test

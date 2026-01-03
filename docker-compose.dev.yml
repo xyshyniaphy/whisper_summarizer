@@ -113,7 +113,7 @@ services:
       - /app/node_modules
       # Viteキャッシュを除外
       - /app/.vite
-    command: /bin/sh -c "npm run dev -- --host 0.0.0.0 2>&1 | tee /app/logs/frontend.log"
+    command: /bin/sh -c "bun run dev -- --host 0.0.0.0 2>&1 | tee /app/logs/frontend.log"
     depends_on:
       - backend
     networks:

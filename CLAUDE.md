@@ -43,7 +43,7 @@ Access: http://localhost:3000
 ### Testing
 
 ```bash
-./run_test.sh frontend    # Frontend tests
+./run_test.sh frontend    # Frontend tests (bun)
 ./run_test.sh backend     # Backend tests
 ./run_test.sh e2e         # E2E tests (requires dev env running)
 ./run_test.sh all         # All tests
@@ -51,6 +51,8 @@ Access: http://localhost:3000
 ```
 
 **Coverage**: Backend 73.37% (32 tests passing) ✅
+
+**Note**: Frontend uses **bun** as the package manager (not npm).
 
 ### Building
 
