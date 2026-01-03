@@ -770,7 +770,7 @@ async def send_chat_message(
     # Save user message
     user_message = ChatMessage(
         transcription_id=transcription_uuid,
-        user_id=current_user.get("id"),
+        user_id=UUID(current_user.get("id")),
         role="user",
         content=user_content
     )
@@ -1065,9 +1065,9 @@ async def assign_transcription_to_channels(
         )
 
     # Verify all channels exist
-    channel_ids = [str(cid) for cid in assignment.channel_ids]
-    channels = db.query(Channel).filter(Channel.id.in_(channel_ids)).all()
-    if len(channels) != len(channel_ids):
+    channel_uuids = [UUID(str(cid)) for cid in assignment.channel_ids]
+    channels = db.query(Channel).filter(Channel.id.in_(channel_uuids)).all()
+    if len(channels) != len(channel_uuids):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="One or more channels not found"
@@ -1075,14 +1075,14 @@ async def assign_transcription_to_channels(
 
     # Remove existing assignments
     db.query(TranscriptionChannel).filter(
-        TranscriptionChannel.transcription_id == transcription_id
+        TranscriptionChannel.transcription_id == transcription_uuid
     ).delete()
 
     # Add new assignments
-    for channel_id in channel_ids:
+    for channel_uuid in channel_uuids:
         ta = TranscriptionChannel(
-            transcription_id=transcription_id,
-            channel_id=channel_id,
+            transcription_id=transcription_uuid,
+            channel_id=channel_uuid,
             assigned_by=current_db_user.id
         )
         db.add(ta)
@@ -1090,12 +1090,12 @@ async def assign_transcription_to_channels(
     db.commit()
 
     logger.info(
-        f"Transcription {transcription_id} assigned to {len(channel_ids)} channels "
+        f"Transcription {transcription_id} assigned to {len(channel_uuids)} channels "
         f"by user {current_db_user.email}"
     )
     return {
-        "message": f"Assigned to {len(channel_ids)} channels",
-        "channel_ids": channel_ids
+        "message": f"Assigned to {len(channel_uuids)} channels",
+        "channel_ids": [str(cid) for cid in channel_uuids]
     }
 
 

@@ -32,11 +32,11 @@ class TestGetChatHistoryEndpoint:
         """チャット履歴取得が成功するテスト"""
         # テスト用データ作成
         db = SessionLocal()
-        trans_id = str(uuid.uuid4())
+        trans_id = uuid.uuid4()
         try:
             transcription = Transcription(
                 id=trans_id,
-                user_id=real_auth_user["id"],
+                user_id=real_auth_user["raw_uuid"],
                 file_name="test.wav",
                 storage_path=f"{trans_id}.txt.gz",
                 stage="completed"
@@ -45,14 +45,14 @@ class TestGetChatHistoryEndpoint:
 
             # チャットメッセージを追加
             chat1 = ChatMessage(
-                id=str(uuid.uuid4()),
+                id=uuid.uuid4(),
                 transcription_id=trans_id,
                 user_id=real_auth_user["raw_uuid"],
                 role="user",
                 content="Test question"
             )
             chat2 = ChatMessage(
-                id=str(uuid.uuid4()),
+                id=uuid.uuid4(),
                 transcription_id=trans_id,
                 user_id=real_auth_user["raw_uuid"],
                 role="assistant",
