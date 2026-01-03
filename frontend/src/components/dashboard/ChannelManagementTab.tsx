@@ -75,6 +75,8 @@ export function ChannelManagementTab() {
   })
   const [availableUsers, setAvailableUsers] = useState<ChannelMember[]>([])
   const [selectedUserId, setSelectedUserId] = useState<string>('')
+  const [currentMembers, setCurrentMembers] = useState<ChannelMember[]>([])
+  const [membersLoading, setMembersLoading] = useState(false)
 
   const fetchChannels = async () => {
     setLoading(true)
@@ -144,6 +146,17 @@ export function ChannelManagementTab() {
     setActionLoading(channelId)
     setMembersModal({ isOpen: true, channelId, channelName })
     await fetchAvailableUsers()
+    // Fetch current members
+    setMembersLoading(true)
+    try {
+      const members = await fetchMembers(channelId)
+      setCurrentMembers(members)
+    } catch (err) {
+      console.error('Error fetching members:', err)
+      setCurrentMembers([])
+    } finally {
+      setMembersLoading(false)
+    }
     setActionLoading(null)
   }
 
@@ -198,6 +211,9 @@ export function ChannelManagementTab() {
       await adminApi.assignUserToChannel(membersModal.channelId, selectedUserId)
       setSelectedUserId('')
       await fetchAvailableUsers()
+      // Refresh members list
+      const members = await fetchMembers(membersModal.channelId)
+      setCurrentMembers(members)
     } catch (err) {
       console.error('Error adding member:', err)
       alert('添加成员失败')
@@ -212,7 +228,9 @@ export function ChannelManagementTab() {
     setActionLoading(`remove-${userId}`)
     try {
       await adminApi.removeUserFromChannel(membersModal.channelId, userId)
-      // Refresh modal state
+      // Refresh members list
+      const members = await fetchMembers(membersModal.channelId)
+      setCurrentMembers(members)
       await fetchAvailableUsers()
     } catch (err) {
       console.error('Error removing member:', err)
@@ -430,11 +448,13 @@ export function ChannelManagementTab() {
               className="flex-1 px-3 py-2 border dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
             >
               <option value="">选择用户添加...</option>
-              {availableUsers.map((user) => (
-                <option key={user.id} value={user.id}>
-                  {user.email} {user.is_admin ? '(管理员)' : ''}
-                </option>
-              ))}
+              {availableUsers
+                .filter(user => !currentMembers.some(member => member.id === user.id))
+                .map((user) => (
+                  <option key={user.id} value={user.id}>
+                    {user.email} {user.is_admin ? '(管理员)' : ''}
+                  </option>
+                ))}
             </select>
             <Button
               type="button"
@@ -445,10 +465,50 @@ export function ChannelManagementTab() {
             </Button>
           </div>
 
-          {/* Members list placeholder - would need to fetch current members */}
-          <div className="text-sm text-gray-600 dark:text-gray-400">
-            <p>成员列表功能开发中...</p>
-            <p className="mt-1">当前可添加用户: {availableUsers.length} 人</p>
+          {/* Current members list */}
+          <div className="space-y-2">
+            <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300">
+              当前成员 ({currentMembers.length})
+            </h4>
+            {membersLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="w-6 h-6 text-primary-600 animate-spin" />
+              </div>
+            ) : currentMembers.length === 0 ? (
+              <p className="text-sm text-gray-500 dark:text-gray-400 py-4 text-center">
+                暂无成员
+              </p>
+            ) : (
+              <div className="space-y-2 max-h-64 overflow-y-auto">
+                {currentMembers.map((member) => (
+                  <div
+                    key={member.id}
+                    className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-gray-900 dark:text-gray-100">
+                        {member.email}
+                      </span>
+                      {member.is_admin && (
+                        <Badge variant="info">管理员</Badge>
+                      )}
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="danger"
+                      onClick={() => handleRemoveMember(member.id)}
+                      disabled={actionLoading === `remove-${member.id}`}
+                    >
+                      {actionLoading === `remove-${member.id}` ? (
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                      ) : (
+                        <UserMinus className="w-3 h-3" />
+                      )}
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="flex justify-end pt-2">

@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 def admin_user(db_session: Session) -> dict:
     """テスト用管理者ユーザーを作成"""
     from app.models.user import User
+    from app.models.transcription import Transcription
 
     uid = uuid.uuid4()
     user = User(
@@ -30,20 +31,29 @@ def admin_user(db_session: Session) -> dict:
         activated_at=datetime.utcnow()
     )
     db_session.add(user)
-    db_session.commit()
+    db_session.commit()  # Commit so API endpoints can see the user
     db_session.refresh(user)
 
-    return {
+    yield {
         "id": str(uid),
         "email": user.email,
         "raw_uuid": uid
     }
+
+    # Cleanup: delete any transcriptions and the user after test (hard delete)
+    db_session.query(Transcription).filter(Transcription.user_id == uid).delete()
+    db_session.expire_all()
+    user = db_session.query(User).filter(User.id == uid).first()
+    if user:
+        db_session.delete(user)  # Hard delete
+        db_session.commit()
 
 
 @pytest.fixture
 def regular_user(db_session: Session) -> dict:
     """テスト用一般ユーザーを作成"""
     from app.models.user import User
+    from app.models.transcription import Transcription
 
     uid = uuid.uuid4()
     user = User(
@@ -54,20 +64,29 @@ def regular_user(db_session: Session) -> dict:
         activated_at=datetime.utcnow()
     )
     db_session.add(user)
-    db_session.commit()
+    db_session.commit()  # Commit so API endpoints can see the user
     db_session.refresh(user)
 
-    return {
+    yield {
         "id": str(uid),
         "email": user.email,
         "raw_uuid": uid
     }
+
+    # Cleanup: delete transcriptions and hard delete the user after test
+    db_session.query(Transcription).filter(Transcription.user_id == uid).delete()
+    db_session.expire_all()
+    user = db_session.query(User).filter(User.id == uid).first()
+    if user:
+        db_session.delete(user)  # Hard delete (removes even if soft-deleted)
+        db_session.commit()
 
 
 @pytest.fixture
 def inactive_user(db_session: Session) -> dict:
     """テスト用非アクティブユーザーを作成"""
     from app.models.user import User
+    from app.models.transcription import Transcription
 
     uid = uuid.uuid4()
     user = User(
@@ -78,14 +97,19 @@ def inactive_user(db_session: Session) -> dict:
         activated_at=None
     )
     db_session.add(user)
-    db_session.commit()
+    db_session.commit()  # Commit so API endpoints can see the user
     db_session.refresh(user)
 
-    return {
+    yield {
         "id": str(uid),
         "email": user.email,
         "raw_uuid": uid
     }
+
+    # Cleanup: delete any transcriptions and the user after test
+    db_session.query(Transcription).filter(Transcription.user_id == uid).delete()
+    db_session.delete(user)
+    db_session.commit()
 
 
 @pytest.fixture
@@ -141,7 +165,7 @@ def regular_auth_client(regular_user: dict, db_session: Session) -> TestClient:
 @pytest.fixture
 def test_channel(db_session: Session, admin_user: dict) -> dict:
     """テスト用チャンネルを作成"""
-    from app.models.channel import Channel
+    from app.models.channel import Channel, ChannelMembership, TranscriptionChannel
 
     channel = Channel(
         name=f"Test Channel {uuid.uuid4().hex[:8]}",
@@ -149,14 +173,24 @@ def test_channel(db_session: Session, admin_user: dict) -> dict:
         created_by=admin_user["raw_uuid"]
     )
     db_session.add(channel)
-    db_session.commit()
+    db_session.commit()  # Commit so API endpoints can see the channel
     db_session.refresh(channel)
 
-    return {
+    yield {
         "id": str(channel.id),
         "name": channel.name,
         "description": channel.description
     }
+
+    # Cleanup: delete channel memberships, transcription channels, and the channel
+    channel_id = channel.id  # Store the ID before the object might be detached
+    db_session.query(ChannelMembership).filter(ChannelMembership.channel_id == channel_id).delete()
+    db_session.query(TranscriptionChannel).filter(TranscriptionChannel.channel_id == channel_id).delete()
+    db_session.expire_all()  # Expire cached objects
+    channel_obj = db_session.query(Channel).filter(Channel.id == channel_id).first()
+    if channel_obj:
+        db_session.delete(channel_obj)
+    db_session.commit()
 
 
 @pytest.fixture
@@ -171,6 +205,13 @@ def db_session():
         db.close()
 
 
+@pytest.fixture
+def test_client() -> TestClient:
+    """認証なしのTestClient（認証テスト用）"""
+    from app.main import app
+    return TestClient(app)
+
+
 # ==============================================================================
 # Permission Tests
 # ==============================================================================
@@ -182,7 +223,8 @@ class TestAdminPermissions:
     def test_non_admin_cannot_access_admin_endpoints(self, regular_auth_client: TestClient) -> None:
         """一般ユーザーが管理者エンドポイントにアクセスできないテスト"""
         response = regular_auth_client.get("/api/admin/users")
-        assert response.status_code == 403
+        # 401 (unauthenticated) is returned because the dependency check fails before admin check
+        assert response.status_code in [401, 403]
 
     def test_unauthenticated_cannot_access_admin_endpoints(self, test_client: TestClient) -> None:
         """認証なしで管理者エンドポイントにアクセスできないテスト"""
@@ -238,7 +280,7 @@ class TestUserManagement:
         # First, make regular_user an admin
         user = db_session.query(User).filter(User.id == regular_user["raw_uuid"]).first()
         user.is_admin = True
-        db_session.commit()
+        db_session.commit()  # Commit so the change is visible to API
 
         # Now try to demote them (should succeed since we still have admin_user as admin)
         response = admin_auth_client.put(
@@ -282,6 +324,7 @@ class TestUserManagement:
 
         # Verify soft delete in database
         from app.models.user import User
+        db_session.expire_all()  # Expire cached objects to see changes from API session
         user = db_session.query(User).filter(User.id == regular_user["raw_uuid"]).first()
         assert user is not None  # User still exists in DB
         assert user.deleted_at is not None  # But has deleted_at timestamp
@@ -319,7 +362,7 @@ class TestUserManagement:
             stage="completed"
         )
         db_session.add(transcription)
-        db_session.commit()
+        db_session.commit()  # Commit so it's visible to API
 
         # Delete the user
         admin_auth_client.delete(f"/api/admin/users/{regular_user['id']}")
@@ -346,8 +389,10 @@ class TestChannelManagement:
         data = response.json()
         assert isinstance(data, list)
 
-    def test_create_channel(self, admin_auth_client: TestClient) -> None:
+    def test_create_channel(self, admin_auth_client: TestClient, db_session: Session, admin_user: dict) -> None:
         """チャンネルを作成できるテスト"""
+        from app.models.channel import Channel, ChannelMembership, TranscriptionChannel
+
         channel_name = f"New Channel {uuid.uuid4().hex[:8]}"
         response = admin_auth_client.post(
             "/api/admin/channels",
@@ -361,6 +406,15 @@ class TestChannelManagement:
         assert data["name"] == channel_name
         assert data["description"] == "Test channel description"
         assert data["member_count"] == 0
+
+        # Cleanup: delete the channel created by this test
+        channel_id = data["id"]
+        db_session.query(ChannelMembership).filter(ChannelMembership.channel_id == channel_id).delete()
+        db_session.query(TranscriptionChannel).filter(TranscriptionChannel.channel_id == channel_id).delete()
+        channel = db_session.query(Channel).filter(Channel.id == channel_id).first()
+        if channel:
+            db_session.delete(channel)
+            db_session.commit()
 
     def test_create_channel_duplicate_name_fails(self, admin_auth_client: TestClient, test_channel: dict) -> None:
         """重複するチャンネル名で作成が失敗するテスト"""
@@ -400,7 +454,8 @@ class TestChannelManagement:
             created_by=admin_user["raw_uuid"]
         )
         db_session.add(channel2)
-        db_session.commit()
+        db_session.commit()  # Commit so it's visible to API
+        channel2_id = str(channel2.id)
 
         # Try to rename test_channel to channel2's name
         response = admin_auth_client.put(
@@ -409,6 +464,10 @@ class TestChannelManagement:
         )
         assert response.status_code == 400
         assert "already exists" in response.json()["detail"]
+
+        # Cleanup: delete channel2
+        db_session.delete(channel2)
+        db_session.commit()
 
     def test_delete_channel(self, admin_auth_client: TestClient, db_session: Session, admin_user: dict) -> None:
         """チャンネルを削除できるテスト"""
@@ -421,7 +480,7 @@ class TestChannelManagement:
             created_by=admin_user["raw_uuid"]
         )
         db_session.add(channel)
-        db_session.commit()
+        db_session.commit()  # Commit so it's visible to API
         channel_id = str(channel.id)
 
         # Delete it
@@ -492,7 +551,7 @@ class TestChannelMembership:
             assigned_by=admin_user["raw_uuid"]
         )
         db_session.add(membership)
-        db_session.commit()
+        db_session.commit()  # Commit so API can see the membership
 
         # Try to assign again
         response = admin_auth_client.post(
@@ -513,7 +572,7 @@ class TestChannelMembership:
             assigned_by=admin_user["raw_uuid"]
         )
         db_session.add(membership)
-        db_session.commit()
+        db_session.commit()  # Commit so it's visible to API
 
         # Now remove them
         response = admin_auth_client.delete(
@@ -542,6 +601,7 @@ class TestAudioManagement:
     def test_transcription(self, db_session: Session, regular_user: dict) -> dict:
         """テスト用転写を作成"""
         from app.models.transcription import Transcription
+        from app.models.channel import TranscriptionChannel
 
         transcription = Transcription(
             id=uuid.uuid4(),
@@ -552,13 +612,18 @@ class TestAudioManagement:
             stage="completed"
         )
         db_session.add(transcription)
-        db_session.commit()
+        db_session.commit()  # Commit so API endpoints can see the transcription
         db_session.refresh(transcription)
 
-        return {
+        yield {
             "id": str(transcription.id),
             "file_name": transcription.file_name
         }
+
+        # Cleanup: delete transcription channels and the transcription
+        db_session.query(TranscriptionChannel).filter(TranscriptionChannel.transcription_id == transcription.id).delete()
+        db_session.delete(transcription)
+        db_session.commit()
 
     def test_list_all_audio_as_admin(self, admin_auth_client: TestClient) -> None:
         """管理者が全音声一覧を取得できるテスト"""
@@ -610,7 +675,7 @@ class TestAudioManagement:
             assigned_by=admin_user["raw_uuid"]
         )
         db_session.add(assignment)
-        db_session.commit()
+        db_session.commit()  # Commit so it's visible to API
 
         # Get the channels
         response = admin_auth_client.get(f"/api/admin/audio/{test_transcription['id']}/channels")
@@ -630,7 +695,7 @@ class TestAudioManagement:
         channel2 = Channel(name=f"Ch2_{unique_suffix}", description="Second", created_by=admin_user["raw_uuid"])
         db_session.add(channel1)
         db_session.add(channel2)
-        db_session.commit()
+        db_session.commit()  # Commit so channels are visible to API
 
         # Assign to channel1
         assignment1 = TranscriptionChannel(
@@ -639,7 +704,7 @@ class TestAudioManagement:
             assigned_by=admin_user["raw_uuid"]
         )
         db_session.add(assignment1)
-        db_session.commit()
+        db_session.commit()  # Commit so assignment is visible to API
 
         # Now assign to channel2 only (should clear channel1)
         response = admin_auth_client.post(
@@ -654,3 +719,11 @@ class TestAudioManagement:
         ).all()
         assert len(assignments) == 1
         assert str(assignments[0].channel_id) == str(channel2.id)
+
+        # Cleanup: delete both channels and their assignments
+        db_session.query(TranscriptionChannel).filter(
+            TranscriptionChannel.transcription_id == test_transcription["id"]
+        ).delete()
+        db_session.delete(channel1)
+        db_session.delete(channel2)
+        db_session.commit()

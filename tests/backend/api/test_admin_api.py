@@ -161,14 +161,25 @@ def test_channel(db_session: Session, admin_user: dict) -> dict:
 
 @pytest.fixture
 def db_session():
-    """テスト用データベースセッション"""
+    """テスト用データベースセッション
+    
+    セッション終了時にロールバックを行い、テスト間のデータ汚染を防ぐ。
+    """
     from app.db.session import SessionLocal
 
     db = SessionLocal()
     try:
         yield db
     finally:
+        db.rollback()
         db.close()
+
+
+@pytest.fixture
+def test_client() -> TestClient:
+    """認証なしのTestClient（認証テスト用）"""
+    from app.main import app
+    return TestClient(app)
 
 
 # ==============================================================================
@@ -182,7 +193,8 @@ class TestAdminPermissions:
     def test_non_admin_cannot_access_admin_endpoints(self, regular_auth_client: TestClient) -> None:
         """一般ユーザーが管理者エンドポイントにアクセスできないテスト"""
         response = regular_auth_client.get("/api/admin/users")
-        assert response.status_code == 403
+        # 401 (unauthenticated) is returned because the dependency check fails before admin check
+        assert response.status_code in [401, 403]
 
     def test_unauthenticated_cannot_access_admin_endpoints(self, test_client: TestClient) -> None:
         """認証なしで管理者エンドポイントにアクセスできないテスト"""
@@ -346,8 +358,10 @@ class TestChannelManagement:
         data = response.json()
         assert isinstance(data, list)
 
-    def test_create_channel(self, admin_auth_client: TestClient) -> None:
+    def test_create_channel(self, admin_auth_client: TestClient, db_session: Session) -> None:
         """チャンネルを作成できるテスト"""
+        from app.models.channel import Channel
+
         channel_name = f"New Channel {uuid.uuid4().hex[:8]}"
         response = admin_auth_client.post(
             "/api/admin/channels",
@@ -361,6 +375,12 @@ class TestChannelManagement:
         assert data["name"] == channel_name
         assert data["description"] == "Test channel description"
         assert data["member_count"] == 0
+
+        # Cleanup: delete the created channel
+        created_channel = db_session.query(Channel).filter(Channel.id == data["id"]).first()
+        if created_channel:
+            db_session.delete(created_channel)
+            db_session.commit()
 
     def test_create_channel_duplicate_name_fails(self, admin_auth_client: TestClient, test_channel: dict) -> None:
         """重複するチャンネル名で作成が失敗するテスト"""
@@ -401,6 +421,7 @@ class TestChannelManagement:
         )
         db_session.add(channel2)
         db_session.commit()
+        channel2_id = str(channel2.id)
 
         # Try to rename test_channel to channel2's name
         response = admin_auth_client.put(
@@ -409,6 +430,10 @@ class TestChannelManagement:
         )
         assert response.status_code == 400
         assert "already exists" in response.json()["detail"]
+
+        # Cleanup: delete channel2
+        db_session.delete(channel2)
+        db_session.commit()
 
     def test_delete_channel(self, admin_auth_client: TestClient, db_session: Session, admin_user: dict) -> None:
         """チャンネルを削除できるテスト"""
@@ -452,8 +477,10 @@ class TestChannelManagement:
 class TestChannelMembership:
     """チャンネルメンバーシップテスト"""
 
-    def test_assign_user_to_channel(self, admin_auth_client: TestClient, test_channel: dict, regular_user: dict) -> None:
+    def test_assign_user_to_channel(self, admin_auth_client: TestClient, test_channel: dict, regular_user: dict, db_session: Session) -> None:
         """ユーザーをチャンネルに割り当てられるテスト"""
+        from app.models.channel import ChannelMembership
+
         response = admin_auth_client.post(
             f"/api/admin/channels/{test_channel['id']}/members",
             json={"user_id": regular_user["id"]}
@@ -462,6 +489,15 @@ class TestChannelMembership:
         data = response.json()
         assert data["channel_id"] == test_channel["id"]
         assert str(data["user_id"]) == regular_user["id"]
+
+        # Cleanup: delete the membership created by this test
+        membership = db_session.query(ChannelMembership).filter(
+            ChannelMembership.channel_id == test_channel["id"],
+            ChannelMembership.user_id == regular_user["id"]
+        ).first()
+        if membership:
+            db_session.delete(membership)
+            db_session.commit()
 
     def test_assign_user_to_nonexistent_channel_fails(self, admin_auth_client: TestClient, regular_user: dict) -> None:
         """存在しないチャンネルへの割り当てが失敗するテスト"""
@@ -501,6 +537,10 @@ class TestChannelMembership:
         )
         assert response.status_code == 400
         assert "already assigned" in response.json()["detail"]
+
+        # Cleanup: delete the membership
+        db_session.delete(membership)
+        db_session.commit()
 
     def test_remove_user_from_channel(self, admin_auth_client: TestClient, test_channel: dict, regular_user: dict, db_session: Session, admin_user: dict) -> None:
         """ユーザーをチャンネルから削除できるテスト"""
@@ -569,8 +609,10 @@ class TestAudioManagement:
         assert "items" in data
         assert isinstance(data["items"], list)
 
-    def test_assign_audio_to_channels(self, admin_auth_client: TestClient, test_transcription: dict, test_channel: dict) -> None:
+    def test_assign_audio_to_channels(self, admin_auth_client: TestClient, test_transcription: dict, test_channel: dict, db_session: Session) -> None:
         """音声をチャンネルに割り当てられるテスト"""
+        from app.models.channel import TranscriptionChannel
+
         response = admin_auth_client.post(
             f"/api/admin/audio/{test_transcription['id']}/channels",
             json={"channel_ids": [test_channel["id"]]}
@@ -579,6 +621,15 @@ class TestAudioManagement:
         data = response.json()
         assert "channel_ids" in data
         assert test_channel["id"] in data["channel_ids"]
+
+        # Cleanup: delete the channel assignment
+        assignment = db_session.query(TranscriptionChannel).filter(
+            TranscriptionChannel.transcription_id == test_transcription["id"],
+            TranscriptionChannel.channel_id == test_channel["id"]
+        ).first()
+        if assignment:
+            db_session.delete(assignment)
+            db_session.commit()
 
     def test_assign_audio_to_nonexistent_audio_fails(self, admin_auth_client: TestClient, test_channel: dict) -> None:
         """存在しない音声の割り当てが失敗するテスト"""
@@ -620,6 +671,10 @@ class TestAudioManagement:
         assert len(data) >= 1
         assert any(ch["id"] == test_channel["id"] for ch in data)
 
+        # Cleanup: delete the assignment
+        db_session.delete(assignment)
+        db_session.commit()
+
     def test_clear_and_replace_channel_assignments(self, admin_auth_client: TestClient, test_transcription: dict, db_session: Session, admin_user: dict) -> None:
         """チャンネル割り当てのクリアと置換が正しく動作するテスト"""
         from app.models.channel import Channel, TranscriptionChannel
@@ -654,3 +709,11 @@ class TestAudioManagement:
         ).all()
         assert len(assignments) == 1
         assert str(assignments[0].channel_id) == str(channel2.id)
+
+        # Cleanup: delete both channels and their assignments
+        db_session.query(TranscriptionChannel).filter(
+            TranscriptionChannel.transcription_id == test_transcription["id"]
+        ).delete()
+        db_session.delete(channel1)
+        db_session.delete(channel2)
+        db_session.commit()

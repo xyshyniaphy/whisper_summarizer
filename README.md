@@ -4,12 +4,12 @@
 
 ## 概要
 
-Whisper Summarizerは、音声ファイルを自動で文字起こしし、Google Gemini 2.0 Flash APIによる要約を生成するWebアプリケーションです。
+Whisper Summarizerは、音声ファイルを自動で文字起こしし、GLM-4.5-Air API (OpenAI-compatible) による要約を生成するWebアプリケーションです。
 
 ### 主な機能
 
 - **音声文字起こし**: faster-whisper (CTranslate2 + cuDNN) によるGPU加速処理
-- **AI要約生成**: Google Gemini 2.0 Flash による高品質な要約
+- **AI要約生成**: GLM-4.5-Air (OpenAI-compatible API) による高品質な要約
 - **音声管理**: アップロードした音声と文字起こし結果の削除機能
 - **ユーザー認証**: Supabase Authによる安全な認証
 - **Docker Compose**: シンプルな2コンテナ構成
@@ -23,8 +23,8 @@ Whisper Summarizerは、音声ファイルを自動で文字起こしし、Googl
 | UIコンポーネント | Tailwind CSS + lucide-react (icons) |
 | バックエンド | FastAPI + Python 3.12 + uv |
 | 音声処理 | faster-whisper (CTranslate2 + cuDNN) |
-| AI要約 | Google Gemini 2.0 Flash |
-| 認証 | Supabase Auth (JWT) |
+| AI要約 | GLM-4.5-Air (OpenAI-compatible API) |
+| 認証 | Supabase Auth (Google OAuth only) |
 | データベース | PostgreSQL 18 Alpine (開発) / Supabase PostgreSQL (本番) |
 | ファイル保存 | ローカルファイルシステム (gzip圧縮) |
 | コンテナ | Docker + Docker Compose |
@@ -48,7 +48,7 @@ Whisper Summarizerは、音声ファイルを自動で文字起こしし、Googl
 
 - Docker & Docker Compose
 - Supabaseプロジェクト (https://supabase.com)
-- Google Gemini APIキー
+- GLM APIキー (https://z.ai/ - 国際プラットフォーム)
 
 **GPUオプション（推奨）:**
 - NVIDIA GPU (Compute Capability 7.0+、RTX 3080推奨)
@@ -72,11 +72,11 @@ SUPABASE_URL=https://xxxx.supabase.co
 SUPABASE_ANON_KEY=eyJ...
 SUPABASE_SERVICE_ROLE_KEY=eyJ...
 
-# Google Gemini API設定 (要約生成用)
-GEMINI_API_KEY=your_gemini_api_key
-GEMINI_MODEL=gemini-2.0-flash-exp  # 使用モデル (gemini-2.0-flash-exp, gemini-1.5-pro 等)
+# GLM API設定 (OpenAI-compatible - https://z.ai/ から取得)
+GLM_API_KEY=your_glm_api_key
+GLM_MODEL=GLM-4.5-Air             # 使用モデル (GLM-4.5-Air, GLM-4.5, GLM-4.7 等)
+GLM_BASE_URL=https://api.z.ai/api/paas/v4/  # 国際エンドポイント (中国国内: https://open.bigmodel.cn/api/paas/v4/)
 REVIEW_LANGUAGE=zh                 # 要約生成言語 (zh, ja, en)
-GEMINI_API_ENDPOINT=               # オプション: カスタムエンドポイントを使用する場合のみ設定
 
 # データベース設定 (開発環境ではPostgreSQL 18 Alpineを使用)
 # 本番環境でSupabase PostgreSQLを使用する場合はDATABASE_URLを設定してください
@@ -260,27 +260,32 @@ cp .env.sample .env
 ### 1. ユーザー登録
 
 1. http://localhost:3000 にアクセス
-2. 「サインアップ」をクリック
-3. メールアドレスとパスワードを入力
-4. Supabaseから確認メールが届くので、リンクをクリック
+2. 「Sign in with Google」でサインアップ
+3. Googleアカウントで認証
+4. **重要**: 新規ユーザーは管理者の承認が必要（非アクティブ状態）
 
-### 2. ログイン
+### 2. アカウントのアクティベーション
 
-1. メールアドレスとパスワードでログイン
+- 管理者がダッシュボードからユーザーをアクティベート
+- アクティベートされたユーザーのみがシステムを利用可能
+
+### 3. ログイン
+
+1. Googleアカウントでログイン
 2. ダッシュボードにリダイレクト
 
-### 3. 音声ファイルのアップロード (実装中)
+### 4. 音声ファイルのアップロード
 
 - サポート形式: m4a, mp3, wav, aac, flac, ogg
 - 最大ファイルサイズ: 未設定
 
-### 4. 文字起こし・要約の確認 (実装中)
+### 5. 文字起こし・要約の確認
 
 - 文字起こし結果をタイムスタンプ付きで表示 (最初の200行)
-- Google Gemini 2.0 Flash による要約を表示 (Overview / Key Points / Details)
+- GLM-4.5-Air による要約を表示
 - ダウンロード機能 (テキスト形式 .txt / 字幕形式 .srt)
 
-### 5. 音声の削除
+### 6. 音声の削除
 
 - 文字起こし履歴リストから、不要なアイテムを削除できます (ゴミ箱アイコン)
 - 削除条件:
@@ -520,7 +525,8 @@ cd tests
 
 **現在のカバレッジ状況:**
 - バックエンド: **73.37%** (目標: 70%以上) ✅
-- テスト総数: 19件 (全てパス)
+- テスト総数: 32件 (基本テスト) + 23件 (チャンネル割り当てAPI) = **55件** ✅
+- E2Eテスト: チャンネル割り当てシナリオ含む ✅
 
 ### バックエンドテスト (Pytest)
 
@@ -593,6 +599,14 @@ npm run test:headed
 **テストの構成:**
 - `tests/e2e/tests/auth.spec.ts` - 認証フローのE2Eテスト
 - `tests/e2e/tests/transcription.spec.ts` - 文字起こしフローのE2Eテスト
+- `tests/e2e/tests/channel-assignment.spec.ts` - チャンネル割り当てシナリオのE2Eテスト
+
+**チャンネル割り当てE2Eテスト内容:**
+- チャンネル一覧表示と検索機能
+- 単一・複数チャンネルの選択と割り当て
+- 割り当てのキャンセル
+- チャンネル変更シナリオ（新規チャンネルへの変更、元のチャンネルに戻す、全解除）
+- APIエラー時のエラーメッセージ表示
 
 ## API仕様
 
@@ -612,6 +626,8 @@ npm run test:headed
 | DELETE | `/api/transcriptions/{id}` | 文字起こし削除 (カスケード) |
 | GET | `/api/transcriptions/{id}/download?format=txt` | テキストダウンロード |
 | GET | `/api/transcriptions/{id}/download?format=srt` | 字幕ダウンロード |
+| GET | `/api/transcriptions/{id}/channels` | 転写のチャンネル取得 |
+| POST | `/api/transcriptions/{id}/channels` | 転写をチャンネルに割り当て |
 
 ## Audio Chunking (長音声の高速文字起こし)
 

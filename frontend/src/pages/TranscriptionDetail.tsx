@@ -143,6 +143,25 @@ export function TranscriptionDetail() {
         return () => clearInterval(interval)
     }, [transcription, id, loadTranscription])
 
+    // Load transcription channels callback (must be before early returns - Rules of Hooks)
+    const loadTranscriptionChannels = useCallback(async (transcriptionId: string) => {
+        if (!transcriptionId) return
+        try {
+            const channels = await api.getTranscriptionChannels(transcriptionId)
+            setTranscriptionChannels(channels)
+        } catch (error) {
+            console.error('Failed to load transcription channels:', error)
+        }
+    }, [])
+
+    // Load channels when transcription loads
+    useEffect(() => {
+        if (transcription && id) {
+            loadTranscriptionChannels(id)
+        }
+    }, [transcription, id, loadTranscriptionChannels])
+
+    // Early returns after ALL hooks are declared
     if (loading) {
         return (
             <div className="container mx-auto px-4 py-8 flex justify-center">
@@ -247,17 +266,6 @@ export function TranscriptionDetail() {
         }
     }
 
-    // Load transcription channels
-    const loadTranscriptionChannels = useCallback(async (transcriptionId: string) => {
-        if (!transcriptionId) return
-        try {
-            const channels = await api.getTranscriptionChannels(transcriptionId)
-            setTranscriptionChannels(channels)
-        } catch (error) {
-            console.error('Failed to load transcription channels:', error)
-        }
-    }, [])
-
     // Open channel assignment modal
     const handleOpenChannelAssign = async () => {
         await loadTranscriptionChannels(id || '')
@@ -278,13 +286,6 @@ export function TranscriptionDetail() {
             throw error
         }
     }
-
-    // Load channels when transcription loads
-    useEffect(() => {
-        if (transcription && id) {
-            loadTranscriptionChannels(id)
-        }
-    }, [transcription, id, loadTranscriptionChannels])
 
     const getBadgeVariant = (stage: string): 'success' | 'error' | 'info' | 'warning' => {
         if (stage === 'completed') return 'success'

@@ -392,9 +392,9 @@ export const adminApi = {
   },
 
   // Audio management
-  listAllAudio: async (): Promise<any> => {
+  listAllAudio: async (): Promise<any[]> => {
     const response = await apiClient.get('/admin/audio');
-    return response.data;
+    return response.data.items || [];
   },
 
   assignAudioToChannels: async (audioId: string, channelIds: string[]): Promise<any> => {

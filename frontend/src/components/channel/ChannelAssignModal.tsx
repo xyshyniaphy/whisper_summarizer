@@ -38,10 +38,12 @@ export function ChannelAssignModal({
   const [searchQuery, setSearchQuery] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   // Load available channels
   useEffect(() => {
     if (isOpen) {
+      setError(null)
       loadChannels()
     }
   }, [isOpen])
@@ -50,6 +52,7 @@ export function ChannelAssignModal({
   useEffect(() => {
     if (isOpen) {
       setSelectedIds(new Set(currentChannelIds))
+      setError(null)
     }
   }, [isOpen, currentChannelIds])
 
@@ -101,12 +104,15 @@ export function ChannelAssignModal({
   }
 
   const handleConfirm = async () => {
+    setError(null)
     setIsSaving(true)
     try {
       await onConfirm(Array.from(selectedIds))
       onClose()
-    } catch (error) {
-      console.error('Failed to assign channels:', error)
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : '分配频道失败，请稍后再试'
+      setError(errorMessage)
+      console.error('Failed to assign channels:', err)
     } finally {
       setIsSaving(false)
     }
@@ -125,6 +131,13 @@ export function ChannelAssignModal({
         </div>
       ) : (
         <div className="space-y-4">
+          {/* Error message */}
+          {error && (
+            <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+              <p className="text-sm text-red-800 dark:text-red-200">{error}</p>
+            </div>
+          )}
+
           {/* Search input */}
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
