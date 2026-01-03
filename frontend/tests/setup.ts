@@ -5,6 +5,25 @@ import * as matchers from '@testing-library/jest-dom/matchers'
 // Extend Vitest's expect with jest-dom matchers
 expect.extend(matchers)
 
+// Mock API calls to prevent network errors
+vi.mock('@/services/api', () => ({
+  api: {
+    get: vi.fn(() => Promise.resolve({ data: [] })),
+    post: vi.fn(() => Promise.resolve({ data: {} })),
+    put: vi.fn(() => Promise.resolve({ data: {} })),
+    delete: vi.fn(() => Promise.resolve({ data: {} })),
+    patch: vi.fn(() => Promise.resolve({ data: {} })),
+  },
+  getTranscriptions: vi.fn(() => Promise.resolve([])),
+  getTranscription: vi.fn(() => Promise.resolve({})),
+  createTranscription: vi.fn(() => Promise.resolve({})),
+  deleteTranscription: vi.fn(() => Promise.resolve({})),
+  updateTranscription: vi.fn(() => Promise.resolve({})),
+  generateSummary: vi.fn(() => Promise.resolve({})),
+  getChatHistory: vi.fn(() => Promise.resolve([])),
+  sendChatMessage: vi.fn(() => Promise.resolve({})),
+}))
+
 // Cleanup after each test
 afterEach(() => {
   cleanup()

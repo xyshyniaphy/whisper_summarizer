@@ -15,6 +15,12 @@ export default defineConfig({
     // セットアップファイル
     setupFiles: ['./tests/setup.ts'],
 
+    // Test timeout (10 seconds - increased for async operations)
+    testTimeout: 10000,
+
+    // Hook timeout (10 seconds)
+    hookTimeout: 10000,
+
     // カバレッジ設定
     coverage: {
       provider: 'v8',
