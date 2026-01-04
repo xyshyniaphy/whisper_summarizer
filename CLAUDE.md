@@ -50,7 +50,9 @@ Access: http://localhost:3000
 ./run_test.sh build       # Build test images
 ```
 
-**Coverage**: Backend 73.37% (32 tests passing) ✅
+**Coverage**:
+- Backend: **100%** (107/107 tests passing) ✅
+- Frontend: **73.6%** (319/433 tests passing, 114 failing)
 
 **Note**: Frontend uses **bun** as the package manager (not npm).
 
@@ -365,7 +367,7 @@ const uploadFileViaAPI = async (page: Page, filePath: string) => {
 1. **faster-whisper with cuDNN** runs in-process within backend container
 2. **Base image**: Run `./build_fastwhisper_base.sh` first (~10-15 min, includes model download)
 3. **Hot reload**: Volume mounts for instant code updates
-4. **Test coverage**: 70%+ target (currently 73.37%, 32 tests)
+4. **Test coverage**: Backend 100% (107/107 ✅), Frontend 73.6% (319/433)
 5. **uv** for Python deps (not pip)
 6. **Jotai** for state (not React Context)
 7. **Data persistence**: `data/` directory volume-mounted

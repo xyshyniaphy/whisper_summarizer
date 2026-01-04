@@ -6,10 +6,8 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { api } from '../../../src/services/api'
-import axios from 'axios'
 
-// Mock axios
-vi.mock('axios')
+// Mock axios is already done in setup.ts with interceptors
 
 // Mock Supabase client
 const mockSession = {

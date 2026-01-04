@@ -10,13 +10,13 @@ import userEvent from '@testing-library/user-event'
 import { Provider } from 'jotai'
 import { renderHook, act } from '@testing-library/react'
 import { useAtom } from 'jotai'
-import { ChannelBadge, Channel } from '../../../src/components/channel/ChannelBadge'
-import { ChannelFilter } from '../../../src/components/channel/ChannelFilter'
-import { ChannelAssignModal } from '../../../src/components/channel/ChannelAssignModal'
-import { channelFilterAtom } from '../../../src/atoms/channels'
+import { ChannelBadge, type Channel } from '@/components/channel/ChannelBadge'
+import { ChannelFilter } from '@/components/channel/ChannelFilter'
+import { ChannelAssignModal } from '@/components/channel/ChannelAssignModal'
+import { channelFilterAtom } from '@/atoms/channels'
 
 // Mock adminApi
-vi.mock('../../../src/services/api', () => ({
+vi.mock('@/services/api', () => ({
   adminApi: {
     listChannels: vi.fn(() => Promise.resolve([
       { id: 'ch1', name: '技术讨论', description: '技术相关讨论' },
