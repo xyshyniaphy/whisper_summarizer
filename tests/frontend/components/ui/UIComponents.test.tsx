@@ -7,11 +7,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { Button } from '../../../src/components/ui/Button'
-import { Card, CardContent, CardHeader, CardTitle } from '../../../src/components/ui/Card'
-import { Badge } from '../../../src/components/ui/Badge'
-import { Modal } from '../../../src/components/ui/Modal'
-import { Accordion, AccordionItem } from '../../../src/components/ui/Accordion'
+import { Button } from '../../../../src/components/ui/Button'
+import { Card, CardContent, CardHeader, CardTitle } from '../../../../src/components/ui/Card'
+import { Badge } from '../../../../src/components/ui/Badge'
+import { Modal } from '../../../../src/components/ui/Modal'
+import { Accordion, AccordionItem } from '../../../../src/components/ui/Accordion'
 
 describe('Button Component', () => {
   describe('Rendering', () => {
@@ -205,15 +205,6 @@ describe('Badge Component', () => {
 })
 
 describe('Modal Component', () => {
-  beforeEach(() => {
-    // Prevent body scroll lock in tests
-    vi.spyOn(document.body, 'style', 'get').mockReturnValue({})
-  })
-
-  afterEach(() => {
-    vi.restoreAllMocks()
-  })
-
   describe('Rendering', () => {
     it('isOpen=falseの場合、何も表示されない', () => {
       render(
@@ -279,30 +270,6 @@ describe('Modal Component', () => {
     })
   })
 
-  describe('Body Scroll Lock', () => {
-    it('モーダルが開いている間、bodyのスクロールが無効になる', () => {
-      const { rerender } = render(
-        <Modal isOpen={true} onClose={vi.fn()}>
-          Content
-        </Modal>
-      )
-
-      // Check if overflow style was set (implementation detail)
-      // In actual implementation, this would set document.body.style.overflow
-    })
-
-    it('モーダルが閉じるとスクロールが有効に戻る', () => {
-      const { unmount } = render(
-        <Modal isOpen={true} onClose={vi.fn()}>
-          Content
-        </Modal>
-      )
-
-      unmount()
-      // After unmount, scroll should be restored
-    })
-  })
-
   describe('Styling', () => {
     it('カスタムclassNameが適用される', () => {
       const { container } = render(
@@ -323,7 +290,8 @@ describe('Accordion Components', () => {
         <AccordionItem title="Test Title">Test Content</AccordionItem>
       )
       expect(screen.getByText('Test Title')).toBeTruthy()
-      expect(screen.getByText('Test Content')).toBeTruthy()
+      // Content is not rendered by default (isOpen=false)
+      expect(screen.queryByText('Test Content')).toBeNull()
     })
 
     it('defaultOpen=trueの場合、最初から開いている', () => {
@@ -341,8 +309,8 @@ describe('Accordion Components', () => {
           Content
         </AccordionItem>
       )
-      // Content should still be in DOM but hidden
-      expect(screen.getByText('Content')).toBeTruthy()
+      // Content is NOT in DOM when closed
+      expect(screen.queryByText('Content')).toBeNull()
     })
   })
 
@@ -354,7 +322,12 @@ describe('Accordion Components', () => {
       )
 
       const titleButton = screen.getByText('Title')
+      // Initially closed - content not in DOM
+      expect(screen.queryByText('Content')).toBeNull()
+
       await user.click(titleButton)
+      // After click - content should be visible
+      expect(screen.getByText('Content')).toBeTruthy()
     })
 
     it('アイコンが回転する', async () => {
@@ -366,13 +339,13 @@ describe('Accordion Components', () => {
       const titleButton = screen.getByText('Title')
       const icon = container.querySelector('svg')
 
-      // Initially not rotated
-      expect(icon?.className).not.toContain('rotate-180')
+      // Initially not rotated (closed)
+      expect(icon?.getAttribute('class')).not.toContain('rotate-180')
 
       await user.click(titleButton)
 
-      // After click, should be rotated
-      expect(icon?.className).toContain('rotate-180')
+      // After click, should be rotated (open)
+      expect(icon?.getAttribute('class')).toContain('rotate-180')
     })
   })
 

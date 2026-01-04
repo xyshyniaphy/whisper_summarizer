@@ -17,12 +17,34 @@ const localStorageMock = (() => {
     getItem: (key: string) => store[key] || null,
     setItem: (key: string, value: string) => { store[key] = value },
     removeItem: (key: string) => { delete store[key] },
-    clear: () => { store = {} }
+    clear: () => {
+      // Properly clear the store by deleting all keys
+      Object.keys(store).forEach(key => delete store[key])
+    }
   }
 })()
 
 Object.defineProperty(window, 'localStorage', {
   value: localStorageMock
+})
+
+// Mock document.documentElement.classList
+const mockClassList = {
+  dark: false,
+  add(className: string) {
+    if (className === 'dark') this.dark = true
+  },
+  remove(className: string) {
+    if (className === 'dark') this.dark = false
+  },
+  contains(className: string) {
+    return className === 'dark' ? this.dark : false
+  }
+}
+
+Object.defineProperty(document.documentElement, 'classList', {
+  value: mockClassList,
+  writable: true
 })
 
 const wrapper = ({ children }: { children: React.ReactNode }) => (
@@ -33,11 +55,11 @@ describe('ThemeToggle', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     localStorageMock.clear()
-    document.documentElement.classList.remove('dark')
+    mockClassList.dark = false
   })
 
   afterEach(() => {
-    document.documentElement.classList.remove('dark')
+    mockClassList.dark = false
   })
 
   describe('Rendering', () => {
@@ -53,9 +75,9 @@ describe('ThemeToggle', () => {
     })
 
     it('ダークテーマ時、太陽のアイコンが表示される', () => {
-      // Set dark theme in localStorage
+      // Set dark theme in localStorage and classList
       localStorageMock.setItem('theme', 'dark')
-      document.documentElement.classList.add('dark')
+      mockClassList.dark = true
       render(<ThemeToggle />, { wrapper })
       expect(screen.getByRole('button')).toBeTruthy()
     })
@@ -77,20 +99,20 @@ describe('ThemeToggle', () => {
       const button = screen.getByRole('button')
       await user.click(button)
 
-      expect(document.documentElement.classList.contains('dark')).toBe(true)
+      expect(mockClassList.contains('dark')).toBe(true)
     })
 
     it('ダークからライトに切り替わるとDOMクラスが削除される', async () => {
       const user = userEvent.setup()
       localStorageMock.setItem('theme', 'dark')
-      document.documentElement.classList.add('dark')
+      mockClassList.dark = true
 
       render(<ThemeToggle />, { wrapper })
 
       const button = screen.getByRole('button')
       await user.click(button)
 
-      expect(document.documentElement.classList.contains('dark')).toBe(false)
+      expect(mockClassList.contains('dark')).toBe(false)
     })
   })
 

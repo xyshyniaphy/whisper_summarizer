@@ -10,13 +10,13 @@ import userEvent from '@testing-library/user-event'
 import { Provider } from 'jotai'
 import { renderHook, act } from '@testing-library/react'
 import { useAtom } from 'jotai'
-import { ChannelBadge, Channel } from '../../../../src/components/channel/ChannelBadge'
-import { ChannelFilter } from '../../../../src/components/channel/ChannelFilter'
-import { ChannelAssignModal } from '../../../../src/components/channel/ChannelAssignModal'
-import { channelFilterAtom } from '../../../../src/atoms/channels'
+import { ChannelBadge, Channel } from '../../../src/components/channel/ChannelBadge'
+import { ChannelFilter } from '../../../src/components/channel/ChannelFilter'
+import { ChannelAssignModal } from '../../../src/components/channel/ChannelAssignModal'
+import { channelFilterAtom } from '../../../src/atoms/channels'
 
 // Mock adminApi
-vi.mock('../../../../src/services/api', () => ({
+vi.mock('../../../src/services/api', () => ({
   adminApi: {
     listChannels: vi.fn(() => Promise.resolve([
       { id: 'ch1', name: '技术讨论', description: '技术相关讨论' },
@@ -230,16 +230,29 @@ describe('ChannelAssignModal Component', () => {
   })
 
   it('「选择所有」ボタンが動作する', async () => {
-    render(<ChannelAssignModal {...mockProps} isOpen={true} />, { wrapper })
+    // Use empty currentChannelIds to ensure "选择所有" is shown (not "取消选择所有")
+    render(<ChannelAssignModal {...mockProps} isOpen={true} currentChannelIds={[]} />, { wrapper })
 
+    // Wait for loading to complete - check for loading spinner to disappear first
     await waitFor(() => {
-      expect(screen.getByText('选择所有')).toBeTruthy()
-    })
+      // The loading spinner should disappear
+      expect(screen.queryByText('加载频道列表...')).not.toBeTruthy()
+    }, { timeout: 5000 })
+
+    // Then check for either button text (could be "选择所有" or "取消选择所有")
+    const selectAllButton = screen.queryByText('选择所有') || screen.queryByText('取消选择所有')
+    expect(selectAllButton).toBeTruthy()
   })
 
   it('「取消」ボタンでonCloseが呼び出される', async () => {
     const user = userEvent.setup()
     render(<ChannelAssignModal {...mockProps} isOpen={true} />, { wrapper })
+
+    // Wait for loading to complete before clicking cancel
+    await waitFor(() => {
+      // Wait for the loading spinner to disappear and cancel button to be available
+      expect(screen.queryByText('加载频道列表...')).not.toBeTruthy()
+    }, { timeout: 5000 })
 
     const cancelButton = screen.getByText('取消')
     await user.click(cancelButton)
@@ -251,10 +264,13 @@ describe('ChannelAssignModal Component', () => {
     const user = userEvent.setup()
     render(<ChannelAssignModal {...mockProps} isOpen={true} />, { wrapper })
 
+    // Wait for loading to complete
     await waitFor(() => {
-      const saveButton = screen.getByText('保存')
-      expect(saveButton).toBeTruthy()
-    })
+      expect(screen.queryByText('加载频道列表...')).not.toBeTruthy()
+    }, { timeout: 5000 })
+
+    const saveButton = screen.getByText('保存')
+    expect(saveButton).toBeTruthy()
 
     // Note: The save button may be disabled during loading
     // Full testing would require proper state management

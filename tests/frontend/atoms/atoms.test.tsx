@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { Provider, useAtom, useSetAtom } from 'jotai'
+import { Provider, useAtom, useSetAtom, createStore } from 'jotai'
 import { renderHook, act } from '@testing-library/react'
 import {
   userAtom,
@@ -52,23 +52,37 @@ Object.defineProperty(document.documentElement, 'classList', {
   writable: true
 })
 
-const wrapper = ({ children }: { children: React.ReactNode }) => (
-  <Provider>{children}</Provider>
-)
+// Create a scoped provider for each test to prevent state leakage
+import { createStore } from 'jotai'
+
+let currentWrapper: (({ children }: { children: React.ReactNode }) => JSX.Element) | null = null
+
+// Call this in beforeEach to get a fresh store for each test
+const resetAtomStore = () => {
+  const store = createStore()
+  currentWrapper = ({ children }: { children: React.ReactNode }) => (
+    <Provider store={store}>
+      <div>{children}</div>
+    </Provider>
+  )
+}
 
 describe('Auth Atoms', () => {
   beforeEach(() => {
+    resetAtomStore() // Create fresh store for each test
     vi.clearAllMocks()
+    // Reset localStorage between tests
+    localStorageMock.clear()
   })
 
   describe('Primitive Atoms', () => {
     it('userAtomの初期値はnullである', () => {
-      const { result } = renderHook(() => useAtom(userAtom), { wrapper })
+      const { result } = renderHook(() => useAtom(userAtom), { wrapper: currentWrapper! })
       expect(result.current[0]).toBeNull()
     })
 
     it('userAtomに値を設定できる', () => {
-      const { result } = renderHook(() => useAtom(userAtom), { wrapper })
+      const { result } = renderHook(() => useAtom(userAtom), { wrapper: currentWrapper! })
       const mockUser = { id: '123', email: 'test@example.com' } as any
 
       act(() => {
@@ -79,17 +93,17 @@ describe('Auth Atoms', () => {
     })
 
     it('sessionAtomの初期値はnullである', () => {
-      const { result } = renderHook(() => useAtom(sessionAtom), { wrapper })
+      const { result } = renderHook(() => useAtom(sessionAtom), { wrapper: currentWrapper! })
       expect(result.current[0]).toBeNull()
     })
 
     it('roleAtomの初期値はnullである', () => {
-      const { result } = renderHook(() => useAtom(roleAtom), { wrapper })
+      const { result } = renderHook(() => useAtom(roleAtom), { wrapper: currentWrapper! })
       expect(result.current[0]).toBeNull()
     })
 
     it('roleAtomに"user"または"admin"を設定できる', () => {
-      const { result } = renderHook(() => useAtom(roleAtom), { wrapper })
+      const { result } = renderHook(() => useAtom(roleAtom), { wrapper: currentWrapper! })
 
       act(() => {
         result.current[1]('user')
@@ -99,12 +113,12 @@ describe('Auth Atoms', () => {
     })
 
     it('loadingAtomの初期値はtrueである', () => {
-      const { result } = renderHook(() => useAtom(loadingAtom), { wrapper })
+      const { result } = renderHook(() => useAtom(loadingAtom), { wrapper: currentWrapper! })
       expect(result.current[0]).toBe(true)
     })
 
     it('loadingAtomをfalseに設定できる', () => {
-      const { result } = renderHook(() => useAtom(loadingAtom), { wrapper })
+      const { result } = renderHook(() => useAtom(loadingAtom), { wrapper: currentWrapper! })
 
       act(() => {
         result.current[1](false)
@@ -116,13 +130,13 @@ describe('Auth Atoms', () => {
 
   describe('Derived Atoms', () => {
     it('isAuthenticatedAtomはuserAtomがnullの場合falseを返す', () => {
-      const { result } = renderHook(() => useAtom(isAuthenticatedAtom), { wrapper })
+      const { result } = renderHook(() => useAtom(isAuthenticatedAtom), { wrapper: currentWrapper! })
       expect(result.current[0]).toBe(false)
     })
 
     it('isAuthenticatedAtomはuserAtomがある場合trueを返す', () => {
-      const { result: userResult } = renderHook(() => useAtom(userAtom), { wrapper })
-      const { result: authResult } = renderHook(() => useAtom(isAuthenticatedAtom), { wrapper })
+      const { result: userResult } = renderHook(() => useAtom(userAtom), { wrapper: currentWrapper! })
+      const { result: authResult } = renderHook(() => useAtom(isAuthenticatedAtom), { wrapper: currentWrapper! })
 
       act(() => {
         userResult.current[1]({ id: '123' } as any)
@@ -132,8 +146,8 @@ describe('Auth Atoms', () => {
     })
 
     it('isAdminAtomはroleAtomが"admin"の場合trueを返す', () => {
-      const { result: roleResult } = renderHook(() => useAtom(roleAtom), { wrapper })
-      const { result: adminResult } = renderHook(() => useAtom(isAdminAtom), { wrapper })
+      const { result: roleResult } = renderHook(() => useAtom(roleAtom), { wrapper: currentWrapper! })
+      const { result: adminResult } = renderHook(() => useAtom(isAdminAtom), { wrapper: currentWrapper! })
 
       act(() => {
         roleResult.current[1]('admin')
@@ -143,8 +157,8 @@ describe('Auth Atoms', () => {
     })
 
     it('isAdminAtomはroleAtomが"user"の場合falseを返す', () => {
-      const { result: roleResult } = renderHook(() => useAtom(roleAtom), { wrapper })
-      const { result: adminResult } = renderHook(() => useAtom(isAdminAtom), { wrapper })
+      const { result: roleResult } = renderHook(() => useAtom(roleAtom), { wrapper: currentWrapper! })
+      const { result: adminResult } = renderHook(() => useAtom(isAdminAtom), { wrapper: currentWrapper! })
 
       act(() => {
         roleResult.current[1]('user')
@@ -156,10 +170,10 @@ describe('Auth Atoms', () => {
 
   describe('authStateAtom', () => {
     it('すべての認証状態を正しく返す', () => {
-      const { result: userResult } = renderHook(() => useAtom(userAtom), { wrapper })
-      const { result: roleResult } = renderHook(() => useAtom(roleAtom), { wrapper })
-      const { result: loadingResult } = renderHook(() => useAtom(loadingAtom), { wrapper })
-      const { result: authResult } = renderHook(() => useAtom(authStateAtom), { wrapper })
+      const { result: userResult } = renderHook(() => useAtom(userAtom), { wrapper: currentWrapper! })
+      const { result: roleResult } = renderHook(() => useAtom(roleAtom), { wrapper: currentWrapper! })
+      const { result: loadingResult } = renderHook(() => useAtom(loadingAtom), { wrapper: currentWrapper! })
+      const { result: authResult } = renderHook(() => useAtom(authStateAtom), { wrapper: currentWrapper! })
 
       act(() => {
         userResult.current[1]({ id: '123' } as any)
@@ -181,18 +195,19 @@ describe('Auth Atoms', () => {
 
 describe('Theme Atoms', () => {
   beforeEach(() => {
+    resetAtomStore() // Create fresh store for each test
     localStorageMock.clear()
     vi.clearAllMocks()
   })
 
   describe('themeAtom', () => {
     it('初期値は"light"である', () => {
-      const { result } = renderHook(() => useAtom(themeAtom), { wrapper })
+      const { result } = renderHook(() => useAtom(themeAtom), { wrapper: currentWrapper! })
       expect(result.current[0]).toBe('light')
     })
 
     it('テーマを"dark"に設定できる', () => {
-      const { result } = renderHook(() => useAtom(themeAtom), { wrapper })
+      const { result } = renderHook(() => useAtom(themeAtom), { wrapper: currentWrapper! })
 
       act(() => {
         result.current[1]('dark')
@@ -204,7 +219,7 @@ describe('Theme Atoms', () => {
 
   describe('themeWithPersistenceAtom', () => {
     it('テーマ変更時にlocalStorageに保存される', () => {
-      const { result } = renderHook(() => useAtom(themeWithPersistenceAtom), { wrapper })
+      const { result } = renderHook(() => useAtom(themeWithPersistenceAtom), { wrapper: currentWrapper! })
 
       act(() => {
         result.current[1]('dark')
@@ -214,7 +229,7 @@ describe('Theme Atoms', () => {
     })
 
     it('ダークテーマ設定時にDOMクラスが追加される', () => {
-      const { result } = renderHook(() => useAtom(themeWithPersistenceAtom), { wrapper })
+      const { result } = renderHook(() => useAtom(themeWithPersistenceAtom), { wrapper: currentWrapper! })
 
       act(() => {
         result.current[1]('dark')
@@ -224,7 +239,7 @@ describe('Theme Atoms', () => {
     })
 
     it('ライトテーマ設定時にDOMクラスが削除される', () => {
-      const { result } = renderHook(() => useAtom(themeWithPersistenceAtom), { wrapper })
+      const { result } = renderHook(() => useAtom(themeWithPersistenceAtom), { wrapper: currentWrapper! })
 
       act(() => {
         result.current[1]('dark')
@@ -239,14 +254,18 @@ describe('Theme Atoms', () => {
 })
 
 describe('Transcription Atoms', () => {
+  beforeEach(() => {
+    resetAtomStore() // Create fresh store for each test
+  })
+
   describe('transcriptionsAtom', () => {
     it('初期値は空配列である', () => {
-      const { result } = renderHook(() => useAtom(transcriptionsAtom), { wrapper })
+      const { result } = renderHook(() => useAtom(transcriptionsAtom), { wrapper: currentWrapper! })
       expect(result.current[0]).toEqual([])
     })
 
     it('転写リストを設定できる', () => {
-      const { result } = renderHook(() => useAtom(transcriptionsAtom), { wrapper })
+      const { result } = renderHook(() => useAtom(transcriptionsAtom), { wrapper: currentWrapper! })
       const mockTranscriptions = [
         { id: '1', file_name: 'test.mp3' }
       ] as any
@@ -261,12 +280,12 @@ describe('Transcription Atoms', () => {
 
   describe('selectedTranscriptionAtom', () => {
     it('初期値はnullである', () => {
-      const { result } = renderHook(() => useAtom(selectedTranscriptionAtom), { wrapper })
+      const { result } = renderHook(() => useAtom(selectedTranscriptionAtom), { wrapper: currentWrapper! })
       expect(result.current[0]).toBeNull()
     })
 
     it('選択された転写を設定できる', () => {
-      const { result } = renderHook(() => useAtom(selectedTranscriptionAtom), { wrapper })
+      const { result } = renderHook(() => useAtom(selectedTranscriptionAtom), { wrapper: currentWrapper! })
       const mockTranscription = { id: '1', file_name: 'test.mp3' } as any
 
       act(() => {
@@ -279,8 +298,8 @@ describe('Transcription Atoms', () => {
 
   describe('userTranscriptionsAtom', () => {
     it('transcriptionsAtomの値を返す', () => {
-      const { result: transcriptionsResult } = renderHook(() => useAtom(transcriptionsAtom), { wrapper })
-      const { result: userResult } = renderHook(() => useAtom(userTranscriptionsAtom), { wrapper })
+      const { result: transcriptionsResult } = renderHook(() => useAtom(transcriptionsAtom), { wrapper: currentWrapper! })
+      const { result: userResult } = renderHook(() => useAtom(userTranscriptionsAtom), { wrapper: currentWrapper! })
 
       const mockTranscriptions = [
         { id: '1', file_name: 'test.mp3' }
@@ -296,12 +315,12 @@ describe('Transcription Atoms', () => {
 
   describe('transcriptionsLoadingAtom', () => {
     it('初期値はfalseである', () => {
-      const { result } = renderHook(() => useAtom(transcriptionsLoadingAtom), { wrapper })
+      const { result } = renderHook(() => useAtom(transcriptionsLoadingAtom), { wrapper: currentWrapper! })
       expect(result.current[0]).toBe(false)
     })
 
     it('ローディング状態を設定できる', () => {
-      const { result } = renderHook(() => useAtom(transcriptionsLoadingAtom), { wrapper })
+      const { result } = renderHook(() => useAtom(transcriptionsLoadingAtom), { wrapper: currentWrapper! })
 
       act(() => {
         result.current[1](true)

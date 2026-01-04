@@ -230,8 +230,8 @@ class PPTXService:
                 current_length = 0
                 slide_count += 1
 
-                # Prevent excessively large files
-                if slide_count >= self.MAX_CONTENT_SLIDES:
+                # Prevent excessively large files (leave room for truncation message)
+                if slide_count >= self.MAX_CONTENT_SLIDES - 1:
                     chunks.append(f"\n[内容过长，已截断。前 {slide_count} 张幻灯片已包含前 "
                                  f"{slide_count * self.CHARS_PER_SLIDE} 字符]")
                     break
@@ -239,8 +239,8 @@ class PPTXService:
             current_chunk.append(line)
             current_length += line_length
 
-        # Add remaining content
-        if current_chunk:
+        # Add remaining content (only if we haven't hit the limit)
+        if current_chunk and slide_count < self.MAX_CONTENT_SLIDES:
             chunks.append('\n'.join(current_chunk))
 
         return chunks

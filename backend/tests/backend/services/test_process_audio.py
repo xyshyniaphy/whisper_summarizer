@@ -107,7 +107,7 @@ class TestParseSrt:
 
         assert len(result) == 2
         assert "这是中文字幕" in result[0]["text"]
-        assert "Japanese 日本语" in result[1]["text"]
+        assert "Japanese 日本語" in result[1]["text"]
 
     def test_parse_empty_srt(self, tmp_path):
         """Test parsing empty SRT file."""

@@ -56,8 +56,8 @@ describe('ConfirmDialog Component', () => {
   describe('Danger Variant', () => {
     it('shows warning icon when variant is danger', () => {
       render(<ConfirmDialog {...defaultProps} variant="danger" />)
-      // The AlertTriangle icon is in the message area with class text-red-500
-      const warningIcon = screen.getByText('Are you sure you want to proceed?').parentElement?.querySelector('.text-red-500')
+      // The AlertTriangle icon is a sibling to the message, in a div with text-red-500 class
+      const warningIcon = document.querySelector('.text-red-500')
       expect(warningIcon).toBeInTheDocument()
     })
 
@@ -69,14 +69,15 @@ describe('ConfirmDialog Component', () => {
 
     it('does not show warning icon when variant is default', () => {
       render(<ConfirmDialog {...defaultProps} variant="default" />)
-      const icons = screen.getAllByRole('button', { name: /确定/ })[0].parentElement?.querySelectorAll('svg')
-      // Only the close button should have an icon (X icon)
-      expect(icons?.length ?? 0).toBeLessThanOrEqual(1)
+      // When variant is default, there should be no AlertTriangle with text-red-500
+      const warningIcon = document.querySelector('.text-red-500')
+      expect(warningIcon).not.toBeInTheDocument()
     })
 
     it('uses primary button variant when variant is default', () => {
       render(<ConfirmDialog {...defaultProps} variant="default" />)
       const confirmButton = screen.getByRole('button', { name: '确定' })
+      // The button uses bg-primary-600 class
       expect(confirmButton).toHaveClass('bg-primary-600')
     })
   })

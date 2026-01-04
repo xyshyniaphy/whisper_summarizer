@@ -8,7 +8,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import { Provider } from 'jotai'
 import { NavBar } from '../../../src/components/NavBar'
 
@@ -43,18 +43,20 @@ vi.mock('../../../src/hooks/useAuth', () => ({
 }))
 
 const wrapper = ({ children }: { children: React.ReactNode }) => (
-  <Provider>{children}</Provider>
+  <MemoryRouter>
+    <Provider>{children}</Provider>
+  </MemoryRouter>
 )
 
 const renderWithRouter = (initialPath: string = '/transcriptions') => {
   return render(
-    <BrowserRouter>
+    <>
       <NavBar />
       <Routes>
         <Route path="/transcriptions" element={<div>Transcriptions Page</div>} />
         <Route path="/dashboard" element={<div>Dashboard Page</div>} />
       </Routes>
-    </BrowserRouter>,
+    </>,
     { wrapper }
   )
 }

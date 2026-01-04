@@ -58,26 +58,43 @@ class TestSetChineseFont:
     @patch('app.services.pptx_service.CHINESE_FONTS', ['Font1', 'Font2'])
     def test_fallback_to_second_font_on_failure(self):
         """Test that fallback fonts are tried if first fails."""
-        mock_text_frame = Mock()
-        mock_paragraph = Mock()
-        mock_run = Mock()
+        # Create a simple font class that tracks attempts and can fail
+        class TestFont:
+            def __init__(self):
+                self._name = None
+                self.attempts = []
+                self.size = None  # set_chinese_font checks this
 
-        # First font setting raises exception, second succeeds
-        mock_run.font.name = 'Font1'
-        def side_effect(value):
-            if value == 'Font1':
-                raise Exception("Font not found")
-            mock_run.font.name = value
+            @property
+            def name(self):
+                return self._name
 
-        mock_run.font.name = MagicMock(side_effect=side_effect)
+            @name.setter
+            def name(self, value):
+                self.attempts.append(value)
+                if value == 'Font1':
+                    raise Exception("Font not found")
+                self._name = value
 
-        mock_paragraph.runs = [mock_run]
-        mock_text_frame.paragraphs = [mock_paragraph]
+        class TestRun:
+            def __init__(self):
+                self.font = TestFont()
 
-        set_chinese_font(mock_text_frame)
+        class TestParagraph:
+            def __init__(self):
+                self.runs = [TestRun()]
 
-        # Should have tried both fonts
-        assert mock_run.font.name.call_count == 2
+        class TestTextFrame:
+            def __init__(self):
+                self.paragraphs = [TestParagraph()]
+
+        test_frame = TestTextFrame()
+        set_chinese_font(test_frame)
+
+        # Verify both fonts were tried
+        assert len(test_frame.paragraphs[0].runs[0].font.attempts) == 2
+        assert 'Font1' in test_frame.paragraphs[0].runs[0].font.attempts
+        assert 'Font2' in test_frame.paragraphs[0].runs[0].font.attempts
 
     def test_sets_default_font_size_when_none(self):
         """Test that default font size is set when run.font.size is None."""

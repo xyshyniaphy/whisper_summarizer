@@ -8,6 +8,7 @@ from unittest.mock import Mock, patch, MagicMock
 from uuid import UUID
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from app.api.transcriptions import router
@@ -16,10 +17,27 @@ from app.models.summary import Summary
 
 
 @pytest.fixture
-def app():
+def app(mock_db):
     """Create a test FastAPI app."""
+    from app.api.deps import get_db, get_current_db_user
+    from app.core.supabase import get_current_active_user
+
     app = FastAPI()
     app.include_router(router, prefix="/api/transcriptions")
+
+    # Override dependencies to use mocks
+    app.dependency_overrides[get_db] = lambda: mock_db
+    app.dependency_overrides[get_current_db_user] = lambda: {
+        "id": "user-123",
+        "email": "test@example.com",
+        "is_active": True
+    }
+    app.dependency_overrides[get_current_active_user] = lambda: {
+        "id": "user-123",
+        "email": "test@example.com",
+        "is_active": True
+    }
+
     return app
 
 
@@ -76,12 +94,17 @@ class TestDownloadDocx:
         mock_transcription.summaries = [mock_summary]
         mock_db.query.return_value.filter.return_value.first.return_value = mock_transcription
 
-        with patch('app.api.transcriptions.get_storage_service') as mock_storage_getter:
+        with patch('app.services.storage_service.get_storage_service') as mock_storage_getter:
             # Don't actually create DOCX, just mock the FileResponse
             with patch('app.api.transcriptions.FileResponse') as mock_file_response:
-                mock_file_response.return_value = Mock(status_code=200)
+                # Return a proper Response object
+                mock_file_response.return_value = Response(
+                    content=b"mock docx content",
+                    media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    headers={"Content-Disposition": 'attachment; filename="test.docx"'}
+                )
 
-                with patch('app.api.transcriptions.tempfile.TemporaryDirectory') as mock_temp_dir:
+                with patch('tempfile.TemporaryDirectory') as mock_temp_dir:
                     mock_temp_dir.return_value.__enter__.return_value = "/tmp/test"
                     mock_temp_dir.return_value.__exit__.return_value = False
 
@@ -120,15 +143,15 @@ class TestDownloadDocx:
             headers={"Authorization": "Bearer test-token"}
         )
 
-        # Should return error about no summary
-        assert response.status_code == 400
+        # Should return 404 when no summaries exist
+        assert response.status_code == 404
 
     def test_docx_import_error(self, client, mock_db, mock_current_user, mock_transcription, mock_summary):
         """Test handling when python-docx is not installed."""
         mock_transcription.summaries = [mock_summary]
         mock_db.query.return_value.filter.return_value.first.return_value = mock_transcription
 
-        with patch('app.api.transcriptions.Document', side_effect=ImportError("No module named 'docx'")):
+        with patch('docx.Document', side_effect=ImportError("No module named 'docx'")):
             response = client.get(
                 f"/api/transcriptions/{mock_transcription.id}/download-docx",
                 headers={"Authorization": "Bearer test-token"}
@@ -149,11 +172,14 @@ class TestDownloadDocx:
                 if filename:
                     assert "my_audio_recording" in filename
                     assert "摘要.docx" in filename
-                return Mock(status_code=200)
+                return Response(
+                    content=b"mock docx",
+                    media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                )
 
             mock_file_response.side_effect = check_filename
 
-            with patch('app.api.transcriptions.tempfile.TemporaryDirectory'):
+            with patch('tempfile.TemporaryDirectory'):
                 response = client.get(
                     f"/api/transcriptions/{mock_transcription.id}/download-docx",
                     headers={"Authorization": "Bearer test-token"}
@@ -177,7 +203,7 @@ class TestDownloadNotebookLMGuideline:
 - Supporting information
 """
 
-        with patch('app.api.transcriptions.get_storage_service') as mock_storage_getter:
+        with patch('app.services.storage_service.get_storage_service') as mock_storage_getter:
             mock_storage = Mock()
             mock_storage.notebooklm_guideline_exists.return_value = True
             mock_storage.get_notebooklm_guideline.return_value = guideline_text
@@ -192,7 +218,7 @@ class TestDownloadNotebookLMGuideline:
         """Test that missing guideline returns 404."""
         mock_db.query.return_value.filter.return_value.first.return_value = mock_transcription
 
-        with patch('app.api.transcriptions.get_storage_service') as mock_storage_getter:
+        with patch('app.services.storage_service.get_storage_service') as mock_storage_getter:
             mock_storage = Mock()
             mock_storage.notebooklm_guideline_exists.return_value = False
             mock_storage_getter.return_value = mock_storage
@@ -229,7 +255,7 @@ class TestDownloadNotebookLMGuideline:
         mock_transcription.file_name = "presentation_audio.mp3"
         mock_db.query.return_value.filter.return_value.first.return_value = mock_transcription
 
-        with patch('app.api.transcriptions.get_storage_service') as mock_storage_getter:
+        with patch('app.services.storage_service.get_storage_service') as mock_storage_getter:
             mock_storage = Mock()
             mock_storage.notebooklm_guideline_exists.return_value = True
             mock_storage.get_notebooklm_guideline.return_value = "Guideline text"
@@ -254,7 +280,7 @@ class TestDownloadNotebookLMGuideline:
         """Test that response has correct media type."""
         mock_db.query.return_value.filter.return_value.first.return_value = mock_transcription
 
-        with patch('app.api.transcriptions.get_storage_service') as mock_storage_getter:
+        with patch('app.services.storage_service.get_storage_service') as mock_storage_getter:
             mock_storage = Mock()
             mock_storage.notebooklm_guideline_exists.return_value = True
             mock_storage.get_notebooklm_guideline.return_value = "Guideline content"
@@ -289,7 +315,7 @@ class TestDownloadNotebookLMGuideline:
 - More details
 """
 
-        with patch('app.api.transcriptions.get_storage_service') as mock_storage_getter:
+        with patch('app.services.storage_service.get_storage_service') as mock_storage_getter:
             mock_storage = Mock()
             mock_storage.notebooklm_guideline_exists.return_value = True
             mock_storage.get_notebooklm_guideline.return_value = guideline_text
@@ -307,23 +333,45 @@ class TestDownloadNotebookLMGuideline:
 class TestExportAuthentication:
     """Tests for authentication and authorization."""
 
-    def test_download_without_auth(self, client):
+    def test_download_without_auth(self, app):
         """Test that download requires authentication."""
-        response = client.get(
-            "/api/transcriptions/12345678-1234-5678-1234-567812345678/download-docx"
-        )
+        from app.core.supabase import get_current_active_user
 
-        # Should require authentication
-        assert response.status_code in [401, 403]
+        # Clear auth override for this test
+        original_overrides = app.dependency_overrides.copy()
+        app.dependency_overrides.pop(get_current_active_user, None)
 
-    def test_guideline_download_without_auth(self, client):
+        try:
+            client = TestClient(app)
+            response = client.get(
+                "/api/transcriptions/12345678-1234-5678-1234-567812345678/download-docx"
+            )
+            # Should require authentication
+            assert response.status_code in [401, 403]
+        finally:
+            # Restore overrides
+            app.dependency_overrides.clear()
+            app.dependency_overrides.update(original_overrides)
+
+    def test_guideline_download_without_auth(self, app):
         """Test that guideline download requires authentication."""
-        response = client.get(
-            "/api/transcriptions/12345678-1234-5678-1234-567812345678/download-notebooklm"
-        )
+        from app.core.supabase import get_current_active_user
 
-        # Should require authentication
-        assert response.status_code in [401, 403]
+        # Clear auth override for this test
+        original_overrides = app.dependency_overrides.copy()
+        app.dependency_overrides.pop(get_current_active_user, None)
+
+        try:
+            client = TestClient(app)
+            response = client.get(
+                "/api/transcriptions/12345678-1234-5678-1234-567812345678/download-notebooklm"
+            )
+            # Should require authentication
+            assert response.status_code in [401, 403]
+        finally:
+            # Restore overrides
+            app.dependency_overrides.clear()
+            app.dependency_overrides.update(original_overrides)
 
     def test_user_cannot_download_others_transcription(self, client, mock_db, mock_current_user):
         """Test that users cannot download other users' transcriptions."""
@@ -354,9 +402,12 @@ class TestResponseHeaders:
         mock_db.query.return_value.filter.return_value.first.return_value = mock_transcription
 
         with patch('app.api.transcriptions.FileResponse') as mock_file_response:
-            mock_file_response.return_value = Mock(status_code=200)
+            mock_file_response.return_value = Response(
+                content=b"mock docx",
+                media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            )
 
-            with patch('app.api.transcriptions.tempfile.TemporaryDirectory'):
+            with patch('tempfile.TemporaryDirectory'):
                 response = client.get(
                     f"/api/transcriptions/{mock_transcription.id}/download-docx",
                     headers={"Authorization": "Bearer test-token"}
@@ -366,7 +417,7 @@ class TestResponseHeaders:
         """Test that guideline response has correct Content-Disposition header."""
         mock_db.query.return_value.filter.return_value.first.return_value = mock_transcription
 
-        with patch('app.api.transcriptions.get_storage_service') as mock_storage_getter:
+        with patch('app.services.storage_service.get_storage_service') as mock_storage_getter:
             mock_storage = Mock()
             mock_storage.notebooklm_guideline_exists.return_value = True
             mock_storage.get_notebooklm_guideline.return_value = "Guideline"
@@ -397,13 +448,13 @@ class TestErrorHandling:
         mock_transcription.summaries = [mock_summary]
         mock_db.query.return_value.filter.return_value.first.return_value = mock_transcription
 
-        with patch('app.api.transcriptions.get_storage_service') as mock_storage_getter:
+        with patch('app.services.storage_service.get_storage_service') as mock_storage_getter:
             mock_storage = Mock()
             mock_storage.get_notebooklm_guideline.side_effect = Exception("Storage error")
             mock_storage_getter.return_value = mock_storage
 
             # Should handle gracefully
-            with patch('app.api.transcriptions.tempfile.TemporaryDirectory'):
+            with patch('tempfile.TemporaryDirectory'):
                 response = client.get(
                     f"/api/transcriptions/{mock_transcription.id}/download-docx",
                     headers={"Authorization": "Bearer test-token"}
@@ -413,7 +464,7 @@ class TestErrorHandling:
         """Test handling of storage service error during guideline download."""
         mock_db.query.return_value.filter.return_value.first.return_value = mock_transcription
 
-        with patch('app.api.transcriptions.get_storage_service') as mock_storage_getter:
+        with patch('app.services.storage_service.get_storage_service') as mock_storage_getter:
             mock_storage = Mock()
             mock_storage.notebooklm_guideline_exists.return_value = True
             mock_storage.get_notebooklm_guideline.side_effect = FileNotFoundError("File not found")

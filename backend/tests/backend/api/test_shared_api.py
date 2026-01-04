@@ -5,20 +5,24 @@ Tests for Shared Transcription API endpoints.
 import pytest
 from datetime import datetime, timedelta, timezone
 from unittest.mock import Mock, patch
+from uuid import uuid4
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.api.shared import router
+from app.api.deps import get_db
 from app.models.transcription import Transcription
 from app.models.share_link import ShareLink
 from app.schemas.share import SharedTranscriptionResponse
 
 
 @pytest.fixture
-def app():
+def app(mock_db):
     """Create a test FastAPI app."""
     app = FastAPI()
     app.include_router(router, prefix="/api/shared")
+    # Override the get_db dependency to use mock_db
+    app.dependency_overrides[get_db] = lambda: mock_db
     return app
 
 
@@ -39,9 +43,10 @@ class TestGetSharedTranscription:
 
     def test_valid_share_link(self, client, mock_db):
         """Test accessing transcription via valid share link."""
-        # Create mock transcription
+        # Create mock transcription with UUID
+        test_id = uuid4()
         mock_transcription = Mock()
-        mock_transcription.id = "transcription-123"
+        mock_transcription.id = test_id
         mock_transcription.file_name = "test_audio.mp3"
         mock_transcription.text = "Transcription text here"
         mock_transcription.language = "zh"
@@ -52,7 +57,7 @@ class TestGetSharedTranscription:
         # Create mock share link
         mock_share_link = Mock()
         mock_share_link.share_token = "valid-token-123"
-        mock_share_link.transcription_id = "transcription-123"
+        mock_share_link.transcription_id = test_id
         mock_share_link.expires_at = None
         mock_share_link.access_count = 5
 
@@ -63,7 +68,7 @@ class TestGetSharedTranscription:
 
         assert response.status_code == 200
         data = response.json()
-        assert data["id"] == "transcription-123"
+        assert data["id"] == str(test_id)
         assert data["file_name"] == "test_audio.mp3"
         assert data["text"] == "Transcription text here"
 
@@ -78,9 +83,13 @@ class TestGetSharedTranscription:
 
     def test_expired_share_link(self, client, mock_db):
         """Test that expired share link returns 410."""
-        mock_share_link = Mock()
-        mock_share_link.share_token = "expired-token"
-        mock_share_link.expires_at = datetime.now(timezone.utc) - timedelta(hours=1)
+        class MockShareLink:
+            share_token = "expired-token"
+            expires_at = datetime.now(timezone.utc) - timedelta(hours=1)
+            access_count = 0
+            transcription_id = "any-id"
+
+        mock_share_link = MockShareLink()
 
         mock_db.query.return_value.filter.return_value.first.return_value = mock_share_link
 
@@ -91,10 +100,13 @@ class TestGetSharedTranscription:
 
     def test_nonexistent_transcription(self, client, mock_db):
         """Test that missing transcription returns 404."""
-        mock_share_link = Mock()
-        mock_share_link.share_token = "valid-token"
-        mock_share_link.transcription_id = "missing-transcription"
-        mock_share_link.expires_at = None
+        class MockShareLink:
+            share_token = "valid-token"
+            transcription_id = "missing-transcription"
+            expires_at = None
+            access_count = 0
+
+        mock_share_link = MockShareLink()
 
         # Share link exists but transcription doesn't
         mock_db.query.return_value.filter.return_value.first.side_effect = [mock_share_link, None]
@@ -106,15 +118,24 @@ class TestGetSharedTranscription:
 
     def test_access_count_incremented(self, client, mock_db):
         """Test that access count is incremented."""
+        test_id = uuid4()
         mock_transcription = Mock()
-        mock_transcription.id = "transcription-123"
+        mock_transcription.id = test_id
         mock_transcription.summaries = []
+        mock_transcription.created_at = datetime.now(timezone.utc)
+        mock_transcription.duration_seconds = 120
+        mock_transcription.file_name = "test.mp3"
+        mock_transcription.text = "Test text"
+        mock_transcription.language = "zh"
 
-        mock_share_link = Mock()
-        mock_share_link.share_token = "token-123"
-        mock_share_link.transcription_id = "transcription-123"
-        mock_share_link.expires_at = None
-        mock_share_link.access_count = 10
+        # Use a simple object with mutable access_count
+        class MockShareLink:
+            share_token = "token-123"
+            transcription_id = test_id
+            expires_at = None
+            access_count = 10
+
+        mock_share_link = MockShareLink()
 
         mock_db.query.return_value.filter.return_value.first.side_effect = [mock_share_link, mock_transcription]
 
@@ -126,11 +147,12 @@ class TestGetSharedTranscription:
 
     def test_includes_summary_when_available(self, client, mock_db):
         """Test that summary is included when available."""
+        test_id = uuid4()
         mock_summary = Mock()
         mock_summary.summary_text = "AI generated summary"
 
         mock_transcription = Mock()
-        mock_transcription.id = "transcription-123"
+        mock_transcription.id = test_id
         mock_transcription.file_name = "test.mp3"
         mock_transcription.text = "Text"
         mock_transcription.language = "zh"
@@ -140,7 +162,7 @@ class TestGetSharedTranscription:
 
         mock_share_link = Mock()
         mock_share_link.share_token = "token-123"
-        mock_share_link.transcription_id = "transcription-123"
+        mock_share_link.transcription_id = test_id
         mock_share_link.expires_at = None
         mock_share_link.access_count = 0
 
@@ -154,14 +176,23 @@ class TestGetSharedTranscription:
 
     def test_no_summary_when_unavailable(self, client, mock_db):
         """Test that summary is None when not available."""
+        test_id = uuid4()
         mock_transcription = Mock()
-        mock_transcription.id = "transcription-123"
+        mock_transcription.id = test_id
         mock_transcription.summaries = []
+        mock_transcription.created_at = datetime.now(timezone.utc)
+        mock_transcription.duration_seconds = 120
+        mock_transcription.file_name = "test.mp3"
+        mock_transcription.text = "Test text"
+        mock_transcription.language = "zh"
 
-        mock_share_link = Mock()
-        mock_share_link.share_token = "token-123"
-        mock_share_link.transcription_id = "transcription-123"
-        mock_share_link.expires_at = None
+        class MockShareLink:
+            share_token = "token-123"
+            transcription_id = test_id
+            expires_at = None
+            access_count = 0
+
+        mock_share_link = MockShareLink()
 
         mock_db.query.return_value.filter.return_value.first.side_effect = [mock_share_link, mock_transcription]
 
@@ -173,8 +204,9 @@ class TestGetSharedTranscription:
 
     def test_includes_all_response_fields(self, client, mock_db):
         """Test that all expected fields are in response."""
+        test_id = uuid4()
         mock_transcription = Mock()
-        mock_transcription.id = "transcription-123"
+        mock_transcription.id = test_id
         mock_transcription.file_name = "test.mp3"
         mock_transcription.text = "Full text content"
         mock_transcription.language = "en"
@@ -182,10 +214,13 @@ class TestGetSharedTranscription:
         mock_transcription.created_at = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
         mock_transcription.summaries = []
 
-        mock_share_link = Mock()
-        mock_share_link.share_token = "token-123"
-        mock_share_link.transcription_id = "transcription-123"
-        mock_share_link.expires_at = None
+        class MockShareLink:
+            share_token = "token-123"
+            transcription_id = test_id
+            expires_at = None
+            access_count = 0
+
+        mock_share_link = MockShareLink()
 
         mock_db.query.return_value.filter.return_value.first.side_effect = [mock_share_link, mock_transcription]
 
@@ -205,16 +240,25 @@ class TestGetSharedTranscription:
 
     def test_handles_future_expiration(self, client, mock_db):
         """Test that share links with future expiration are accepted."""
+        test_id = uuid4()
         future_time = datetime.now(timezone.utc) + timedelta(days=30)
 
-        mock_share_link = Mock()
-        mock_share_link.share_token = "token-123"
-        mock_share_link.expires_at = future_time
-        mock_share_link.transcription_id = "transcription-123"
+        class MockShareLink:
+            share_token = "token-123"
+            expires_at = future_time
+            transcription_id = test_id
+            access_count = 0
+
+        mock_share_link = MockShareLink()
 
         mock_transcription = Mock()
-        mock_transcription.id = "transcription-123"
+        mock_transcription.id = test_id
         mock_transcription.summaries = []
+        mock_transcription.created_at = datetime.now(timezone.utc)
+        mock_transcription.duration_seconds = 120
+        mock_transcription.file_name = "test.mp3"
+        mock_transcription.text = "Test text"
+        mock_transcription.language = "zh"
 
         mock_db.query.return_value.filter.return_value.first.side_effect = [mock_share_link, mock_transcription]
 
@@ -228,8 +272,10 @@ class TestSharedTranscriptionResponseModel:
 
     def test_response_schema_structure(self):
         """Test that response schema has correct structure."""
+        from uuid import UUID
+        test_id = uuid4()
         response = SharedTranscriptionResponse(
-            id="test-id",
+            id=test_id,
             file_name="test.mp3",
             text="Transcription text",
             summary="Summary text",
@@ -238,7 +284,8 @@ class TestSharedTranscriptionResponseModel:
             created_at=datetime.now(timezone.utc)
         )
 
-        assert response.id == "test-id"
+        assert response.id == test_id
+        assert isinstance(response.id, UUID)
         assert response.file_name == "test.mp3"
         assert response.text == "Transcription text"
         assert response.summary == "Summary text"

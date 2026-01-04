@@ -47,31 +47,35 @@ export function setAtomValue(atomKey: string, value: any) {
   }
 }
 
-// Mock useAtom hook
-vi.mock('jotai', () => ({
-  atom: vi.fn((initialValue) => {
-    const newAtom = initialValue
-    atomStore.set(newAtom, initialValue)
-    return newAtom
-  }),
-  useAtom: vi.fn((atomToUse) => {
-    const value = atomStore.get(atomToUse)
-    const setValue = vi.fn((newValue: any) => {
-      atomStore.set(atomToUse, newValue)
-    })
-    return [value, setValue]
-  }),
-  useAtomValue: vi.fn((atomToUse) => {
-    return atomStore.get(atomToUse)
-  }),
-  useSetAtom: vi.fn((atomToUse) => {
-    return vi.fn((newValue: any) => {
-      atomStore.set(atomToUse, newValue)
-    })
-  }),
-  useAtomDevtools: vi.fn(),
-  Provider: ({ children }: { children: React.ReactNode }) => children,
-}))
+// Mock useAtom hook - use importOriginal to get createStore
+vi.mock('jotai', async () => {
+  const actual = await vi.importActual('jotai')
+  return {
+    ...(actual as any),
+    atom: vi.fn((initialValue) => {
+      const newAtom = initialValue
+      atomStore.set(newAtom, initialValue)
+      return newAtom
+    }),
+    useAtom: vi.fn((atomToUse) => {
+      const value = atomStore.get(atomToUse)
+      const setValue = vi.fn((newValue: any) => {
+        atomStore.set(atomToUse, newValue)
+      })
+      return [value, setValue]
+    }),
+    useAtomValue: vi.fn((atomToUse) => {
+      return atomStore.get(atomToUse)
+    }),
+    useSetAtom: vi.fn((atomToUse) => {
+      return vi.fn((newValue: any) => {
+        atomStore.set(atomToUse, newValue)
+      })
+    }),
+    useAtomDevtools: vi.fn(),
+    Provider: ({ children }: { children: React.ReactNode }) => children,
+  }
+})
 
 // Mock React Router
 vi.mock('react-router-dom', async () => {

@@ -220,8 +220,9 @@ describe('Accordion Component', () => {
     it('has proper padding when open', () => {
       render(<AccordionItem title="Padding Test" defaultOpen={true}>Padded Content</AccordionItem>)
       // Content is wrapped in a div with p-4 class
-      const content = screen.getByText('Padded Content').parentElement
-      expect(content).toHaveClass('bg-white', 'dark:bg-gray-900', 'p-4')
+      // The text's parentElement might be wrapped, so find the div with p-4 class
+      const contentWrapper = screen.getByText('Padded Content').closest('.p-4')
+      expect(contentWrapper).toHaveClass('bg-white', 'dark:bg-gray-900', 'p-4')
     })
 
     it('has correct background colors', () => {
