@@ -98,28 +98,45 @@
 
 ---
 
-## Frontend Test Fixes (ON HOLD)
+## Frontend Test Fixes (IN PROGRESS)
 
-**Status**: Phase 1-2 Complete ✅ | Phase 3-6 On Hold ⏸️
+**Status**: Phase 1-3 In Progress ✅ | Phase 4-6 Pending ⏸️
 
 ### Progress Summary
 
-| Metric | Before | After | Target |
-|--------|--------|-------|--------|
-| Test Pass Rate | 1.2% (2/164) | **62.4% (186/298)** | 100% |
-| Files Passing | 0% (0/59) | **20% (4/20)** | 100% |
+| Metric | Before | Phase 1-2 | Phase 3 (Current) | Target |
+|--------|--------|-----------|------------------|--------|
+| Test Pass Rate | 1.2% (2/164) | 62.4% (186/298) | **75.1% (325/433)** | 100% |
+| Files Passing | 0% (0/59) | 20% (4/20) | **50% (11/22)** | 100% |
 
 ### Completed ✅
 
 - [x] **Phase 1**: Fix jsdom environment
 - [x] **Phase 2**: Fix React 19 compatibility
+- [x] **Phase 3 (Partial)**: Fixed atoms tests (23/24 passing), improved overall pass rate by 1.5%
 
-### On Hold ⏸️
+### In Progress 🔄
 
-- [ ] **Phase 3**: Fix remaining 112 test failures
+- [ ] **Phase 3 (Remaining)**: Fix 108 remaining test failures
+  - UserMenu tests (14 failing): "Too many re-renders"
+  - NavBar/TranscriptionDetail tests (45 failing): Router wrapper issues
+  - API Service tests (13 failing): Mock hoisting complexity
+  - useAuth hook tests (7 failing): Module path issues
+
+### Pending ⏸️
+
 - [ ] **Phase 4**: Add missing test cases
 - [ ] **Phase 5**: E2E test fixes
 - [ ] **Phase 6**: Achieve 100% coverage
+
+### Latest Changes (2026-01-06)
+
+- Removed Jotai global mock from `setup.ts` - atoms now use real Jotai
+- Removed axios global mock from `setup.ts` - prevented conflicts
+- Improved atoms tests from 5/24 → 23/24 passing
+- API tests restructured (still has mock hoisting issues)
+
+**Iteration Log**: `claudelogs/i_260106_0831.md`
 
 ---
 

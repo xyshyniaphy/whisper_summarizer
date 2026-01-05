@@ -27,7 +27,7 @@ export default defineConfig({
     // グローバルなテストユーティリティ
     globals: true,
 
-    // セットアップファイル
+    // セットアップファイル (order matters - main setup first)
     setupFiles: ['./tests/setup.ts'],
 
     // Test timeout (10 seconds - increased for async operations)
@@ -57,4 +57,6 @@ export default defineConfig({
       },
     },
   },
+  // Separate config for atoms tests that uses real Jotai
+  // This can be specified via CLI: vitest --config vitest.atoms.config.ts
 })

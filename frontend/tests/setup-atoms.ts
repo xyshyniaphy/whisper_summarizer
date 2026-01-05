@@ -1,23 +1,43 @@
 /**
- * Test setup for Vitest with React 19 + jsdom
+ * Test setup for Atoms tests - Uses REAL Jotai (not mocked)
  *
- * IMPORTANT: This file runs BEFORE each test file.
- * Ensure jsdom globals are available before any imports.
+ * This setup is specifically for testing Jotai atoms behavior.
  */
 
-// Ensure jsdom globals are available (fixes "document is not defined")
-if (typeof document === 'undefined') {
-  // This should never happen with environment: 'jsdom', but adding as safety check
-  throw new Error('jsdom environment not loaded. Check vitest.config.ts has environment: "jsdom"')
-}
-
-// Import testing utilities after jsdom is confirmed available
 import { expect, afterEach, vi, beforeAll } from 'vitest'
 import { cleanup } from '@testing-library/react'
 import * as matchers from '@testing-library/jest-dom/matchers'
 
 // Extend Vitest's expect with jest-dom matchers
 expect.extend(matchers)
+
+// Mock localStorage
+const localStorageMock = (() => {
+  let store: Record<string, string> = {}
+  return {
+    getItem: (key: string) => store[key] || null,
+    setItem: (key: string, value: string) => { store[key] = value },
+    removeItem: (key: string) => { delete store[key] },
+    clear: () => { store = {} }
+  }
+})()
+
+Object.defineProperty(window, 'localStorage', {
+  value: localStorageMock
+})
+
+// Mock Supabase client
+vi.mock('@/services/supabase', () => ({
+  supabase: {
+    auth: {
+      getSession: vi.fn(() => Promise.resolve({ data: { session: null }, error: null })),
+      getUser: vi.fn(() => Promise.resolve({ data: { user: null }, error: null })),
+      signInWithOAuth: vi.fn(() => Promise.resolve({ data: { url: 'http://localhost:3000' }, error: null })),
+      signOut: vi.fn(() => Promise.resolve({ error: null })),
+      onAuthStateChange: vi.fn(() => ({ data: { subscription: { unsubscribe: vi.fn() } } })),
+    },
+  }
+}))
 
 // Mock React Router
 vi.mock('react-router-dom', async () => {
@@ -37,50 +57,10 @@ vi.mock('react-router-dom', async () => {
   }
 })
 
-// Mock Supabase client
-vi.mock('@/services/supabase', () => ({
-  supabase: {
-    auth: {
-      getSession: vi.fn(() => Promise.resolve({ data: { session: null }, error: null })),
-      getUser: vi.fn(() => Promise.resolve({ data: { user: null }, error: null })),
-      signInWithOAuth: vi.fn(() => Promise.resolve({ data: { url: 'http://localhost:3000' }, error: null })),
-      signOut: vi.fn(() => Promise.resolve({ error: null })),
-      onAuthStateChange: vi.fn(() => ({ data: { subscription: { unsubscribe: vi.fn() } } })),
-    },
-    from: vi.fn(() => ({
-      select: vi.fn(() => ({
-        eq: vi.fn(() => ({
-          data: [],
-          error: null,
-        })),
-        order: vi.fn(() => ({
-          data: [],
-          error: null,
-        })),
-      })),
-      insert: vi.fn(() => ({
-        data: null,
-        error: null,
-      })),
-      update: vi.fn(() => ({
-        eq: vi.fn(() => ({
-          data: null,
-          error: null,
-        })),
-      })),
-      delete: vi.fn(() => ({
-        eq: vi.fn(() => ({
-          data: null,
-          error: null,
-        })),
-      })),
-    })),
-  }
-}))
-
 // Cleanup after each test
 afterEach(() => {
   cleanup()
+  localStorageMock.clear()
 })
 
 // Mock window.matchMedia
