@@ -1,1170 +1,1374 @@
-# Comprehensive Test Fix Plan - All Tests Passing
+# Server/Runner Split Implementation Plan
 
-**Created**: 2026-01-04 09:00 UTC
+**Created**: 2026-01-05
 **Status**: READY FOR EXECUTION
-**Goal**: Fix ALL 165 failing tests and add new tests where possible to achieve 95%+ pass rate
+**Goal**: Split monolithic backend into lightweight server + GPU runner
 
 ---
 
 ## Executive Summary
 
-**Current State**:
-- Frontend: 256 passing / 123 failing (67.5% pass rate) - 379 total
-- Backend: 367 passing / 42 failing (86.4% pass rate) - 425 total
-- Overall: ~730 passing / ~165 failing (~80% pass rate) - ~911 total
+**Current Architecture**:
+```
+Frontend (Vite:3000) → Backend (FastAPI:8000, ~8GB) → PostgreSQL
+                                    ↓
+                            faster-whisper (cuDNN) + GLM API
+```
 
-**Target State**:
-- Frontend: 340+ passing / <40 failing (90%+ pass rate)
-- Backend: 410+ passing / <15 failing (96%+ pass rate)
-- Overall: 750+ passing / <55 failing (93%+ pass rate)
+**Target Architecture**:
+```
+Frontend (Vite:3000) → Server (FastAPI, ~150MB) ←→ Runner (GPU, ~8GB)
+                           ↓                              ↓
+                      PostgreSQL                faster-whisper + GLM
+```
 
-**Total Fixes Required**: 165 test fixes + ~30-50 new tests
+**Benefits**:
+- Server runs on cheap VPS (no GPU needed)
+- Horizontal scaling (multiple runners)
+- Independent deployment
+- Cost optimization
+
+**Key Decisions**:
+- ✅ Delete audio after runner completes (save disk space)
+- ✅ Simple API key authentication
+- ✅ Replace backend/ with server/ immediately
+- ✅ GLM summarization on Runner (keeps server lighter)
 
 ---
 
-## Root Cause Analysis
+## Architecture Overview
 
-### Backend Test Failures (42 total)
+### Server (Lightweight API)
+- **Base Image**: `python:3.12-slim` (~150MB vs 8GB)
+- **Contains**:
+  - FastAPI application
+  - Database models and session
+  - Supabase auth integration
+  - Admin endpoints
+  - Job queue management
+  - User-facing API endpoints
+- **Removed**:
+  - Whisper/faster-whisper
+  - ffmpeg
+  - CUDA/cuDNN
+  - GLM API (moved to runner)
 
-#### Category 1: Mock Path Issues (15 failures)
+### Runner (GPU Processing)
+- **Base Image**: `whisper-summarizer-fastwhisper-base`
+- **Contains**:
+  - faster-whisper (cuDNN)
+  - Audio processing (ffmpeg)
+  - GLM API summarization
+  - Job polling client
+  - Result uploader
+- **Runs on**: Separate GPU server
 
-**Problem**: Tests mock incorrect import paths
+### Communication Protocol
 
-| Test File | Failures | Root Cause |
-|-----------|----------|------------|
-| test_shared_api.py | 9 | `mock_db` never injected via dependency override |
-| test_transcription_exports.py | 21 | Wrong mock paths: `app.api.transcriptions.get_storage_service` doesn't exist |
-| test_formatting_service.py | 2 | Wrong mock path: `app.services.formatting_service.get_glm_client` doesn't exist |
-
-**Actual Import Paths**:
-```python
-# CORRECT paths (from actual code analysis)
-from app.core.glm import get_glm_client  # Used in formatting_service.py line 77
-from app.services.storage_service import get_storage_service  # Actual location
-
-# INCORRECT paths (what tests try to mock)
-app.services.formatting_service.get_glm_client  # DOESN'T EXIST
-app.api.transcriptions.get_storage_service  # DOESN'T EXIST
-app.api.transcriptions.Document  # Should be: from docx import Document
 ```
-
-#### Category 2: Incorrect Test Expectations (12 failures)
-
-**Problem**: Tests expect behavior that doesn't match actual implementation
-
-| Test | Issue | Fix |
-|------|-------|-----|
-| test_chunks_split_at_whitespace | Expects split at whitespace/punctuation | Actual logic splits at fixed byte size |
-| test_multi_chunk_formatting | Expects "\n\n" separator | Code has "tuple index out of range" error |
-| test_system_prompt_contains_formatting_rules | Unknown assertion | Need to check actual failure |
-| test_respects_max_content_slides | Expects max 3 slides | Actual returns 4 |
-| test_fallback_to_second_font_on_failure | Expects `call_count` attribute | Returns string instead of Mock |
-
-#### Category 3: Authentication/Dependency Issues (10 failures)
-
-**Problem**: Tests don't bypass authentication or inject dependencies properly
-
-- Tests expect 404/422 but get 401 (authentication failure)
-- Mock fixtures created but never used by endpoints
-- Dependency injection not overridden
-
-#### Category 4: Code Bugs (5 failures)
-
-**Problem**: Actual bugs in the code revealed by tests
-
-```python
-# formatting_service.py line 213 - tuple index out of range
-ERROR [FORMAT] Failed to format text chunk: tuple index out of range
+1. User uploads audio → Server stores (status=pending)
+2. Runner polls GET /api/runner/jobs?status=pending
+3. Runner claims job POST /api/runner/jobs/{id}/start
+4. Runner downloads audio GET /api/runner/audio/{id}
+5. Runner transcribes (whisper) + summarizes (GLM)
+6. Runner uploads result POST /api/runner/jobs/{id}/complete
+7. Server updates DB, status=completed, deletes audio
 ```
-
-### Frontend Test Failures (123 total)
-
-#### Category 1: DOM Selector Issues (~80 failures)
-
-**Problem**: Tests use Chinese text selectors that don't work reliably
-
-```typescript
-// FAILS - Chinese text selector
-screen.getByText('取消')
-screen.getByText('选择所有')
-
-// SOLUTION - Use data-testid attributes
-<button data-testid="cancel-button">取消</button>
-screen.getByTestId('cancel-button')
-```
-
-**Files Requiring data-testid**:
-- `frontend/src/components/channel/ChannelFilter.tsx`
-- `frontend/src/components/channel/ChannelAssignModal.tsx`
-- `frontend/src/components/ui/ConfirmDialog.tsx` (partial)
-
-#### Category 2: Component Structure Mismatches (~30 failures)
-
-**Problem**: Tests expect DOM structure that doesn't match actual components
-
-| Test File | Issue |
-|-----------|-------|
-| Accordion.test.tsx | Expects `p-4` class, actual has `border rounded-lg` |
-| Badge.test.tsx | Variant rendering tests fail |
-| Card.test.tsx | `className` merging test fails |
-| Modal.test.tsx | Overlay query selector fails |
-| ConfirmDialog.test.tsx | Icon element not found as expected |
-| ChannelBadge.test.tsx | Channel count formatting issues |
-
-#### Category 3: Jotai State Issues (~13 failures) - ACCEPTED
-
-**Problem**: Jotai atoms cannot be mocked in unit tests
-
-**Decision**: Rely on E2E tests (116 scenarios) for Jotai state coverage
 
 ---
 
-## Fix Plan - Prioritized Execution
+## Database Schema Changes
 
-### Phase 1: CRITICAL - Backend Mock Path Fixes (15 tests)
+### New Transcription Status Field
 
-**Priority**: HIGHEST - Quick wins with high impact
-**Estimated Time**: 1-2 hours
-**Impact**: +15 tests passing (86.4% → 90% backend pass rate)
+```sql
+ALTER TABLE transcriptions
+ADD COLUMN status VARCHAR(20) DEFAULT 'pending',
+ADD COLUMN runner_id VARCHAR(100),
+ADD COLUMN started_at TIMESTAMP,
+ADD COLUMN completed_at TIMESTAMP,
+ADD COLUMN error_message TEXT,
+ADD COLUMN processing_time_seconds INTEGER;
 
-#### Step 1.1: Fix test_formatting_service.py (2 tests)
+-- Index for runner queries
+CREATE INDEX idx_transcriptions_status ON transcriptions(status);
+CREATE INDEX idx_transcriptions_status_created ON transcriptions(status, created_at);
 
-**File**: `backend/tests/backend/services/test_formatting_service.py`
-
-**Fix 1**: Change mock path from `app.services.formatting_service.get_glm_client` to `app.core.glm.get_glm_client`
-
-```python
-# BEFORE (INCORRECT)
-@patch('app.services.formatting_service.get_glm_client')
-def test_glm_client_initialization(self, mock_glm_getter):
-    # ...
-
-# AFTER (CORRECT)
-@patch('app.core.glm.get_glm_client')
-def test_glm_client_initialization(self, mock_glm_getter):
-    service = TextFormattingService()
-    assert service.glm_client is not None
-    mock_glm_getter.assert_called_once()
+-- Set existing records to completed
+UPDATE transcriptions SET status='completed' WHERE status IS NULL;
 ```
 
-**Fix 2**: Fix `test_init_sets_default_max_chunk`
+### Status Enum
 
 ```python
-# BEFORE - fails because settings is mocked somewhere
-def test_init_sets_default_max_chunk(self):
-    service = TextFormattingService()
-    assert service.max_chunk_bytes > 0  # FAILS - MagicMock
-
-# AFTER - check actual value or don't mock settings
-def test_init_sets_default_max_chunk(self):
-    service = TextFormattingService()
-    # Either check the actual value
-    assert service.max_chunk_bytes == 10000  # Default from settings
-    # OR ensure settings isn't mocked
+class TranscriptionStatus(str, Enum):
+    PENDING = "pending"        # Audio uploaded, waiting for runner
+    PROCESSING = "processing"  # Runner is working on it
+    COMPLETED = "completed"    # Done successfully
+    FAILED = "failed"          # Processing failed
 ```
 
-#### Step 1.2: Fix test_shared_api.py (9 tests)
+### Optional: Runners Table (Monitoring)
 
-**File**: `backend/tests/backend/api/test_shared_api.py`
-
-**Root Cause**: `mock_db` fixture is never injected into the FastAPI app
-
-**Fix**: Override the `get_db` dependency
-
-```python
-# BEFORE - mock_db created but never used
-@pytest.fixture
-def mock_db():
-    return Mock()
-
-def test_valid_share_link(self, client, mock_db):
-    # mock_db setup here but endpoint never receives it
-    mock_db.query.return_value.filter.return_value.first.side_effect = [...]
-
-# AFTER - properly inject mock_db via dependency override
-@pytest.fixture
-def app_with_mock_db(mock_db):
-    """Create app with mock db dependency override."""
-    app = FastAPI()
-    app.include_router(router, prefix="/api/shared")
-    # CRITICAL: Override the dependency
-    from app.api.deps import get_db
-    app.dependency_overrides[get_db] = lambda: mock_db
-    return app
-
-@pytest.fixture
-def client(app_with_mock_db):
-    return TestClient(app_with_mock_db)
-
-def test_valid_share_link(self, client, mock_db):
-    # Now mock_db will actually be used
-    mock_transcription = Mock()
-    mock_transcription.id = "transcription-123"
-    mock_transcription.file_name = "test_audio.mp3"
-
-    mock_share_link = Mock()
-    mock_share_link.share_token = "valid-token-123"
-    mock_share_link.transcription_id = "transcription-123"
-    mock_share_link.expires_at = None
-    mock_share_link.access_count = 5
-
-    mock_db.query.return_value.filter.return_value.first.side_effect = [mock_share_link, mock_transcription]
-
-    response = client.get("/api/shared/valid-token-123")
-    assert response.status_code == 200
+```sql
+CREATE TABLE runners (
+    id VARCHAR(100) PRIMARY KEY,
+    last_ping TIMESTAMP,
+    is_active BOOLEAN DEFAULT TRUE,
+    max_concurrent_jobs INTEGER DEFAULT 2,
+    current_jobs INTEGER DEFAULT 0,
+    created_at TIMESTAMP DEFAULT NOW()
+);
 ```
 
-**Alternative**: Use real test database like other backend tests
+---
+
+## Phase 1: Database Migration
+
+**Priority**: HIGHEST - Must be done first
+**Estimated Time**: 30 minutes
+
+### Step 1.1: Create Migration Script
+
+**File**: `server/alembic/versions/xxx_add_transcription_status.py`
 
 ```python
-# Alternative approach - use real database
-@pytest.fixture(scope="function")
-def db_with_share_link(db):
-    """Create a share link in the test database."""
-    from app.models.share_link import ShareLink
-    from app.models.transcription import Transcription
-    import uuid
+"""add transcription status fields
 
-    # Create transcription
-    transcription = Transcription(
-        id=str(uuid.uuid4()),
-        file_name="test.mp3",
-        text="Test transcription",
-        language="zh",
-        duration_seconds=120,
-        user_id=str(uuid.uuid4())
-    )
-    db.add(transcription)
+Revision ID: xxx_add_status
+Revises: xxx
+Create Date: 2026-01-05
 
-    # Create share link
-    share_link = ShareLink(
-        id=str(uuid.uuid4()),
-        share_token="test-token-123",
-        transcription_id=transcription.id,
-        expires_at=None
-    )
-    db.add(share_link)
+"""
+from alembic import op
+import sqlalchemy as sa
+
+def upgrade():
+    # Add new columns
+    op.add_column('transcriptions', sa.Column('status', sa.String(20), nullable=True, server_default='pending'))
+    op.add_column('transcriptions', sa.Column('runner_id', sa.String(100), nullable=True))
+    op.add_column('transcriptions', sa.Column('started_at', sa.TIMESTAMP(), nullable=True))
+    op.add_column('transcriptions', sa.Column('completed_at', sa.TIMESTAMP(), nullable=True))
+    op.add_column('transcriptions', sa.Column('error_message', sa.Text(), nullable=True))
+    op.add_column('transcriptions', sa.Column('processing_time_seconds', sa.Integer(), nullable=True))
+
+    # Create indexes
+    op.create_index('idx_transcriptions_status', 'transcriptions', ['status'])
+    op.create_index('idx_transcriptions_status_created', 'transcriptions', ['status', 'created_at'])
+
+    # Update existing records
+    op.execute("UPDATE transcriptions SET status='completed' WHERE status IS NULL")
+
+    # Make status non-nullable after update
+    op.alter_column('transcriptions', 'status', nullable=False)
+
+def downgrade():
+    op.drop_index('idx_transcriptions_status_created', table_name='transcriptions')
+    op.drop_index('idx_transcriptions_status', table_name='transcriptions')
+    op.drop_column('transcriptions', 'processing_time_seconds')
+    op.drop_column('transcriptions', 'error_message')
+    op.drop_column('transcriptions', 'completed_at')
+    op.drop_column('transcriptions', 'started_at')
+    op.drop_column('transcriptions', 'runner_id')
+    op.drop_column('transcriptions', 'status')
+```
+
+### Step 1.2: Update Transcription Model
+
+**File**: `server/app/models/transcription.py`
+
+```python
+from enum import Enum
+
+class TranscriptionStatus(str, Enum):
+    PENDING = "pending"
+    PROCESSING = "processing"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+class Transcription(Base):
+    __tablename__ = "transcriptions"
+
+    # ... existing fields ...
+
+    status = Column(String(20), default=TranscriptionStatus.PENDING, nullable=False)
+    runner_id = Column(String(100), nullable=True)
+    started_at = Column(DateTime, nullable=True)
+    completed_at = Column(DateTime, nullable=True)
+    error_message = Column(Text, nullable=True)
+    processing_time_seconds = Column(Integer, nullable=True)
+
+    @property
+    def processing_time(self) -> Optional[int]:
+        """Get processing time in seconds."""
+        if self.started_at and self.completed_at:
+            return int((self.completed_at - self.started_at).total_seconds())
+        return None
+```
+
+---
+
+## Phase 2: Create Server Directory Structure
+
+**Priority**: HIGHEST
+**Estimated Time**: 2 hours
+
+### Step 2.1: Create Directory Structure
+
+```bash
+# Create server directory (copy from backend)
+mkdir -p server/app
+
+# Copy structure
+cp -r backend/app/* server/app/
+
+# Create runner directory
+mkdir -p runner/app/{services,worker,models}
+```
+
+### Step 2.2: Update Server Models
+
+**File**: `server/app/models/transcription.py`
+
+Add status fields (see Phase 1.2)
+
+### Step 2.3: Create Server Requirements
+
+**File**: `server/requirements.txt`
+
+```txt
+# FastAPI and server
+fastapi==0.115.0
+uvicorn[standard]==0.32.0
+python-multipart==0.0.9
+
+# Database
+sqlalchemy==2.0.35
+psycopg2-binary==2.9.9
+
+# Authentication
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+python-dotenv==1.0.1
+
+# Supabase
+supabase==2.7.4
+
+# Validation
+pydantic==2.10.0
+pydantic-settings==2.6.0
+
+# HTTP client
+httpx==0.27.2
+
+# Utilities
+python-dateutil==2.9.0
+
+# REMOVE: whisper, faster-whisper, ffmpeg, torch, CUDA
+```
+
+### Step 2.4: Create Server Dockerfile
+
+**File**: `server/Dockerfile`
+
+```dockerfile
+# Lightweight Python image
+FROM python:3.12-slim
+
+WORKDIR /app
+
+# Install system dependencies only
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy application
+COPY ./app ./app
+
+# Create data directory
+RUN mkdir -p /app/data/uploads /app/data/transcribes
+
+# Expose port
+EXPOSE 8000
+
+# Run server
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+```
+
+### Step 2.5: Create Runner API Endpoints
+
+**File**: `server/app/api/runner.py`
+
+```python
+"""
+Runner API endpoints - for job queue management
+"""
+from fastapi import APIRouter, HTTPException, Depends, status
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from sqlalchemy.orm import Session
+from typing import List
+import os
+
+from app.db.session import get_db
+from app.models.transcription import Transcription, TranscriptionStatus
+from app.schemas.runner import (
+    JobResponse, JobListResponse,
+    JobCompleteRequest, JobStartRequest,
+    AudioDownloadResponse
+)
+
+router = APIRouter()
+security = HTTPBearer()
+
+# API key for runner authentication
+RUNNER_API_KEY = os.getenv("RUNNER_API_KEY")
+
+async def verify_runner(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    """Verify runner API key."""
+    if credentials.credentials != RUNNER_API_KEY:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid runner API key"
+        )
+    return credentials.credentials
+
+@router.get("/jobs", response_model=List[JobResponse])
+async def get_pending_jobs(
+    status_filter: TranscriptionStatus = TranscriptionStatus.PENDING,
+    limit: int = 10,
+    db: Session = Depends(get_db),
+    api_key: str = Depends(verify_runner)
+):
+    """Get pending transcription jobs."""
+    jobs = db.query(Transcription)\
+        .filter(Transcription.status == status_filter)\
+        .order_by(Transcription.created_at)\
+        .limit(limit)\
+        .all()
+
+    return [
+        JobResponse(
+            id=str(job.id),
+            file_name=job.file_name,
+            file_path=job.file_path,
+            language=job.language,
+            created_at=job.created_at
+        )
+        for job in jobs
+    ]
+
+@router.post("/jobs/{job_id}/start")
+async def start_job(
+    job_id: str,
+    request: JobStartRequest,
+    db: Session = Depends(get_db),
+    api_key: str = Depends(verify_runner)
+):
+    """Mark job as started (claimed by runner)."""
+    job = db.query(Transcription).filter(Transcription.id == job_id).first()
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    if job.status != TranscriptionStatus.PENDING:
+        raise HTTPException(status_code=400, detail="Job not available")
+
+    job.status = TranscriptionStatus.PROCESSING
+    job.runner_id = request.runner_id
+    job.started_at = datetime.utcnow()
+
     db.commit()
-    db.refresh(share_link)
+    return {"status": "started"}
 
-    return db, share_link
+@router.post("/jobs/{job_id}/complete")
+async def complete_job(
+    job_id: str,
+    result: JobCompleteRequest,
+    db: Session = Depends(get_db),
+    api_key: str = Depends(verify_runner)
+):
+    """Submit transcription result."""
+    job = db.query(Transcription).filter(Transcription.id == job_id).first()
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
 
-def test_valid_share_link(client, db_with_share_link):
-    db, share_link = db_with_share_link
-    response = client.get(f"/api/shared/{share_link.share_token}")
-    assert response.status_code == 200
+    job.status = TranscriptionStatus.COMPLETED
+    job.text = result.text
+    job.summary = result.summary
+    job.completed_at = datetime.utcnow()
+    job.processing_time_seconds = result.processing_time_seconds
+
+    # Delete audio file to save space
+    if job.file_path and os.path.exists(job.file_path):
+        os.remove(job.file_path)
+        job.file_path = None
+
+    db.commit()
+    return {"status": "completed"}
+
+@router.post("/jobs/{job_id}/fail")
+async def fail_job(
+    job_id: str,
+    error_message: str,
+    db: Session = Depends(get_db),
+    api_key: str = Depends(verify_runner)
+):
+    """Report job failure."""
+    job = db.query(Transcription).filter(Transcription.id == job_id).first()
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    job.status = TranscriptionStatus.FAILED
+    job.error_message = error_message
+    job.completed_at = datetime.utcnow()
+
+    db.commit()
+    return {"status": "failed"}
+
+@router.get("/audio/{job_id}", response_model=AudioDownloadResponse)
+async def get_audio(
+    job_id: str,
+    db: Session = Depends(get_db),
+    api_key: str = Depends(verify_runner)
+):
+    """Get audio file for processing."""
+    job = db.query(Transcription).filter(Transcription.id == job_id).first()
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    if not job.file_path or not os.path.exists(job.file_path):
+        raise HTTPException(status_code=404, detail="Audio file not found")
+
+    return AudioDownloadResponse(
+        file_path=job.file_path,
+        file_size=os.path.getsize(job.file_path),
+        content_type=job.content_type
+    )
+
+@router.post("/heartbeat")
+async def runner_heartbeat(
+    runner_id: str,
+    current_jobs: int = 0,
+    db: Session = Depends(get_db),
+    api_key: str = Depends(verify_runner)
+):
+    """Update runner heartbeat (optional, for monitoring)."""
+    # Optional: Update runners table
+    return {"status": "ok"}
 ```
 
-#### Step 1.3: Fix test_transcription_exports.py (21 tests)
+### Step 2.6: Create Runner Schemas
 
-**File**: `backend/tests/backend/api/test_transcription_exports.py`
-
-**Issue**: Wrong mock paths + authentication bypass
-
-**Fix 1**: Correct mock paths
+**File**: `server/app/schemas/runner.py`
 
 ```python
-# BEFORE (INCORRECT)
-with patch('app.api.transcriptions.get_storage_service') as mock_storage_getter:
-with patch('app.api.transcriptions.Document', side_effect=ImportError):
-with patch('app.api.transcriptions.tempfile.TemporaryDirectory'):
+"""Runner API schemas"""
+from pydantic import BaseModel
+from datetime import datetime
+from typing import Optional
 
-# AFTER (CORRECT)
-with patch('app.services.storage_service.get_storage_service') as mock_storage_getter:
-with patch('docx.Document', side_effect=ImportError):
-with patch('tempfile.TemporaryDirectory'):
+class JobResponse(BaseModel):
+    id: str
+    file_name: str
+    file_path: str
+    language: str
+    created_at: datetime
+
+class JobListResponse(BaseModel):
+    jobs: List[JobResponse]
+    count: int
+
+class JobStartRequest(BaseModel):
+    runner_id: str
+
+class JobCompleteRequest(BaseModel):
+    text: str
+    summary: Optional[str] = None
+    processing_time_seconds: int
+
+class AudioDownloadResponse(BaseModel):
+    file_path: str
+    file_size: int
+    content_type: str
 ```
 
-**Fix 2**: Bypass authentication for tests
+### Step 2.7: Update Server Main App
+
+**File**: `server/app/main.py`
 
 ```python
-# Add this fixture to override authentication
-@pytest.fixture
-def client_no_auth(app):
-    """Create client that bypasses authentication."""
-    from app.api.deps import get_current_user
-    from app.models.user import User
+from fastapi import FastAPI
+from app.api import auth, audio, transcriptions, admin, runner
+from app.db.session import engine
+from app.db.base import Base
 
-    # Create mock user
-    mock_user = Mock(spec=User)
-    mock_user.id = str(uuid.uuid4())
-    mock_user.email = "test@example.com"
-    mock_user.is_active = True
-    mock_user.is_admin = False
+Base.metadata.create_all(bind=engine)
 
-    client = TestClient(app)
-    # Override get_current_user to return mock user
-    app.dependency_overrides[get_current_user] = lambda: mock_user
+app = FastAPI(title="Whisper Summarizer Server")
 
-    return client
+app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
+app.include_router(audio.router, prefix="/api/audio", tags=["audio"])
+app.include_router(transcriptions.router, prefix="/api/transcriptions", tags=["transcriptions"])
+app.include_router(admin.router, prefix="/api/admin", tags=["admin"])
+app.include_router(runner.router, prefix="/api/runner", tags=["runner"])
+
+@app.get("/health")
+def health_check():
+    return {"status": "healthy", "service": "server"}
 ```
 
 ---
 
-### Phase 2: HIGH - Backend Assertion Fixes (12 tests)
+## Phase 3: Create Runner Service
 
-**Priority**: HIGH - Medium effort, medium impact
-**Estimated Time**: 2-3 hours
-**Impact**: +12 tests passing (90% → 93% backend pass rate)
+**Priority**: HIGH
+**Estimated Time**: 3 hours
 
-#### Step 2.1: Fix test_formatting_service.py remaining (4 tests)
+### Step 3.1: Runner Directory Structure
 
-**Fix 1**: `test_chunks_split_at_whitespace`
+```
+runner/
+├── app/
+│   ├── __init__.py
+│   ├── main.py             # FastAPI for health checks
+│   ├── config.py           # Configuration
+│   ├── services/
+│   │   ├── __init__.py
+│   │   ├── whisper_service.py      # Copied from backend
+│   │   ├── glm_service.py          # Copied from backend
+│   │   └── audio_processor.py      # Processing orchestration
+│   ├── worker/
+│   │   ├── __init__.py
+│   │   └── poller.py               # Main polling loop
+│   └── models/
+│       └── job_schemas.py          # Job DTOs
+├── Dockerfile
+├── requirements.txt
+└── .env.sample
+```
+
+### Step 3.2: Runner Configuration
+
+**File**: `runner/app/config.py`
 
 ```python
-# BEFORE - Expects chunk to end with whitespace/punctuation
-def test_chunks_split_at_whitespace(self):
-    service = TextFormattingService()
-    text = "word " * 10000  # Long text with spaces
-    chunks = service.split_text_into_chunks(text)
-    for chunk in chunks:
-        # Check last non-whitespace character
-        assert chunk.rstrip()[-1].isspace() or chunk.rstrip()[-1] in "。！？.,;:"
-        # FAILS - chunk ends with '4' from a word
+"""Runner configuration"""
+from pydantic_settings import BaseSettings
 
-# AFTER - Update expectation to match actual behavior
-def test_chunks_split_at_whitespace(self):
-    service = TextFormattingService()
-    text = "word " * 10000
-    chunks = service.split_text_into_chunks(text)
-    # The actual implementation splits at byte boundaries
-    # and tries to find whitespace, but may split mid-word if necessary
-    assert len(chunks) > 1  # Should split into multiple chunks
-    # Verify chunks are roughly the right size (within 20% of max)
-    for chunk in chunks:
-        chunk_bytes = len(chunk.encode('utf-8'))
-        assert chunk_bytes <= service.max_chunk_bytes * 1.2  # Allow 20% overage
+class Settings(BaseSettings):
+    # Server connection
+    server_url: str = "http://localhost:8000"
+    runner_api_key: str = ""
+    runner_id: str = "runner-01"
+
+    # Polling config
+    poll_interval_seconds: int = 10
+    max_concurrent_jobs: int = 2
+    job_timeout_seconds: int = 3600
+
+    # Whisper config
+    faster_whisper_device: str = "cuda"
+    faster_whisper_compute_type: str = "int8_float16"
+    faster_whisper_model_size: str = "large-v3-turbo"
+    whisper_language: str = "zh"
+    whisper_threads: int = 4
+
+    # Audio chunking
+    enable_chunking: bool = True
+    chunk_size_minutes: int = 10
+    chunk_overlap_seconds: int = 15
+    max_concurrent_chunks: int = 4
+    use_vad_split: bool = True
+
+    # GLM API
+    glm_api_key: str = ""
+    glm_model: str = "GLM-4.5-Air"
+    glm_base_url: str = "https://api.z.ai/api/paas/v4/"
+    review_language: str = "zh"
+
+    class Config:
+        env_file = ".env"
+
+settings = Settings()
 ```
 
-**Fix 2**: `test_multi_chunk_formatting`
+### Step 3.3: Runner Job Client
+
+**File**: `runner/app/services/job_client.py`
 
 ```python
-# BEFORE - Expects "\n\n" separator
-def test_multi_chunk_formatting(self):
-    service = TextFormattingService()
-    long_text = "word " * 10000
-
-    with patch.object(service, 'format_text_chunk') as mock_format:
-        mock_format.return_value = "formatted chunk"
-        result = service.format_transcription_text(long_text)
-
-    assert "\n\n" in result  # FAILS - code has error
-
-# AFTER - Fix the actual code bug in formatting_service.py
-# In formatting_service.py around line 249-250, find and fix:
-# BEFORE (buggy code)
-# for i, chunk in enumerate(chunks, 1):
-#     logger.debug(f"Formatting chunk {i}/{len(chunks)}")
-#     formatted_chunk = self.format_text_chunk(chunk)
-#     formatted_chunks.append(formatted_chunk)
-# # ... later ...
-# return "\n\n".join(formatted_chunks)  # This line may have index error
-
-# Check lines around 213-218 for "tuple index out of range"
-# Then fix test to match fixed code behavior
-```
-
-**Fix 3**: `test_system_prompt_contains_formatting_rules`
-
-```python
-# Run test first to see actual failure
-# Then update assertion to match actual system prompt content
-def test_system_prompt_contains_formatting_rules(self):
-    prompt = TextFormattingService.FORMAT_SYSTEM_PROMPT
-    # Check for actual rules present in the prompt
-    assert "标点符号" in prompt  # Punctuation rules
-    assert "段落结构" in prompt  # Paragraph structure
-    assert "不要总结" in prompt  # Don't summarize
-```
-
-#### Step 2.2: Fix test_pptx_service.py (2 tests)
-
-**Fix 1**: `test_respects_max_content_slides`
-
-```python
-# BEFORE
-def test_respects_max_content_slides(self):
-    service = PPTXService()
-    long_text = "Slide content. " * 100
-    slides = service._create_content_slides(long_text, max_slides=3)
-    assert len(slides) <= 3  # FAILS - returns 4
-
-# AFTER - Check actual max_slides parameter or update expectation
-def test_respects_max_content_slides(self):
-    service = PPTXService()
-    long_text = "Slide content. " * 100
-    # Check actual implementation for parameter name
-    slides = service._create_content_slides(long_text, max_content_slides=3)
-    assert len(slides) <= 3
-```
-
-**Fix 2**: `test_fallback_to_second_font_on_failure`
-
-```python
-# BEFORE
-def test_fallback_to_second_font_on_failure(self):
-    service = PPTXService()
-    with patch.object(service, '_load_font', side_effect=Exception("Font not found")):
-        result = service._get_chinese_font()
-        assert result.call_count == 2  # FAILS - result is a string, not Mock
-
-# AFTER - Fix assertion to match actual return type
-def test_fallback_to_second_font_on_failure(self):
-    service = PPTXService()
-    with patch.object(service, '_load_font', side_effect=Exception("Font not found")):
-        result = service._get_chinese_font()
-        # Result should be a font name/path string, not a Mock
-        assert isinstance(result, str)
-        assert result.endswith('.ttf') or result.endswith('.otf')
-```
-
-#### Step 2.3: Fix test_process_audio.py (1 test)
-
-**Fix**: `test_parse_unicode_content`
-
-```python
-# BEFORE
-def test_parse_unicode_content(self):
-    srt_content = "1\\n00:00:00,000 --> 00:00:01,000\\nJapanese 日本語\\n"
-    result = parse_srt(srt_content)
-    assert 'Japanese 日本語' in result[0]['text']  # FAILS - character mismatch
-
-# AFTER - Update to actual Unicode characters
-def test_parse_unicode_content(self):
-    # The actual file might use different Unicode characters
-    srt_content = "1\\n00:00:00,000 --> 00:00:01,000\\nJapanese 日本語\\n"
-    result = parse_srt(srt_content)
-    # Check for either version or use regex
-    assert any('Japanese' in segment['text'] for segment in result)
-```
-
-#### Step 2.4: Fix test_notebooklm_service.py (5 tests)
-
-**Fix**: Text length validation issues
-
-```python
-# BEFORE - Text too short
-def test_handles_unicode_content(self):
-    service = NotebookLMService()
-    text = "测试"  # Too short
-    result = service.generate_guideline("文件.txt", text)
-    # FAILS - "Transcription text is too short to generate guideline"
-
-# AFTER - Use longer text
-def test_handles_unicode_content(self):
-    service = NotebookLMService()
-    # Generate text longer than MIN_TRANSCRIPTION_LENGTH
-    long_text = "测试内容。" * 100  # 600+ characters
-    result = service.generate_guideline("文件.txt", long_text)
-    assert result is not None
-```
-
----
-
-### Phase 3: HIGH - Frontend DOM Selector Fixes (~80 tests)
-
-**Priority**: HIGH - High effort, high impact
-**Estimated Time**: 3-4 hours
-**Impact**: +80 tests passing (67.5% → 88% frontend pass rate)
-
-#### Step 3.1: Add data-testid to Components
-
-**File 1**: `frontend/src/components/channel/ChannelFilter.tsx`
-
-```tsx
-// Add data-testid attributes to interactive elements
-function ChannelFilter({ value, onChange, disabled }: ChannelFilterProps) {
-  return (
-    <div className="flex gap-2">
-      <button
-        data-testid="filter-all"
-        className={cn(
-          "px-3 py-1 rounded",
-          value === 'all' && 'bg-blue-500 text-white'
-        )}
-        onClick={() => onChange('all')}
-        disabled={disabled}
-      >
-        全部
-      </button>
-      <button
-        data-testid="filter-personal"
-        className={cn(
-          "px-3 py-1 rounded",
-          value === 'personal' && 'bg-blue-500 text-white'
-        )}
-        onClick={() => onChange('personal')}
-        disabled={disabled}
-      >
-        我的
-      </button>
-      <button
-        data-testid="filter-channel"
-        className={cn(
-          "px-3 py-1 rounded",
-          value === 'channel' && 'bg-blue-500 text-white'
-        )}
-        onClick={() => onChange('channel')}
-        disabled={disabled}
-      >
-        频道
-      </button>
-    </div>
-  );
-}
-```
-
-**File 2**: `frontend/src/components/channel/ChannelAssignModal.tsx`
-
-```tsx
-// Add data-testid to key elements
-<Dialog open={isOpen} onOpenChange={onClose}>
-  <DialogContent>
-    <DialogHeader>
-      <DialogTitle>分配到频道</DialogTitle>
-    </DialogHeader>
-
-    <div className="space-y-2 max-h-96 overflow-y-auto" data-testid="channel-list">
-      {channels.map(channel => (
-        <label key={channel.id} className="flex items-center gap-2 p-2 hover:bg-gray-100 rounded cursor-pointer">
-          <input
-            type="checkbox"
-            data-testid={`channel-checkbox-${channel.id}`}
-            value={channel.id}
-            checked={selectedChannels.includes(channel.id)}
-            onChange={(e) => {
-              if (e.target.checked) {
-                onSelect([...selectedChannels, channel.id]);
-              } else {
-                onSelect(selectedChannels.filter(id => id !== channel.id));
-              }
-            }}
-          />
-          <span>{channel.name}</span>
-        </label>
-      ))}
-    </div>
-
-    <div className="flex justify-end gap-2 mt-4">
-      <button
-        data-testid="cancel-assign"
-        onClick={onClose}
-      >
-        取消
-      </button>
-      <button
-        data-testid="confirm-assign"
-        onClick={() => onAssign(selectedChannels)}
-      >
-        确认
-      </button>
-    </div>
-  </DialogContent>
-</Dialog>
-```
-
-**File 3**: `frontend/src/components/ui/ConfirmDialog.tsx`
-
-```tsx
-// Add data-testid to buttons
-<Dialog open={isOpen} onOpenChange={onClose}>
-  <DialogContent>
-    <DialogHeader>
-      {icon && <div data-testid="dialog-icon">{icon}</div>}
-      <DialogTitle>{title}</DialogTitle>
-      <DialogDescription>{message}</DialogDescription>
-    </DialogHeader>
-
-    <div className="flex justify-end gap-2">
-      <button
-        data-testid="dialog-cancel"
-        className={cancelButtonClassName}
-        onClick={() => onClose()}
-      >
-        {cancelLabel}
-      </button>
-      <button
-        data-testid="dialog-confirm"
-        className={confirmButtonClassName}
-        onClick={() => {
-          onConfirm();
-          onClose();
-        }}
-      >
-        {confirmLabel}
-      </button>
-    </div>
-  </DialogContent>
-</Dialog>
-```
-
-#### Step 3.2: Update Tests to Use data-testid
-
-**File**: `frontend/tests/components/channel/ChannelComponents.test.tsx`
-
-```typescript
-// BEFORE - Chinese text selectors
-screen.getByText('取消')
-screen.getByText('选择所有')
-
-// AFTER - data-testid selectors
-screen.getByTestId('cancel-assign')
-screen.getByTestId('confirm-assign')
-screen.getByTestId('channel-checkbox-123')
-screen.getByTestId('filter-all')
-screen.getByTestId('filter-personal')
-screen.getByTestId('filter-channel')
-```
-
-**File**: `frontend/tests/components/ui/ConfirmDialog.test.tsx`
-
-```typescript
-// BEFORE - Searches for AlertTriangle icon by role
-const icon = screen.getByRole('img', { hidden: true })
-
-// AFTER - Use data-testid
-const icon = container.querySelector('[data-testid="dialog-icon"]')
-expect(icon).toBeInTheDocument()
-```
-
----
-
-### Phase 4: MEDIUM - Frontend Component Structure Fixes (~30 tests)
-
-**Priority**: MEDIUM - Medium effort, medium impact
-**Estimated Time**: 2-3 hours
-**Impact**: +30 tests passing (88% → 95% frontend pass rate)
-
-#### Step 4.1: Fix Accordion.test.tsx
-
-**File**: `frontend/tests/components/ui/Accordion.test.tsx`
-
-```typescript
-// BEFORE - Expects p-4 class
-const content = screen.getByText('Padded Content').parentElement
-expect(content).toHaveClass('bg-white', 'dark:bg-gray-900', 'p-4')
-// FAILS - actual classes are different
-
-// AFTER - Match actual component structure
-const content = screen.getByText('Padded Content').parentElement
-expect(content).toHaveClass('border', 'dark:border-gray-700', 'rounded-lg', 'overflow-hidden')
-```
-
-#### Step 4.2: Fix Badge.test.tsx
-
-**File**: `frontend/tests/components/ui/Badge.test.tsx`
-
-```typescript
-// Run test to see actual output
-// Then update expectations to match actual variant classes
-
-// Example - if variant uses different class names
-test('renders success variant', () => {
-  render(<Badge variant="success">Success</Badge>)
-  const badge = screen.getByText('Success')
-  // Check what classes are actually applied
-  expect(badge.className).toContain('bg-green-100') // or whatever the actual class is
-})
-```
-
-#### Step 4.3: Fix Card.test.tsx
-
-```typescript
-// BEFORE - Expects className to be merged
-const title = screen.getByText('Test Title')
-expect(title).toHaveClass('custom-class')
-// FAILS - className merging might work differently
-
-// AFTER - Check actual className behavior
-const title = screen.getByText('Test Title')
-expect(title).toHaveClass('text-lg', 'font-semibold') // default classes
-// Check if custom class is added or replaces defaults
-```
-
-#### Step 4.4: Fix Modal.test.tsx
-
-```typescript
-// BEFORE - Queries for overlay with specific selector
-const overlay = screen.getByTestId('modal-overlay')
-// FAILS - overlay has different testid or no testid
-
-// AFTER - Use role-based query or check actual testid
-const overlay = container.querySelector('.fixed.inset-0') // or actual class
-expect(overlay).toBeInTheDocument()
-```
-
-#### Step 4.5: Fix ChannelBadge.test.tsx
-
-```typescript
-// BEFORE - Pluralization test fails
-test('shows count when multiple channels', () => {
-  render(<ChannelBadge channels={[{id: '1', name: 'A'}, {id: '2', name: 'B'}]} />)
-  expect(screen.getByText('2 channels')).toBeInTheDocument()
-  // FAILS - might show different text
-})
-
-// AFTER - Update to actual text
-test('shows count when multiple channels', () => {
-  render(<ChannelBadge channels={[{id: '1', name: 'A'}, {id: '2', name: 'B'}]} />)
-  // Check what text is actually shown
-  expect(screen.getByText(/2/)).toBeInTheDocument()
-  // Or match exact format: "2 频道" or "2 channels"
-})
-```
-
----
-
-### Phase 5: MEDIUM - Backend Code Fixes (5 tests)
-
-**Priority**: MEDIUM - Requires code changes, not just test fixes
-**Estimated Time**: 1-2 hours
-**Impact**: +5 tests passing (93% → 96% backend pass rate)
-
-#### Step 5.1: Fix formatting_service.py Bug
-
-**File**: `backend/app/services/formatting_service.py`
-
-**Issue**: "tuple index out of range" error around line 213-218
-
-```python
-# Find the bug - likely in format_text_chunk or format_transcription_text
-# Search for where tuples are accessed by index
-
-# POSSIBLE BUG - In format_text_chunk around line 176-178
-choice = response.choices[0]
-formatted = choice.message.content or ""
-
-# GLM-4.5-Air sometimes puts the actual answer in reasoning_content
-if not formatted and hasattr(choice.message, 'reasoning_content') and choice.message.reasoning_content:
-    reasoning = choice.message.reasoning_content
-    lines = reasoning.split('\n')
-    for line in reversed(lines):
-        line = line.strip()
-        # BUG HERE: lines might have empty elements
-        if line and not line.startswith(('首先', '然后', '接下来', '让我', '我需要', '分析')):
-            formatted = line
-            break
-
-# FIX - Add bounds checking
-if not formatted and hasattr(choice.message, 'reasoning_content') and choice.message.reasoning_content:
-    reasoning = choice.message.reasoning_content
-    lines = [l.strip() for l in reasoning.split('\n') if l.strip()]  # Filter empty lines
-    for line in reversed(lines):
-        # Skip reasoning markers
-        if not any(line.startswith(prefix) for prefix in ['首先', '然后', '接下来', '让我', '我需要', '分析']):
-            formatted = line
-            break
-```
-
-#### Step 5.2: Add Missing Error Handling
-
-**File**: `backend/app/services/formatting_service.py`
-
-```python
-# Add better error handling in format_transcription_text
-def format_transcription_text(self, text: str) -> str:
-    if not text or len(text.strip()) < 50:
-        return text
-
-    chunks = self.split_text_into_chunks(text)
-    if len(chunks) == 1:
-        return self.format_text_chunk(chunks[0])
-
-    # Format chunks sequentially
-    formatted_chunks = []
-    for i, chunk in enumerate(chunks, 1):
-        try:
-            formatted_chunk = self.format_text_chunk(chunk)
-            formatted_chunks.append(formatted_chunk)
-        except Exception as e:
-            logger.error(f"Failed to format chunk {i}: {e}")
-            formatted_chunks.append(chunk)  # Use original on failure
-
-    # Join with double newline
-    return "\n\n".join(formatted_chunks)
-```
-
----
-
-### Phase 6: LOW - Add New Tests (30-50 new tests)
-
-**Priority**: LOW - Increases coverage but doesn't fix failures
-**Estimated Time**: 4-6 hours
-**Impact**: +30-50 new tests, +5-10% coverage
-
-#### Step 6.1: Backend Coverage Improvements
-
-**Target Areas**: Low-coverage modules identified in coverage reports
-
-**File 1**: `backend/tests/backend/services/test_whisper_service.py`
-
-```python
-# Add tests for edge cases
-class TestWhisperEdgeCases:
-    """Tests for edge cases in whisper service."""
-
-    def test_handles_corrupted_audio_file(self):
-        """Test handling of corrupted audio files."""
-        service = WhisperService()
-        with pytest.raises(Exception):
-            service.transcribe("corrupted.mp3")
-
-    def test_handles_empty_audio_file(self):
-        """Test handling of empty audio files."""
-        service = WhisperService()
-        result = service.transcribe("empty.mp3")
-        assert result == ""
-
-    def test_vad_split_with_silence(self):
-        """Test VAD split with silence detection."""
-        service = WhisperService()
-        # Test audio with long silence
-        chunks = service._split_by_vad("audio_with_silence.mp3")
-        assert len(chunks) > 1
-```
-
-**File 2**: `backend/tests/backend/services/test_transcription_processor.py`
-
-```python
-# Add tests for cancellation scenarios
-class TestTranscriptionCancellation:
-    """Tests for transcription cancellation."""
-
-    @pytest.mark.asyncio
-    async def test_cancel_long_running_transcription(self, db):
-        """Test cancelling a long-running transcription."""
-        processor = TranscriptionProcessor()
-        transcription_id = str(uuid.uuid4())
-
-        # Start transcription in background
-        task = asyncio.create_task(
-            processor.process_transcription(transcription_id)
+"""Client for communicating with server"""
+import httpx
+import os
+from typing import List, Optional
+from ..models.job_schemas import Job, JobResult
+from ..config import settings
+
+class JobClient:
+    def __init__(self):
+        self.base_url = settings.server_url.rstrip('/')
+        self.api_key = settings.runner_api_key
+        self.runner_id = settings.runner_id
+        self.client = httpx.Client(
+            base_url=f"{self.base_url}/api/runner",
+            headers={"Authorization": f"Bearer {self.api_key}"},
+            timeout=30.0
         )
 
-        # Cancel immediately
-        await asyncio.sleep(0.1)
-        processor.cancel(transcription_id)
+    def get_pending_jobs(self, limit: int = 1) -> List[Job]:
+        """Get pending jobs from server."""
+        try:
+            response = self.client.get("/jobs", params={"limit": limit})
+            response.raise_for_status()
+            return [Job(**job) for job in response.json()]
+        except httpx.HTTPError as e:
+            print(f"Error fetching jobs: {e}")
+            return []
 
-        # Verify cancellation
-        with pytest.raises(CancelledError):
-            await task
+    def start_job(self, job_id: str) -> bool:
+        """Claim a job from server."""
+        try:
+            response = self.client.post(
+                f"/jobs/{job_id}/start",
+                json={"runner_id": self.runner_id}
+            )
+            response.raise_for_status()
+            return True
+        except httpx.HTTPError as e:
+            print(f"Error starting job {job_id}: {e}")
+            return False
+
+    def get_audio_path(self, job_id: str) -> Optional[str]:
+        """Get audio file path for job."""
+        try:
+            response = self.client.get(f"/audio/{job_id}")
+            response.raise_for_status()
+            data = response.json()
+            return data["file_path"]
+        except httpx.HTTPError as e:
+            print(f"Error getting audio for job {job_id}: {e}")
+            return None
+
+    def complete_job(self, job_id: str, result: JobResult) -> bool:
+        """Submit job result to server."""
+        try:
+            response = self.client.post(
+                f"/jobs/{job_id}/complete",
+                json={
+                    "text": result.text,
+                    "summary": result.summary,
+                    "processing_time_seconds": result.processing_time_seconds
+                }
+            )
+            response.raise_for_status()
+            return True
+        except httpx.HTTPError as e:
+            print(f"Error completing job {job_id}: {e}")
+            return False
+
+    def fail_job(self, job_id: str, error: str) -> bool:
+        """Report job failure."""
+        try:
+            response = self.client.post(
+                f"/jobs/{job_id}/fail",
+                content=error.encode(),
+                headers={"Content-Type": "text/plain"}
+            )
+            response.raise_for_status()
+            return True
+        except httpx.HTTPError as e:
+            print(f"Error reporting failure for job {job_id}: {e}")
+            return False
+
+    def send_heartbeat(self, current_jobs: int = 0) -> bool:
+        """Send heartbeat to server."""
+        try:
+            response = self.client.post(
+                "/heartbeat",
+                params={"runner_id": self.runner_id, "current_jobs": current_jobs}
+            )
+            return response.status_code == 200
+        except httpx.HTTPError:
+            return False
+
+    def close(self):
+        """Close the HTTP client."""
+        self.client.close()
 ```
 
-**File 3**: `backend/tests/backend/api/test_error_handling.py` (NEW FILE)
+### Step 3.4: Runner Poller
+
+**File**: `runner/app/worker/poller.py`
 
 ```python
-"""
-Tests for API error handling.
-"""
-import pytest
-from fastapi.testclient import TestClient
+"""Main polling loop for runner"""
+import asyncio
+import signal
+import sys
+from typing import Set
+from concurrent.futures import ThreadPoolExecutor
+from ..services.job_client import JobClient
+from ..services.audio_processor import AudioProcessor
+from ..config import settings
+from ..models.job_schemas import Job
 
-class TestAPIErrorHandling:
-    """Tests for consistent error handling across API endpoints."""
+class RunnerPoller:
+    def __init__(self):
+        self.client = JobClient()
+        self.processor = AudioProcessor()
+        self.running = False
+        self.active_jobs: Set[str] = set()
+        self.executor = ThreadPoolExecutor(max_workers=settings.max_concurrent_jobs)
 
-    def test_404_returns_consistent_format(self, client):
-        """Test that 404 errors have consistent format."""
-        response = client.get("/api/transcriptions/nonexistent-id")
-        assert response.status_code == 404
-        data = response.json()
-        assert "detail" in data
+        # Setup signal handlers
+        signal.signal(signal.SIGINT, self._shutdown)
+        signal.signal(signal.SIGTERM, self._shutdown)
 
-    def test_422_validation_error_format(self, client):
-        """Test that validation errors have consistent format."""
-        response = client.get("/api/transcriptions/invalid-uuid")
-        assert response.status_code == 422
-        data = response.json()
-        assert "detail" in data
+    def _shutdown(self, signum, frame):
+        """Graceful shutdown."""
+        print(f"\nReceived signal {signum}, shutting down...")
+        self.running = False
+        sys.exit(0)
+
+    async def process_job(self, job: Job):
+        """Process a single job."""
+        print(f"[{job.id}] Processing {job.file_name}")
+
+        # Claim job
+        if not self.client.start_job(job.id):
+            print(f"[{job.id}] Failed to claim job")
+            return
+
+        # Get audio path
+        audio_path = self.client.get_audio_path(job.id)
+        if not audio_path:
+            self.client.fail_job(job.id, "Audio file not found")
+            return
+
+        # Process audio
+        try:
+            result = self.processor.process(audio_path, job.language)
+            self.client.complete_job(job.id, result)
+            print(f"[{job.id}] Completed in {result.processing_time_seconds}s")
+        except Exception as e:
+            print(f"[{job.id}] Failed: {e}")
+            self.client.fail_job(job.id, str(e))
+        finally:
+            self.active_jobs.discard(job.id)
+
+    async def poll_loop(self):
+        """Main polling loop."""
+        print(f"Runner started: {settings.runner_id}")
+        print(f"Max concurrent jobs: {settings.max_concurrent_jobs}")
+        print(f"Poll interval: {settings.poll_interval_seconds}s")
+
+        self.running = True
+
+        while self.running:
+            # Send heartbeat
+            self.client.send_heartbeat(len(self.active_jobs))
+
+            # Check if we can accept more jobs
+            if len(self.active_jobs) >= settings.max_concurrent_jobs:
+                print(f"Max concurrent jobs reached ({len(self.active_jobs)})")
+                await asyncio.sleep(settings.poll_interval_seconds)
+                continue
+
+            # Fetch pending jobs
+            slots_available = settings.max_concurrent_jobs - len(self.active_jobs)
+            jobs = self.client.get_pending_jobs(limit=slots_available)
+
+            if not jobs:
+                await asyncio.sleep(settings.poll_interval_seconds)
+                continue
+
+            # Process jobs concurrently
+            for job in jobs:
+                self.active_jobs.add(job.id)
+                asyncio.create_task(self.process_job(job))
+
+            # Wait before next poll
+            await asyncio.sleep(settings.poll_interval_seconds)
+
+    def run(self):
+        """Run the poller."""
+        try:
+            asyncio.run(self.poll_loop())
+        finally:
+            self.client.close()
+            self.executor.shutdown(wait=True)
+
+def main():
+    poller = RunnerPoller()
+    poller.run()
+
+if __name__ == "__main__":
+    main()
 ```
 
-#### Step 6.2: Frontend Coverage Improvements
+### Step 3.5: Runner Dockerfile
 
-**File 1**: `frontend/tests/components/ui/Button.test.tsx` (ADD TESTS)
+**File**: `runner/Dockerfile`
 
-```typescript
-// Add tests for edge cases
-describe('Button Edge Cases', () => {
-  test('handles rapid clicks without errors', () => {
-    const handleClick = vi.fn()
-    render(<Button onClick={handleClick}>Click Me</Button>)
+```dockerfile
+# Base image with faster-whisper and CUDA
+FROM whisper-summarizer-fastwhisper-base:latest
 
-    const button = screen.getByRole('button')
-    for (let i = 0; i < 10; i++) {
-      fireEvent.click(button)
-    }
+WORKDIR /app
 
-    expect(handleClick).toHaveBeenCalledTimes(10)
-  })
+# Install additional Python dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
-  test('applies custom className correctly', () => {
-    render(<Button className="custom-class">Test</Button>)
-    const button = screen.getByRole('button')
-    expect(button).toHaveClass('custom-class')
-  })
-})
+# Copy application
+COPY ./app ./app
+
+# Expose health check port
+EXPOSE 8001
+
+# Run poller
+CMD ["python", "-m", "app.worker.poller"]
 ```
 
-**File 2**: `frontend/tests/components/ui/Modal.test.tsx` (ADD TESTS)
+### Step 3.6: Runner Requirements
 
-```typescript
-// Add accessibility tests
-describe('Modal Accessibility', () => {
-  test('traps focus within modal', () => {
-    render(
-      <Modal isOpen={true} onClose={() => {}}>
-        <button>Inside</button>
-      </Modal>
-    )
+**File**: `runner/requirements.txt`
 
-    const insideButton = screen.getByText('Inside')
-    insideButton.focus()
+```txt
+# HTTP client
+httpx==0.27.2
 
-    // Focus should stay within modal
-    expect(document.activeElement).toBe(insideButton)
-  })
+# Configuration
+pydantic-settings==2.6.0
+python-dotenv==1.0.1
 
-  test('has proper ARIA attributes', () => {
-    render(
-      <Modal isOpen={true} onClose={() => {}} title="Test Modal">
-        Content
-      </Modal>
-    )
-
-    const dialog = screen.getByRole('dialog')
-    expect(dialog).toHaveAttribute('aria-modal', 'true')
-    expect(dialog).toHaveAttribute('aria-label', 'Test Modal')
-  })
-})
+# Copy from backend requirements:
+faster-whisper==1.0.3
+ctranslate2==4.4.0
+ffmpeg-python==0.2.0
+openai==1.54.0  # For GLM API (OpenAI-compatible)
 ```
 
-**File 3**: `frontend/tests/components/loading-states.test.tsx` (NEW FILE)
+### Step 3.7: Runner Environment
 
-```typescript
-/**
- * Tests for loading states across components
- */
-import { render, screen } from '@testing-library/react'
-import { Loader2 } from 'lucide-react'
+**File**: `runner/.env.sample`
 
-describe('Loading States', () => {
-  test('Modal shows loading spinner correctly', () => {
-    // Test loading state in Modal
-    // Add isLoading prop test
-  })
+```bash
+# Server Connection
+SERVER_URL=http://localhost:8000
+RUNNER_API_KEY=your-secret-runner-api-key
+RUNNER_ID=runner-gpu-01
 
-  test('Button shows loading state correctly', () => {
-    render(<Button loading={true}>Submit</Button>)
-    expect(screen.getByRole('button')).toBeDisabled()
-    expect(screen.queryByText('Submit')).not.toBeInTheDocument()
-  })
-})
+# Polling Config
+POLL_INTERVAL_SECONDS=10
+MAX_CONCURRENT_JOBS=2
+JOB_TIMEOUT_SECONDS=3600
+
+# Whisper Config
+FASTER_WHISPER_DEVICE=cuda
+FASTER_WHISPER_COMPUTE_TYPE=int8_float16
+FASTER_WHISPER_MODEL_SIZE=large-v3-turbo
+WHISPER_LANGUAGE=zh
+WHISPER_THREADS=4
+
+# Audio Chunking
+ENABLE_CHUNKING=true
+CHUNK_SIZE_MINUTES=10
+CHUNK_OVERLAP_SECONDS=15
+MAX_CONCURRENT_CHUNKS=4
+USE_VAD_SPLIT=true
+
+# GLM API
+GLM_API_KEY=your-glm-api-key
+GLM_MODEL=GLM-4.5-Air
+GLM_BASE_URL=https://api.z.ai/api/paas/v4/
+REVIEW_LANGUAGE=zh
 ```
 
 ---
 
-### Phase 7: LOW - Frontend Jotai Tests (13 tests) - OPTIONAL
+## Phase 4: Update Docker Compose
 
-**Priority**: LOW - Difficult to fix, E2E tests cover this
-**Estimated Time**: 4-6 hours (if attempted)
-**Impact**: +13 tests (95% → 98% frontend pass rate)
-**Recommendation**: SKIP - Rely on E2E tests
+**Priority**: HIGH
+**Estimated Time**: 1 hour
 
-**Alternative**: If time permits, rewrite using `@testing-library/react-hooks`:
+### Step 4.1: Development Docker Compose
 
-```typescript
-import { renderHook, waitFor } from '@testing-library/react'
-import { useAtom } from 'jotai'
+**File**: `docker-compose.dev.yml`
 
-test('auth atom updates correctly', async () => {
-  const { result } = renderHook(() => useAtom(authAtom))
-  const [auth, setAuth] = result.current
+```yaml
+version: '3.8'
 
-  act(() => {
-    setAuth({ user: { id: '123', email: 'test@test.com' }, token: 'abc' })
-  })
+services:
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    environment:
+      - VITE_API_URL=http://localhost:8000
+    depends_on:
+      - server
 
-  await waitFor(() => {
-    expect(result.current[0].user?.email).toBe('test@test.com')
-  })
-})
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./server:/app
+      - ./data:/app/data
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/whisper_summarizer
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
+      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+      - RUNNER_API_KEY=${RUNNER_API_KEY:-dev-secret-key}
+    depends_on:
+      - postgres
+    restart: unless-stopped
+
+  runner:
+    build:
+      context: ./runner
+      dockerfile: Dockerfile
+    environment:
+      - SERVER_URL=http://server:8000
+      - RUNNER_API_KEY=${RUNNER_API_KEY:-dev-secret-key}
+      - RUNNER_ID=runner-dev
+      - MAX_CONCURRENT_JOBS=2
+      - FASTER_WHISPER_DEVICE=cuda
+      - GLM_API_KEY=${GLM_API_KEY}
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    volumes:
+      - runner-cache:/tmp/whisper_models
+      - ./data:/app/data
+    depends_on:
+      - server
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:18-alpine
+    environment:
+      - POSTGRES_DB=whisper_summarizer
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+volumes:
+  postgres-data:
+  runner-cache:
+```
+
+### Step 4.2: Production Docker Compose
+
+**File**: `docker-compose.yml`
+
+```yaml
+version: '3.8'
+
+services:
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.prod
+    ports:
+      - "80:80"
+    depends_on:
+      - server
+    restart: unless-stopped
+
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
+      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+      - RUNNER_API_KEY=${RUNNER_API_KEY}
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
+
+  # Runner runs on separate GPU server
+  # See docker-compose.runner.yml for runner configuration
+
+volumes:
+  postgres-data:
+```
+
+### Step 4.3: Runner Docker Compose
+
+**File**: `docker-compose.runner.yml`
+
+```yaml
+version: '3.8'
+
+services:
+  runner:
+    build:
+      context: ./runner
+      dockerfile: Dockerfile
+    environment:
+      - SERVER_URL=${SERVER_URL}
+      - RUNNER_API_KEY=${RUNNER_API_KEY}
+      - RUNNER_ID=${RUNNER_ID:-runner-prod-01}
+      - MAX_CONCURRENT_JOBS=${MAX_CONCURRENT_JOBS:-4}
+      - POLL_INTERVAL_SECONDS=${POLL_INTERVAL_SECONDS:-10}
+      - FASTER_WHISPER_DEVICE=cuda
+      - GLM_API_KEY=${GLM_API_KEY}
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    volumes:
+      - runner-cache:/tmp/whisper_models
+    restart: unless-stopped
+
+volumes:
+  runner-cache:
 ```
 
 ---
 
-## Execution Order & Time Estimates
+## Phase 5: Update Development Scripts
 
-### Sprint 1: Quick Backend Fixes (Day 1)
-- [ ] Phase 1.1: Fix formatting_service.py mock paths (30 min)
-- [ ] Phase 1.2: Fix shared_api.py dependency injection (45 min)
-- [ ] Phase 1.3: Fix transcription_exports.py mock paths (45 min)
-- **Impact**: +36 tests passing (86.4% → 95% backend)
+**Priority**: MEDIUM
+**Estimated Time**: 30 minutes
 
-### Sprint 2: Backend Assertion Fixes (Day 1-2)
-- [ ] Phase 2.1: Fix formatting_service assertions (1 hour)
-- [ ] Phase 2.2: Fix pptx_service tests (30 min)
-- [ ] Phase 2.3: Fix process_audio test (15 min)
-- [ ] Phase 2.4: Fix notebooklm_service tests (30 min)
-- **Impact**: +12 tests passing (95% → 98% backend)
+### Step 5.1: Update run_dev.sh
 
-### Sprint 3: Frontend DOM Fixes (Day 2-3)
-- [ ] Phase 3.1: Add data-testid to components (2 hours)
-- [ ] Phase 3.2: Update tests to use data-testid (1 hour)
-- **Impact**: +80 tests passing (67.5% → 88% frontend)
+```bash
+#!/bin/bash
 
-### Sprint 4: Frontend Component Fixes (Day 3)
-- [ ] Phase 4.1: Fix Accordion tests (30 min)
-- [ ] Phase 4.2: Fix Badge tests (30 min)
-- [ ] Phase 4.3: Fix Card tests (30 min)
-- [ ] Phase 4.4: Fix Modal tests (30 min)
-- [ ] Phase 4.5: Fix ChannelBadge tests (30 min)
-- **Impact**: +30 tests passing (88% → 95% frontend)
+case "$1" in
+  up-d)
+    echo "Starting development environment..."
+    docker-compose -f docker-compose.dev.yml up -d
+    echo "Server: http://localhost:8000"
+    echo "Frontend: http://localhost:3000"
+    ;;
+  logs)
+    docker-compose -f docker-compose.dev.yml logs -f ${2:-}
+    ;;
+  runner-logs)
+    docker-compose -f docker-compose.dev.yml logs -f runner
+    ;;
+  down)
+    docker-compose -f docker-compose.dev.yml down
+    ;;
+  restart)
+    docker-compose -f docker-compose.dev.yml restart ${2:-}
+    ;;
+  *)
+    echo "Usage: $0 {up-d|logs|runner-logs|down|restart}"
+    exit 1
+esac
+```
 
-### Sprint 5: Backend Code Fixes (Day 4)
-- [ ] Phase 5.1: Fix formatting_service.py bug (1 hour)
-- [ ] Phase 5.2: Add error handling (30 min)
-- **Impact**: +5 tests passing (98% → 99% backend)
+---
 
-### Sprint 6: New Tests (Day 5-6) - OPTIONAL
-- [ ] Phase 6.1: Add backend coverage tests (3 hours)
-- [ ] Phase 6.2: Add frontend coverage tests (2 hours)
-- **Impact**: +30-50 new tests, +5-10% coverage
+## Phase 6: Documentation Updates
+
+**Priority**: MEDIUM
+**Estimated Time**: 1 hour
+
+- [ ] Update README.md with server/runner architecture
+- [ ] Update CLAUDE.md with new structure
+- [ ] Create deployment guide for runner on separate server
+- [ ] Add troubleshooting section for runner connectivity
+
+---
+
+## Phase 7: Testing & Migration
+
+**Priority**: HIGH
+**Estimated Time**: 2 hours
+
+### Step 7.1: Test Server Independently
+
+```bash
+# Start server only
+docker-compose -f docker-compose.dev.yml up server postgres
+
+# Test health check
+curl http://localhost:8000/health
+
+# Test runner API (with auth)
+curl -H "Authorization: Bearer dev-secret-key" \
+  http://localhost:8000/api/runner/jobs
+```
+
+### Step 7.2: Test Runner
+
+```bash
+# Start runner
+docker-compose -f docker-compose.dev.yml up runner
+
+# Check logs for job polling
+docker-compose -f docker-compose.dev.yml logs -f runner
+```
+
+### Step 7.3: Test Full Integration
+
+1. Upload audio via frontend
+2. Verify status=pending in database
+3. Watch runner logs for job processing
+4. Verify status=completed after processing
+5. Verify audio file was deleted
+6. Check transcription result in frontend
+
+### Step 7.4: Migrate Existing Data
+
+```sql
+-- Set existing transcriptions to completed
+UPDATE transcriptions
+SET status = 'completed',
+    completed_at = COALESCE(updated_at, created_at)
+WHERE status IS NULL;
+
+-- Handle failed transcriptions
+UPDATE transcriptions
+SET status = 'failed',
+    error_message = 'Migration: marked as failed'
+WHERE text IS NULL AND status IS NULL;
+```
+
+---
+
+## File Structure After Split
+
+```
+whisper_summarizer/
+├── frontend/              # No changes
+├── server/                # NEW: Lightweight server (replaces backend)
+│   ├── app/
+│   │   ├── api/           # + runner.py
+│   │   ├── core/          # Config, Supabase
+│   │   ├── models/        # + transcription status fields
+│   │   ├── schemas/       # + runner.py
+│   │   ├── services/      # Lightweight only (no whisper)
+│   │   └── db/
+│   ├── Dockerfile         # python:3.12-slim
+│   └── requirements.txt   # No whisper/ffmpeg/CUDA
+├── runner/                # NEW: Whisper runner
+│   ├── app/
+│   │   ├── main.py
+│   │   ├── config.py
+│   │   ├── services/      # whisper, glm, audio_processor
+│   │   ├── worker/        # poller.py
+│   │   └── models/        # job_schemas.py
+│   ├── Dockerfile         # Based on fastwhisper-base
+│   ├── requirements.txt
+│   └── .env.sample
+├── backend/               # DEPRECATED - will be removed after migration
+├── data/                  # Shared storage
+├── docker-compose.yml
+├── docker-compose.dev.yml
+└── docker-compose.runner.yml
+```
+
+---
+
+## Environment Variables
+
+### Server (.env)
+
+```bash
+# Database
+DATABASE_URL=postgresql://...
+
+# Supabase
+SUPABASE_URL=https://...
+SUPABASE_ANON_KEY=eyJ...
+SUPABASE_SERVICE_ROLE_KEY=eyJ...
+
+# Runner Authentication (NEW)
+RUNNER_API_KEY=your-super-secret-key-here
+
+# Server Config
+CORS_ORIGINS=http://localhost:3000
+```
+
+### Runner (.env)
+
+```bash
+# Server Connection (NEW)
+SERVER_URL=https://your-server.com
+RUNNER_API_KEY=your-super-secret-key-here
+RUNNER_ID=runner-gpu-01
+
+# Polling Config (NEW)
+POLL_INTERVAL_SECONDS=10
+MAX_CONCURRENT_JOBS=4
+
+# Whisper Config (from backend)
+FASTER_WHISPER_DEVICE=cuda
+FASTER_WHISPER_COMPUTE_TYPE=int8_float16
+# ... etc
+
+# GLM API (from backend - moved here)
+GLM_API_KEY=your-glm-api-key
+GLM_MODEL=GLM-4.5-Air
+# ... etc
+```
+
+---
+
+## Deployment Guide
+
+### Server Deployment (No GPU)
+
+```bash
+# On any VPS (DigitalOcean, AWS, etc.)
+git clone <repo>
+cd whisper_summarizer
+
+# Configure .env
+cp .env.sample .env
+# Edit .env with your settings
+
+# Run database migration
+docker-compose -f docker-compose.dev.yml run server alembic upgrade head
+
+# Start server
+docker-compose up -d server
+```
+
+### Runner Deployment (GPU Server)
+
+```bash
+# On GPU server (e.g., RunPod, Lambda Labs)
+git clone <repo>
+cd whisper_summarizer
+
+# Configure runner
+cp runner/.env.sample runner/.env
+# Edit runner/.env with SERVER_URL and API keys
+
+# Build and start runner
+docker-compose -f docker-compose.runner.yml up -d runner
+
+# View logs
+docker-compose -f docker-compose.runner.yml logs -f runner
+```
+
+### Multiple Runners
+
+```bash
+# On multiple GPU servers, just change RUNNER_ID
+# Runner 1:
+RUNNER_ID=runner-gpu-01 docker-compose -f docker-compose.runner.yml up -d runner
+
+# Runner 2:
+RUNNER_ID=runner-gpu-02 docker-compose -f docker-compose.runner.yml up -d runner
+```
+
+---
+
+## Monitoring & Troubleshooting
+
+### Check Runner Status
+
+```sql
+-- View active runners
+SELECT runner_id,
+       COUNT(*) FILTER (WHERE status = 'processing') as active_jobs,
+       MAX(last_ping) as last_seen
+FROM transcriptions
+WHERE started_at > NOW() - INTERVAL '1 hour'
+GROUP BY runner_id;
+```
+
+### Check Job Queue
+
+```sql
+-- View pending jobs
+SELECT id, file_name, created_at
+FROM transcriptions
+WHERE status = 'pending'
+ORDER BY created_at;
+
+-- View processing jobs
+SELECT id, file_name, runner_id, started_at,
+       NOW() - started_at as duration
+FROM transcriptions
+WHERE status = 'processing';
+```
+
+### Common Issues
+
+1. **Runner can't connect to server**
+   - Check SERVER_URL is reachable
+   - Verify RUNNER_API_KEY matches
+   - Check firewall allows traffic
+
+2. **Jobs stuck in processing**
+   - Runner may have crashed
+   - Check runner logs
+   - Manual reset: `UPDATE transcriptions SET status='pending' WHERE status='processing' AND started_at < NOW() - INTERVAL '1 hour'`
+
+3. **Audio file not found**
+   - Check server data volume is mounted
+   - Verify file permissions
+   - Check storage path configuration
+
+---
+
+## Rollback Plan
+
+If issues arise:
+
+```bash
+# Stop new services
+docker-compose -f docker-compose.dev.yml down
+
+# Switch back to backend
+docker-compose -f docker-compose.backend.yml up -d  # Old config
+
+# Revert database migration
+alembic downgrade -1
+```
 
 ---
 
 ## Success Criteria
 
-### Pass Rate Targets
-
-| Metric | Current | After Fix | Target | Status |
-|--------|---------|-----------|--------|--------|
-| Backend Pass Rate | 86.4% | 98%+ | 95% | ✅ |
-| Frontend Pass Rate | 67.5% | 95%+ | 90% | ✅ |
-| Overall Pass Rate | ~80% | 96%+ | 93% | ✅ |
-| Backend Coverage | 67.9% | 75%+ | 70% | ✅ |
-| Frontend Coverage | ~87% | 90%+ | 90% | ✅ |
-
-### Test Counts
-
-| Category | Current Failures | After Fix | New Tests |
-|----------|-----------------|-----------|-----------|
-| Backend API | 30 | 0 | +10 |
-| Backend Services | 12 | 0 | +20 |
-| Frontend DOM | ~80 | 0 | 0 |
-| Frontend Components | ~30 | 0 | +15 |
-| **TOTAL** | **152** | **0** | **+45** |
-
----
-
-## Files to Modify
-
-### Backend Test Files (9 files)
-1. `tests/backend/services/test_formatting_service.py`
-2. `tests/backend/api/test_shared_api.py`
-3. `tests/backend/api/test_transcription_exports.py`
-4. `tests/backend/services/test_pptx_service.py`
-5. `tests/backend/services/test_process_audio.py`
-6. `tests/backend/services/test_notebooklm_service.py`
-7. `tests/backend/services/test_whisper_service.py` (add tests)
-8. `tests/backend/services/test_transcription_processor.py` (add tests)
-9. `tests/backend/api/test_error_handling.py` (NEW FILE)
-
-### Frontend Test Files (8 files)
-1. `tests/frontend/components/channel/ChannelComponents.test.tsx`
-2. `tests/frontend/components/ui/Accordion.test.tsx`
-3. `tests/frontend/components/ui/Badge.test.tsx`
-4. `tests/frontend/components/ui/Card.test.tsx`
-5. `tests/frontend/components/ui/Modal.test.tsx`
-6. `tests/frontend/components/ui/ConfirmDialog.test.tsx`
-7. `tests/frontend/components/channel/ChannelBadge.test.tsx`
-8. `tests/frontend/components/loading-states.test.tsx` (NEW FILE)
-
-### Frontend Component Files (3 files)
-1. `frontend/src/components/channel/ChannelFilter.tsx`
-2. `frontend/src/components/channel/ChannelAssignModal.tsx`
-3. `frontend/src/components/ui/ConfirmDialog.tsx`
-
-### Backend Service Files (1 file)
-1. `backend/app/services/formatting_service.py` (fix bug)
-
----
-
-## Testing Commands
-
-### Run All Tests
-```bash
-# Backend
-./run_test.sh backend
-
-# Frontend
-./run_test.sh frontend
-
-# All
-./run_test.sh all
-```
-
-### Run Specific Test Files
-```bash
-# Backend specific file
-docker exec whisper_backend_dev pytest tests/backend/services/test_formatting_service.py -v
-
-# Frontend specific file
-bun test tests/frontend/components/ui/Accordion.test.tsx
-```
-
-### Run with Coverage
-```bash
-# Backend coverage
-docker exec whisper_backend_dev pytest --cov=app.services --cov-report=html --cov-report=term-missing
-
-# Frontend coverage
-bun test --coverage
-```
-
----
-
-## Progress Tracking
-
-### Phase 1: Backend Mock Fixes
-- [ ] test_formatting_service.py (2 tests)
-- [ ] test_shared_api.py (9 tests)
-- [ ] test_transcription_exports.py (21 tests)
-**Target**: +32 tests
-
-### Phase 2: Backend Assertion Fixes
-- [ ] test_formatting_service.py (4 tests)
-- [ ] test_pptx_service.py (2 tests)
-- [ ] test_process_audio.py (1 test)
-- [ ] test_notebooklm_service.py (5 tests)
-**Target**: +12 tests
-
-### Phase 3: Frontend DOM Fixes
-- [ ] Add data-testid to components (3 files)
-- [ ] Update tests to use data-testid
-**Target**: +80 tests
-
-### Phase 4: Frontend Component Fixes
-- [ ] Accordion.test.tsx
-- [ ] Badge.test.tsx
-- [ ] Card.test.tsx
-- [ ] Modal.test.tsx
-- [ ] ChannelBadge.test.tsx
-**Target**: +30 tests
-
-### Phase 5: Backend Code Fixes
-- [ ] Fix formatting_service.py bug
-- [ ] Add error handling
-**Target**: +5 tests
-
-### Phase 6: New Tests
-- [ ] Backend coverage tests
-- [ ] Frontend coverage tests
-**Target**: +30-50 new tests
+- [ ] Server starts without GPU
+- [ ] Runner polls and claims jobs
+- [ ] Audio processing completes successfully
+- [ ] Results uploaded to server
+- [ ] Audio files deleted after processing
+- [ ] Multiple runners can run simultaneously
+- [ ] Server image < 200MB
+- [ ] Runner image ~8GB (unchanged)
+- [ ] All tests pass with new architecture
 
 ---
 
 **Status**: ✅ READY FOR EXECUTION
-**Created**: 2026-01-04 09:00 UTC
-**Owner**: Development Team
-**Priority**: HIGH - Fix all failing tests to achieve 95%+ pass rate
+**Created**: 2026-01-05
+**Priority**: HIGH - Architectural improvement for scalability
+**Estimated Total Time**: 8-12 hours
 
-**Next Step**: Execute Sprint 1 (Phase 1: Backend Mock Fixes)
+**Next Step**: Execute Phase 1 (Database Migration)

@@ -1,10 +1,12 @@
 # Whisper Summarizer
 
-音声文字起こし・要約システム - faster-whisper (cuDNN) & Supabase統合版
+音声文字起こし・要約システム - Server/Runner 分散アーキテクチャ版
 
 ## 概要
 
 Whisper Summarizerは、音声ファイルを自動で文字起こしし、GLM-4.5-Air API (OpenAI-compatible) による要約を生成するWebアプリケーションです。
+
+**🎯 新アーキテクチャ**: サーバーとランナーを分離し、スケーラビリティとコスト効率を大幅に改善しました。
 
 ### 主な機能
 
@@ -12,35 +14,46 @@ Whisper Summarizerは、音声ファイルを自動で文字起こしし、GLM-4
 - **AI要約生成**: GLM-4.5-Air (OpenAI-compatible API) による高品質な要約
 - **音声管理**: アップロードした音声と文字起こし結果の削除機能
 - **ユーザー認証**: Supabase Authによる安全な認証
-- **Docker Compose**: シンプルな2コンテナ構成
+- **分散処理**: 軽量サーバー (VPS) + GPUランナー (別サーバー)
+
+### アーキテクチャ
+
+```
+フロントエンド (Vite:3000) → サーバー (FastAPI, ~150MB) ←→ ランナー (GPU, ~8GB)
+                           ↓                              ↓
+                      PostgreSQL                faster-whisper + GLM
+```
+
+**メリット**:
+- ✅ **サーバーはGPU不要** - 安価なVPSで動作可能
+- ✅ **水平スケーリング** - 複数のランナーを追加可能
+- ✅ **独立デプロイ** - サーバーとランナーを別々に更新可能
+- ✅ **コスト最適化** - GPUはランナーのみで使用
 
 ### 技術スタック
 
-| コンポーネント | 技術 |
-|---|---|
-| フロントエンド | React 19 + TypeScript + Vite + Tailwind CSS |
-| ステート管理 | Jotai (atomic state) |
-| UIコンポーネント | Tailwind CSS + lucide-react (icons) |
-| バックエンド | FastAPI + Python 3.12 + uv |
-| 音声処理 | faster-whisper (CTranslate2 + cuDNN) |
-| AI要約 | GLM-4.5-Air (OpenAI-compatible API) |
-| 認証 | Supabase Auth (Google OAuth only) |
-| データベース | PostgreSQL 18 Alpine (開発) / Supabase PostgreSQL (本番) |
-| ファイル保存 | ローカルファイルシステム (gzip圧縮) |
-| コンテナ | Docker + Docker Compose |
+| コンポーネント | サーバー | ランナー |
+|---|---|---|
+| ベースイメージ | python:3.12-slim (~150MB) | fastwhisper-base (~8GB) |
+| バックエンド | FastAPI + Python 3.12 | faster-whisper + GLM |
+| 音声処理 | なし | faster-whisper (cuDNN) |
+| AI要約 | なし | GLM-4.5-Air API |
+| データベース | PostgreSQL 18 Alpine | - |
+| 認証 | Supabase Auth | - |
 
 ### Dockerイメージサイズ
 
 | イメージ | サイズ | 説明 |
 |---|---|---|
-| whisper_summarizer-backend | ~8GB | FastAPI + Python + CUDA cuDNN Runtime + faster-whisper |
+| whisper_summarizer-server | ~150MB | FastAPIサーバー (GPU不要) ⭐ NEW |
+| whisper_summarizer-runner | ~8GB | GPU処理用ランナー (faster-whisper + GLM) ⭐ NEW |
 | whisper_summarizer-frontend | 380MB | React + Vite (開発) / Nginx (本番) |
 | postgres | ~250MB | PostgreSQL 18 Alpine (開発のみ) |
 
 **アーキテクチャ改善:**
-- whisper.cpp (3.46GB) の別コンテナが不要に
-- faster-whisperはPythonライブラリとしてバックエンドに統合
-- cuDNN最適化カーネルによりGPU性能が向上 (40-60x vs 20-30x)
+- サーバーはGPU不要 - 安価なVPSで運用可能
+- ランナーはGPUサーバーで動作 - 必要に応じてスケール
+- 処理完了後に音声ファイルを自動削除 - ディスク容量節約
 
 ## セットアップ
 
@@ -66,51 +79,66 @@ cp .env.sample .env
 
 2. `.env`を編集して以下を設定:
 
+**サーバー設定 (.env)** - GPU不要:
 ```bash
+# データベース設定
+POSTGRES_DB=whisper_summarizer
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=postgres
+
 # Supabase設定 (Supabaseダッシュボードから取得)
 SUPABASE_URL=https://xxxx.supabase.co
 SUPABASE_ANON_KEY=eyJ...
 SUPABASE_SERVICE_ROLE_KEY=eyJ...
 
-# GLM API設定 (OpenAI-compatible - https://z.ai/ から取得)
-GLM_API_KEY=your_glm_api_key
-GLM_MODEL=GLM-4.5-Air             # 使用モデル (GLM-4.5-Air, GLM-4.5, GLM-4.7 等)
-GLM_BASE_URL=https://api.z.ai/api/paas/v4/  # 国際エンドポイント (中国国内: https://open.bigmodel.cn/api/paas/v4/)
-REVIEW_LANGUAGE=zh                 # 要約生成言語 (zh, ja, en)
+# ランナー認証 (サーバーとランナーで同じ値を設定)
+RUNNER_API_KEY=your-super-secret-runner-api-key
 
-# データベース設定 (開発環境ではPostgreSQL 18 Alpineを使用)
-# 本番環境でSupabase PostgreSQLを使用する場合はDATABASE_URLを設定してください
-POSTGRES_DB=whisper_summarizer
-POSTGRES_USER=postgres
-POSTGRES_PASSWORD=postgres
-
-# バックエンド設定
+# サーバー設定
 CORS_ORIGINS=http://localhost:3000
+```
+
+**ランナー設定 (runner/.env)** - GPUが必要:
+```bash
+# サーバー接続 (サーバーのURLを指定)
+SERVER_URL=http://localhost:8000  # 本番環境: https://your-server.com
+RUNNER_API_KEY=your-super-secret-runner-api-key  # サーバーと同じ値
+RUNNER_ID=runner-gpu-01
+
+# ポーリング設定
+POLL_INTERVAL_SECONDS=10          # ジョブ取得間隔 (秒)
+MAX_CONCURRENT_JOBS=2             # 並列処理数 (GPU: 2-4推奨)
 
 # faster-whisper設定 (GPU加速)
 FASTER_WHISPER_DEVICE=cuda                  # cuda (GPU) または cpu
-FASTER_WHISPER_COMPUTE_TYPE=int8_float16     # int8_float16 (推奨, GPU), float16 (GPU), float32 (GPU), int8 (CPU)
+FASTER_WHISPER_COMPUTE_TYPE=int8_float16     # int8_float16 (推奨, GPU), int8 (CPU)
 FASTER_WHISPER_MODEL_SIZE=large-v3-turbo
-WHISPER_LANGUAGE=zh                         # 文字起こし言語 (auto, zh, ja, en 等)
-WHISPER_THREADS=4                           # 処理に使用するスレッド数
+WHISPER_LANGUAGE=zh                         # 文字起こし言語
+WHISPER_THREADS=4                           # 処理スレッド数
 
 # Audio Chunking (長音声の高速文字起こし)
-ENABLE_CHUNKING=true              # チャンキング機能の有効化
-CHUNK_SIZE_MINUTES=10             # チャンクの長さ（分）- 推奨: CPUで5-10、GPUで10-15
-CHUNK_OVERLAP_SECONDS=15          # チャンク間のオーバーラップ（秒）- VAD有効時15秒、固定分割時30秒
-MAX_CONCURRENT_CHUNKS=4           # 並列処理するチャンク数 - GPU: 4-8推奨
-USE_VAD_SPLIT=true                # 無音検出によるスマート分割
-VAD_SILENCE_THRESHOLD=-30         # 無音と判定する閾値
-VAD_MIN_SILENCE_DURATION=0.5      # 分割点として判定する最小無音時間（秒）
-MERGE_STRATEGY=lcs                # マージ戦略: lcs（テキストベース）、timestamp（シンプル）
+ENABLE_CHUNKING=true              # チャンキング有効
+CHUNK_SIZE_MINUTES=10             # チャンク長さ（分）
+CHUNK_OVERLAP_SECONDS=15          # オーバーラップ（秒）
+MAX_CONCURRENT_CHUNKS=4           # 並列チャンク数 (GPU: 4-8推奨)
+USE_VAD_SPLIT=true                # 無音検出分割
+VAD_SILENCE_THRESHOLD=-30         # 無音閾値
+VAD_MIN_SILENCE_DURATION=0.5      # 最小無音時間
+MERGE_STRATEGY=lcs                # マージ戦略
+
+# GLM API設定 (OpenAI-compatible)
+GLM_API_KEY=your_glm_api_key      # https://z.ai/ から取得
+GLM_MODEL=GLM-4.5-Air             # 使用モデル
+GLM_BASE_URL=https://api.z.ai/api/paas/v4/  # 国際エンドポイント
+REVIEW_LANGUAGE=zh                 # 要約言語 (zh, ja, en)
 ```
 
 ### ベースイメージのビルド（初回のみ）
 
-**初回起動前に**、faster-whisperモデルを含むベースイメージをビルドする必要があります:
+**ランナー用**、faster-whisperモデルを含むベースイメージをビルドする必要があります:
 
 ```bash
-# ベースイメージをビルド (~10-15分、モデルダウンロード含む)
+# ランナー ベースイメージをビルド (~10-15分、モデルダウンロード含む)
 ./build_fastwhisper_base.sh
 
 # 出力例:
@@ -122,6 +150,8 @@ MERGE_STRATEGY=lcs                # マージ戦略: lcs（テキストベース
 - NVIDIA CUDA 12.9.1 cuDNN Runtime
 - Python 3.12 + uv + faster-whisper
 - **事前ダウンロード済み** `large-v3-turbo` モデル (~3GB)
+
+**※ サーバーはGPU不要で、ベースイメージは不要です** (python:3.12-slimを使用)
 
 **ベースイメージの再ビルドが必要な場合:**
 - モデルの更新が必要な時
@@ -218,37 +248,78 @@ whisper_summarizer/
 │   ├── Dockerfile
 │   └── package.json
 │
-├── backend/               # FastAPIバックエンド (faster-whisper統合)
+├── server/                # 軽量サーバー (GPU不要) ⭐ NEW
 │   ├── app/
-│   │   ├── api/          # APIエンドポイント
-│   │   ├── services/     # faster-whisper + Gemini + Storage統合
+│   │   ├── api/          # APIエンドポイント (auth, audio, transcriptions, admin, runner)
+│   │   ├── services/     # Storage統合のみ
 │   │   ├── core/         # 設定・Supabase統合
 │   │   ├── models/       # データベースモデル
 │   │   └── schemas/      # Pydanticスキーマ
-│   ├── Dockerfile        # CUDA cuDNN Runtimeベース
+│   ├── Dockerfile        # python:3.12-slim ベース
+│   └── requirements.txt  # 軽量依存関係のみ
+│
+├── runner/                # GPU処理ランナー ⭐ NEW
+│   ├── app/
+│   │   ├── worker/       # ポーリングワーカー
+│   │   ├── services/     # faster-whisper + GLM + Storage統合
+│   │   ├── config.py     # ランナー設定
+│   │   └── models/       # ジョブスキーマ
+│   ├── Dockerfile        # fastwhisper-base ベース
 │   └── requirements.txt  # faster-whisper依存関係
 │
 ├── data/                 # データ保存用 (Dockerボリュームマウント)
-│   ├── uploads/          # アップロードされた音声ファイル
-│   └── output/           # 文字起こし結果
+│   ├── uploads/          # アップロードされた音声ファイル (処理後に自動削除)
+│   └── transcribes/      # 文字起こし結果 (gzip圧縮)
 │
-├── docker-compose.yml     # 本番環境
-├── docker-compose.dev.yml # 開発環境
-└── .env.sample           # 環境変数テンプレート
+├── docker-compose.yml             # 本番環境 (server + runner)
+├── docker-compose.dev.yml         # 開発環境 (server + runner)
+├── docker-compose.runner.yml      # ランナー専用 (別サーバー用)
+└── .env.sample                   # 環境変数テンプレート
 ```
 
 ## クイックスタート
 
+### 開発環境 (Server + Runner 同一マシン)
+
 ```bash
 # 1. 環境変数を設定
 cp .env.sample .env
-# .envを編集してSupabaseとGoogle GeminiのAPIキーを設定
+# .envを編集してSupabaseとGLM APIキーを設定
 
-# 2. 開発環境を起動
+# 2. ランナー用環境変数を設定
+cp runner/.env.sample runner/.env
+# runner/.envを編集してSERVER_URLとRUNNER_API_KEYを設定
+
+# 3. ランナー用ベースイメージをビルド (初回のみ、~10-15分)
+./build_fastwhisper_base.sh
+
+# 4. 開発環境を起動
 ./run_dev.sh up-d
 
-# 3. ブラウザでアクセス
+# 5. ブラウザでアクセス
 # http://localhost:3000
+```
+
+### 本番環境 (ServerとRunnerを別々にデプロイ)
+
+**サーバー (GPU不要):**
+```bash
+# サーバー環境変数を設定
+cp .env.sample .env
+# .envを編集
+
+# サーバーを起動
+docker-compose up -d --build server
+```
+
+**ランナー (GPUが必要):**
+```bash
+# ランナー環境変数を設定
+cp runner/.env.sample runner/.env
+# runner/.envを編集 (SERVER_URLはサーバーのURLに変更)
+
+# ランナーを起動
+docker-compose -f docker-compose.runner.yml up -d --build
 ```
 
 詳細は以下のセクションを参照してください。
@@ -464,7 +535,8 @@ DATABASE_URL="postgresql://..." ./scripts/set_first_admin.sh user@example.com
 開発環境では、ソースコードの変更が即座に反映されます:
 
 - **フロントエンド**: `./frontend` → Vite Dev Server
-- **バックエンド**: `./backend` → Uvicorn --reload (faster-whisperモデルは起動時にロード)
+- **サーバー**: `./server` → Uvicorn --reload (軽量、起動が高速)
+- **ランナー**: `./runner` → 自動再起動 (設定変更時に反映)
 
 ### ログの確認
 
@@ -473,15 +545,19 @@ DATABASE_URL="postgresql://..." ./scripts/set_first_admin.sh user@example.com
 docker-compose -f docker-compose.dev.yml logs -f
 
 # 特定のサービスのログ
-docker-compose -f docker-compose.dev.yml logs -f backend
+docker-compose -f docker-compose.dev.yml logs -f server
+docker-compose -f docker-compose.dev.yml logs -f runner
 docker-compose -f docker-compose.dev.yml logs -f frontend
 ```
 
 ### コンテナに入る
 
 ```bash
-# バックエンドコンテナ
-docker-compose -f docker-compose.dev.yml exec backend bash
+# サーバーコンテナ
+docker-compose -f docker-compose.dev.yml exec server bash
+
+# ランナーコンテナ
+docker-compose -f docker-compose.dev.yml exec runner bash
 
 # フロントエンドコンテナ
 docker-compose -f docker-compose.dev.yml exec frontend sh
@@ -518,30 +594,30 @@ cd tests
 ```
 
 **テスト結果の確認:**
-- バックエンド: カバレッジレポートは `backend/htmlcov/index.html`
+- サーバー: カバレッジレポートは `server/htmlcov/index.html`
 - フロントエンド: Vitestの標準出力
 - E2E: Playwrightレポートは `tests/e2e/playwright-report/index.html` (ホスト側 `data/playwright-report/`)
 - E2Eスクリーンショット: ホスト側 `data/screenshots/` (失敗時は `data/screenshots/failures/`)
 
 **現在のカバレッジ状況:**
-- バックエンド: **100%** (107/107 tests passing) ✅
+- サーバー: **100%** (107/107 tests passing) ✅
 - フロントエンド: **73.6%** (319/433 tests passing, 114 failing)
-- テスト総数: 107件 (バックエンド) + 433件 (フロントエンド) = **540件**
+- テスト総数: 107件 (サーバー) + 433件 (フロントエンド) = **540件**
 
-### バックエンドテスト (Pytest)
+### サーバーテスト (Pytest)
 
 ローカル環境でテストを実行する場合:
 
 ```bash
 # テストを実行
-cd backend
+cd server
 uv run pytest
 
 # カバレッジ付きで実行
 uv run pytest --cov=app --cov-report=html --cov-report=term
 
 # 特定のテストを実行
-uv run pytest ../tests/backend/api/test_auth_api.py
+uv run pytest ../tests/server/api/test_auth_api.py
 
 # マーカーでフィルター
 uv run pytest -m unit          # 単体テストのみ
@@ -549,9 +625,9 @@ uv run pytest -m integration   # 統合テストのみ
 ```
 
 **テストの構成:**
-- `tests/backend/api/` - APIエンドポイントのテスト
-- `tests/backend/services/` - サービスレイヤーのテスト
-- `tests/backend/integration/` - 統合テスト
+- `tests/server/api/` - APIエンドポイントのテスト
+- `tests/server/services/` - サービスレイヤーのテスト
+- `tests/server/integration/` - 統合テスト
 
 ### フロントエンドテスト (Vitest)
 
@@ -629,9 +705,42 @@ npm run test:headed
 | GET | `/api/transcriptions/{id}/channels` | 転写のチャンネル取得 |
 | POST | `/api/transcriptions/{id}/channels` | 転写をチャンネルに割り当て |
 
+### Runner APIエンドポイント ⭐ NEW
+
+ランナーからサーバーへアクセスするためのエンドポイントです (API Key認証が必要):
+
+| メソッド | パス | 説明 |
+|---|---|---|
+| GET | `/api/runner/jobs` | 保留中のジョブを取得 |
+| POST | `/api/runner/jobs/{id}/start` | ジョブを処理開始 |
+| GET | `/api/runner/audio/{id}` | 音声ファイルをダウンロード |
+| POST | `/api/runner/jobs/{id}/complete` | ジョブ完了結果を送信 |
+| POST | `/api/runner/jobs/{id}/fail` | ジョブ失敗を報告 |
+| POST | `/api/runner/heartbeat` | ランナー稼動状態を報告 |
+
+**リクエスト例:**
+
+```bash
+# ジョブを取得
+curl -H "Authorization: Bearer RUNNER_API_KEY" \
+  http://server:8000/api/runner/jobs?status=pending&limit=10
+
+# ジョブを開始
+curl -X POST -H "Authorization: Bearer RUNNER_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"runner_id": "runner-gpu-01"}' \
+  http://server:8000/api/runner/jobs/abc123/start
+
+# ジョブを完了
+curl -X POST -H "Authorization: Bearer RUNNER_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"text": "転写テキスト...", "summary": "要約...", "processing_time_seconds": 45}' \
+  http://server:8000/api/runner/jobs/abc123/complete
+```
+
 ## Audio Chunking (長音声の高速文字起こし)
 
-長音声ファイル（10分以上）の文字起こし速度を向上させるため、チャンキング機能を実装しています。
+ランナー側で長音声ファイル（10分以上）の文字起こし速度を向上させるため、チャンキング機能を実装しています。
 
 ### 機能概要
 
@@ -699,7 +808,7 @@ USE_VAD_SPLIT=true
 
 ## トラブルシューティング
 
-### GPUが認識されない
+### ランナーのGPUが認識されない
 
 ```bash
 # ホストマシンでGPUを確認
@@ -708,13 +817,15 @@ nvidia-smi
 # nvidia-container-runtimeがインストールされているか確認
 docker run --rm --gpus all nvidia/cuda:12.4.0-base-ubuntu22.04 nvidia-smi
 
-# コンテナ内でGPUを確認
-docker-compose -f docker-compose.dev.yml exec backend nvidia-smi
+# ランナーコンテナ内でGPUを確認
+docker-compose -f docker-compose.dev.yml exec runner nvidia-smi
 ```
 
 **エラー: `could not select device driver`**
 - nvidia-container-toolkitをインストール: https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html
 - Dockerデーモンを再起動: `sudo systemctl restart docker`
+
+**注意**: サーバーはGPU不要です。GPUの問題はランナー側のみです。
 
 ### ポートが既に使用されている
 
@@ -722,7 +833,7 @@ docker-compose -f docker-compose.dev.yml exec backend nvidia-smi
 # 使用中のポートを確認
 sudo lsof -i :3000
 sudo lsof -i :3080
-sudo lsof -i :8001
+sudo lsof -i :8000
 
 # プロセスを終了
 sudo kill -9 <PID>
@@ -730,21 +841,47 @@ sudo kill -9 <PID>
 
 ### Dockerイメージを再ビルド
 
+**サーバー (軽量、高速ビルド):**
 ```bash
 # キャッシュなしでビルド
-docker-compose -f docker-compose.dev.yml build --no-cache
+docker-compose -f docker-compose.dev.yml build --no-cache server
 
 # 全てのボリュームを削除して再起動
 docker-compose -f docker-compose.dev.yml down -v
 docker-compose -f docker-compose.dev.yml up --build
 ```
 
+**ランナー (ベースイメージが必要):**
+```bash
+# ベースイメージを再ビルド (モデル再ダウンロード含む)
+./build_fastwhisper_base.sh --no-cache
+
+# ランナーをビルド
+docker-compose -f docker-compose.dev.yml build --no-cache runner
+```
+
+### ランナーがサーバーに接続できない
+
+**問題**: ランナーが `Connection refused` エラーを表示
+
+**解決策**:
+1. サーバーが起動しているか確認: `docker-compose ps`
+2. `runner/.env` の `SERVER_URL` が正しいか確認
+   - 開発環境: `http://server:8000` (Docker内部ネットワーク)
+   - 本番環境: `https://your-server.com` (実際のサーバーURL)
+3. `RUNNER_API_KEY` がサーバーの `.env` と一致しているか確認
+
 ### faster-whisperモデルのダウンロード
 
-faster-whisperモデルは初回使用時に自動的に `/tmp/whisper_models` にダウンロードされます:
+faster-whisperモデルは初回使用時に自動的にベースイメージに含まれています:
 - モデルサイズ: large-v3-turbo ~3GB
-- ダウンロード元: Hugging Face
-- 一度ダウンロードされるとキャッシュされます
+- ベースイメージビルド時に事前ダウンロード
+- 一度ビルドされるとキャッシュされます
+
+**再ビルドが必要な場合**:
+```bash
+./build_fastwhisper_base.sh --no-cache
+```
 
 ## ライセンス
 

@@ -8,19 +8,29 @@ GPU-accelerated audio transcription with AI summarization using faster-whisper +
 
 **Performance**: GPU (RTX 3080) achieves **40-60x speedup** vs CPU (20-min file: ~1-1.5 min vs ~60 min).
 
-### Architecture
+### Architecture (Server/Runner Split)
 
 ```
-Frontend (Vite:3000) → Backend (FastAPI:8000) → PostgreSQL + Supabase Auth
-                                    ↓
-                            faster-whisper (cuDNN)
+Frontend (Vite:3000) → Server (FastAPI, ~150MB) ←→ Runner (GPU, ~8GB)
+                           ↓                              ↓
+                      PostgreSQL                faster-whisper + GLM
 ```
+
+**Key Benefits:**
+- **Server runs on cheap VPS** (no GPU needed)
+- **Horizontal scaling** (multiple runners)
+- **Independent deployment** (update server without affecting processing)
+- **Cost optimization** (only runner needs GPU)
 
 **Key Points:**
+- **Server**: Lightweight API server (auth, database, job queue, admin endpoints)
+- **Runner**: GPU worker (faster-whisper, GLM summarization, job polling)
+- **Communication**: HTTP-based job queue with API key authentication
+- **Audio cleanup**: Files deleted after processing to save space
 - **Local PostgreSQL 18 Alpine** for dev (internal, no port export)
 - **Local filesystem** for transcriptions (`/app/data/transcribes/`, gzip-compressed)
 - **Supabase Auth** only (no Storage)
-- **Vite proxy** forwards `/api/*` to backend, disables buffering for SSE
+- **Vite proxy** forwards `/api/*` to server, disables buffering for SSE
 
 ## Development Commands
 
@@ -71,16 +81,50 @@ docker-compose -f docker-compose.dev.yml up -d --force-recreate
 
 ## Code Architecture
 
-### Backend (`backend/app/`)
+### Server (`server/app/`)
+
+**Lightweight API server** - No GPU, no whisper, no ffmpeg required.
 
 ```
 app/
-├── api/              # FastAPI routers (auth, audio, transcriptions, admin)
-├── core/             # Config, Supabase, GLM API integration
-├── services/         # Business logic (whisper, storage, transcription processor)
-├── models/           # SQLAlchemy ORM (UUID primary keys)
+├── api/              # FastAPI routers
+│   ├── auth.py       # Supabase OAuth
+│   ├── audio.py      # Audio upload
+│   ├── transcriptions.py  # Transcription CRUD
+│   ├── admin.py      # Admin endpoints (users, channels, audio)
+│   └── runner.py     # Runner API (job queue) ⭐ NEW
+├── core/             # Config, Supabase integration
+├── services/         # Lightweight services only
+│   └── storage_service.py  # File storage (database + paths)
+├── models/           # SQLAlchemy ORM
+│   └── transcription.py     # + status, runner_id, started_at, etc.
 ├── schemas/          # Pydantic validation
+│   └── runner.py     # Runner API schemas ⭐ NEW
 └── db/session.py     # Database session management
+```
+
+**Removed from Server** (moved to runner):
+- `whisper_service.py` - faster-whisper transcription
+- `transcription_processor.py` - Audio processing orchestration
+- `glm_service.py` - GLM API summarization
+- All ffmpeg/whisper/CUDA dependencies
+
+### Runner (`runner/app/`)
+
+**GPU worker** - Polls server for jobs, processes audio, uploads results.
+
+```
+app/
+├── worker/
+│   └── poller.py     # Main polling loop (async)
+├── services/
+│   ├── job_client.py     # Server communication (HTTP) ⭐ NEW
+│   ├── whisper_service.py    # faster-whisper (from backend)
+│   ├── glm_service.py        # GLM summarization (from backend)
+│   └── audio_processor.py    # Orchestration ⭐ NEW
+├── models/
+│   └── job_schemas.py    # Job DTOs ⭐ NEW
+└── config.py          # Runner configuration (server URL, API key) ⭐ NEW
 ```
 
 ### Frontend (`frontend/src/`)
@@ -105,40 +149,71 @@ src/
 - **Google OAuth only** (email/password removed)
 - **ConfirmDialog** component (NEVER use `window.confirm`)
 
-## Environment Variables (.env)
+## Environment Variables
+
+### Server (.env)
+
+**Server environment variables** - Lightweight, no GPU requirements.
 
 ```bash
-# Supabase (Auth only)
-SUPABASE_URL=https://xxxx.supabase.co
-SUPABASE_ANON_KEY=eyJ...
-SUPABASE_SERVICE_ROLE_KEY=eyJ...
-
-# Database (Dev: PostgreSQL 18 Alpine)
+# Database
+DATABASE_URL=postgresql://postgres:postgres@postgres:5432/whisper_summarizer
 POSTGRES_DB=whisper_summarizer
 POSTGRES_USER=postgres
 POSTGRES_PASSWORD=postgres
 
-# GLM API (OpenAI-compatible)
-GLM_API_KEY=your-key
-GLM_MODEL=GLM-4.5-Air
-GLM_BASE_URL=https://api.z.ai/api/paas/v4/
-REVIEW_LANGUAGE=zh
+# Supabase Auth (Google OAuth only)
+SUPABASE_URL=https://xxxx.supabase.co
+SUPABASE_ANON_KEY=eyJ...
+SUPABASE_SERVICE_ROLE_KEY=eyJ...
+
+# Runner Authentication (NEW - Required)
+RUNNER_API_KEY=your-super-secret-runner-api-key-here
+
+# Server Configuration
+CORS_ORIGINS=http://localhost:3000
+```
+
+**Server Docker Image**: `python:3.12-slim` (~150MB)
+
+### Runner (.env)
+
+**Runner environment variables** - GPU required, whisper + GLM.
+
+```bash
+# Server Connection (NEW - Required)
+SERVER_URL=http://localhost:8000  # Or https://your-server.com
+RUNNER_API_KEY=your-super-secret-runner-api-key-here
+RUNNER_ID=runner-gpu-01
+
+# Polling Configuration (NEW)
+POLL_INTERVAL_SECONDS=10           # How often to poll for jobs
+MAX_CONCURRENT_JOBS=2              # Concurrent jobs per runner
+JOB_TIMEOUT_SECONDS=3600           # Max time per job
 
 # faster-whisper (GPU enabled by default)
-FASTER_WHISPER_DEVICE=cuda              # cuda or cpu
-FASTER_WHISPER_COMPUTE_TYPE=int8_float16  # Mixed precision (recommended)
+FASTER_WHISPER_DEVICE=cuda              # cuda (GPU) or cpu
+FASTER_WHISPER_COMPUTE_TYPE=int8_float16 # int8_float16 (GPU), int8 (CPU)
 FASTER_WHISPER_MODEL_SIZE=large-v3-turbo
 WHISPER_LANGUAGE=zh
 WHISPER_THREADS=4
 
-# Audio Chunking
+# Audio Chunking (long audio optimization)
 ENABLE_CHUNKING=true
 CHUNK_SIZE_MINUTES=10
 CHUNK_OVERLAP_SECONDS=15
-MAX_CONCURRENT_CHUNKS=2           # GPU: 4-8 recommended
+MAX_CONCURRENT_CHUNKS=4           # GPU: 4-8 recommended
 USE_VAD_SPLIT=true
 MERGE_STRATEGY=lcs
+
+# GLM API (OpenAI-compatible - Moved from Server)
+GLM_API_KEY=your-glm-api-key
+GLM_MODEL=GLM-4.5-Air
+GLM_BASE_URL=https://api.z.ai/api/paas/v4/
+REVIEW_LANGUAGE=zh
 ```
+
+**Runner Docker Image**: `whisper-summarizer-fastwhisper-base:latest` (~8GB)
 
 ## User & Channel Management
 
@@ -203,7 +278,35 @@ PRIMARY KEY (channel_id, user_id)
 transcription_id UUID REFERENCES transcriptions(id) ON DELETE CASCADE
 channel_id UUID REFERENCES channels(id) ON DELETE CASCADE
 PRIMARY KEY (transcription_id, channel_id)
+
+-- transcriptions (with server/runner split fields)
+id UUID PRIMARY KEY
+-- ... existing fields ...
+
+status VARCHAR(20) DEFAULT 'pending'      -- NEW: pending, processing, completed, failed
+runner_id VARCHAR(100)                      -- NEW: Which runner is processing
+started_at TIMESTAMP                        -- NEW: When processing started
+completed_at TIMESTAMP                      -- NEW: When processing finished
+error_message TEXT                          -- NEW: Error details if failed
+processing_time_seconds INTEGER             -- NEW: Processing duration
+
+-- Indexes for runner queries
+CREATE INDEX idx_transcriptions_status ON transcriptions(status);
+CREATE INDEX idx_transcriptions_status_created ON transcriptions(status, created_at);
 ```
+
+### Transcription Status Flow
+
+```
+pending → processing → completed
+                ↘ failed
+```
+
+**Status meanings**:
+- `pending`: Audio uploaded, waiting for runner to claim
+- `processing`: Runner has claimed the job and is processing
+- `completed`: Transcription and summary complete
+- `failed`: Processing failed (check `error_message`)
 
 ## Cascade Deletes
 
@@ -364,11 +467,61 @@ const uploadFileViaAPI = async (page: Page, filePath: string) => {
 
 ## Important Notes
 
-1. **faster-whisper with cuDNN** runs in-process within backend container
-2. **Base image**: Run `./build_fastwhisper_base.sh` first (~10-15 min, includes model download)
-3. **Hot reload**: Volume mounts for instant code updates
-4. **Test coverage**: Backend 100% (107/107 ✅), Frontend 73.6% (319/433)
-5. **uv** for Python deps (not pip)
-6. **Jotai** for state (not React Context)
-7. **Data persistence**: `data/` directory volume-mounted
-8. **SSE Streaming**: Vite proxy disables buffering for real-time AI chat
+1. **Server/Runner Architecture**: Server is lightweight (~150MB), runner has GPU (~8GB)
+2. **Server**: Runs on any VPS without GPU, handles auth, database, job queue
+3. **Runner**: Runs on GPU server, polls for jobs, processes audio with faster-whisper + GLM
+4. **Communication**: HTTP-based job queue with API key authentication
+5. **Audio cleanup**: Files deleted after processing to save space
+6. **faster-whisper with cuDNN** runs in runner container (not server)
+7. **Base image**: Run `./build_fastwhisper_base.sh` first for runner (~10-15 min, includes model download)
+8. **Hot reload**: Volume mounts for instant code updates (server and runner)
+9. **Test coverage**: Backend 100% (107/107 ✅), Frontend 73.6% (319/433)
+10. **uv** for Python deps (not pip)
+11. **Jotai** for state (not React Context)
+12. **Data persistence**: `data/` directory volume-mounted
+13. **SSE Streaming**: Vite proxy disables buffering for real-time AI chat
+
+## Server/Runner API
+
+### Runner API Endpoints (Server → Runner)
+
+These endpoints are called by the runner to poll for jobs and submit results:
+
+**Authentication**: `Authorization: Bearer RUNNER_API_KEY` header required
+
+- `GET /api/runner/jobs?status=pending&limit=10` - Get pending jobs
+- `POST /api/runner/jobs/{id}/start` - Claim a job (status: pending → processing)
+- `GET /api/runner/audio/{id}` - Get audio file path for processing
+- `POST /api/runner/jobs/{id}/complete` - Submit transcription result
+- `POST /api/runner/jobs/{id}/fail` - Report job failure
+- `POST /api/runner/heartbeat` - Update runner status (monitoring)
+
+### Job Lifecycle
+
+1. **Upload**: User uploads audio → Server stores → `status=pending`
+2. **Claim**: Runner polls → Claims job → `status=processing`, `runner_id=xxx`
+3. **Process**: Runner downloads audio, transcribes, summarizes
+4. **Complete**: Runner uploads result → `status=completed`, audio deleted
+5. **Failure**: Runner reports error → `status=failed`, error saved
+
+### Deployment Models
+
+**Development**: Single machine
+```
+[Frontend] + [Server] + [Runner] + [Postgres]
+All in docker-compose.dev.yml
+```
+
+**Production**: Separate servers
+```
+VPS (cheap):
+  [Frontend] + [Server] + [Postgres]
+
+GPU Server (RunPod, Lambda Labs, etc.):
+  [Runner] → connects to remote SERVER_URL
+```
+
+**Horizontal Scaling**:
+```
+1 Server → N Runners (each with unique RUNNER_ID)
+```
