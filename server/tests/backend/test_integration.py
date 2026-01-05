@@ -7,6 +7,7 @@ Tests end-to-end scenarios including:
 - Admin operations
 """
 
+import os
 import pytest
 import tempfile
 from pathlib import Path
@@ -34,9 +35,10 @@ def test_audio_file():
 @pytest.fixture
 def test_user(db_session):
     """Create a test user."""
+    user_id = uuid4()
     user = User(
-        id=uuid4(),
-        email="test@example.com",
+        id=user_id,
+        email=f"test-{user_id.hex[:8]}@example.com",
         is_active=True,
         is_admin=False
     )
@@ -48,9 +50,10 @@ def test_user(db_session):
 @pytest.fixture
 def admin_user(db_session):
     """Create an admin user."""
+    user_id = uuid4()
     user = User(
-        id=uuid4(),
-        email="admin@example.com",
+        id=user_id,
+        email=f"admin-{user_id.hex[:8]}@example.com",
         is_active=True,
         is_admin=True
     )
@@ -126,7 +129,7 @@ def test_e2e_workflow_upload_to_complete(auth_client, test_audio_file, db_sessio
     assert trans.status == TranscriptionStatus.PENDING
 
     # Step 3: Simulate runner claiming job
-    auth_client.headers["Authorization"] = "Bearer test-runner-api-key"
+    auth_client.headers["Authorization"] = f"Bearer {os.environ.get('RUNNER_API_KEY', 'test-runner-api-key')}"
     start_response = auth_client.post(
         f"/api/runner/jobs/{transcription_id}/start",
         json={"runner_id": "test-runner"}
@@ -185,7 +188,7 @@ def test_e2e_workflow_with_failure(auth_client, test_audio_file, db_session):
     transcription_id = data["id"]
 
     # Claim job
-    auth_client.headers["Authorization"] = "Bearer test-runner-api-key"
+    auth_client.headers["Authorization"] = f"Bearer {os.environ.get('RUNNER_API_KEY', 'test-runner-api-key')}"
     start_response = auth_client.post(
         f"/api/runner/jobs/{transcription_id}/start",
         json={"runner_id": "test-runner"}
@@ -301,9 +304,10 @@ def test_e2e_user_lifecycle(admin_auth_client, db_session):
     5. User can access admin endpoints
     """
     # Create new inactive user
+    new_user_id = uuid4()
     new_user = User(
-        id=uuid4(),
-        email="newuser@example.com",
+        id=new_user_id,
+        email=f"newuser-{new_user_id.hex[:8]}@example.com",
         is_active=False,
         is_admin=False
     )
@@ -345,7 +349,7 @@ def test_runner_heartbeat_integration(auth_client):
     2. Server acknowledges heartbeat
     3. Runner can poll for jobs
     """
-    auth_client.headers["Authorization"] = "Bearer test-runner-api-key"
+    auth_client.headers["Authorization"] = f"Bearer {os.environ.get('RUNNER_API_KEY', 'test-runner-api-key')}"
 
     # Send heartbeat with active jobs
     heartbeat_response = auth_client.post(
@@ -379,7 +383,7 @@ def test_e2e_invalid_audio_upload(auth_client):
 
 def test_e2e_complete_non_existent_job(auth_client):
     """Test completing a job that doesn't exist."""
-    auth_client.headers["Authorization"] = "Bearer test-runner-api-key"
+    auth_client.headers["Authorization"] = f"Bearer {os.environ.get('RUNNER_API_KEY', 'test-runner-api-key')}"
     fake_id = uuid4()
 
     response = auth_client.post(
@@ -400,7 +404,7 @@ def test_e2e_double_start_job(auth_client, test_audio_file, db_session):
     transcription_id = response.json()["id"]
 
     # First start
-    auth_client.headers["Authorization"] = "Bearer test-runner-api-key"
+    auth_client.headers["Authorization"] = f"Bearer {os.environ.get('RUNNER_API_KEY', 'test-runner-api-key')}"
     start_response = auth_client.post(
         f"/api/runner/jobs/{transcription_id}/start",
         json={"runner_id": "runner-1"}
@@ -568,7 +572,7 @@ def test_e2e_concurrent_job_claims(auth_client, test_audio_file):
     transcription_id = response.json()["id"]
 
     # Runner 1 claims job
-    auth_client.headers["Authorization"] = "Bearer test-runner-api-key"
+    auth_client.headers["Authorization"] = f"Bearer {os.environ.get('RUNNER_API_KEY', 'test-runner-api-key')}"
     start_response1 = auth_client.post(
         f"/api/runner/jobs/{transcription_id}/start",
         json={"runner_id": "runner-1"}
@@ -587,8 +591,18 @@ def test_e2e_concurrent_job_claims(auth_client, test_audio_file):
 # Security Tests
 # ============================================================================
 
-def test_e2e_unauthorized_admin_access(test_client, regular_user):
+def test_e2e_unauthorized_admin_access(test_client):
     """Test that regular users cannot access admin endpoints."""
+    # Create a regular (non-admin) user
+    from uuid import uuid4
+    regular_user_id = uuid4()
+    regular_user = User(
+        id=regular_user_id,
+        email=f"regular-{regular_user_id.hex[:8]}@example.com",
+        is_active=True,
+        is_admin=False
+    )
+
     def mock_get_current_user():
         return regular_user
 

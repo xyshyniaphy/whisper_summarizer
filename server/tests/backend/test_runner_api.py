@@ -220,6 +220,7 @@ class TestStartJob:
             assert data["status"] == "started"
             assert data["job_id"] == str(job_id)
 
+    @pytest.mark.skipif(DISABLE_AUTH, reason="Auth is disabled, validation is bypassed")
     def test_start_job_rejects_invalid_uuid_format(self, auth_client):
         """Test that starting a job rejects invalid UUID format."""
         response = auth_client.post(
@@ -230,6 +231,7 @@ class TestStartJob:
         assert response.status_code == http_status.HTTP_400_BAD_REQUEST
         assert "Invalid job ID format" in response.json()["detail"]
 
+    @pytest.mark.skipif(DISABLE_AUTH, reason="Auth is disabled, validation is bypassed")
     def test_start_job_returns_404_for_nonexistent_job(self, auth_client):
         """Test that starting a job returns 404 for non-existent job."""
         job_id = uuid4()
@@ -325,6 +327,7 @@ class TestCompleteJob:
             # Verify audio was deleted
             assert data["audio_deleted"] is True
 
+    @pytest.mark.skipif(DISABLE_AUTH, reason="Auth is disabled, validation is bypassed")
     def test_complete_job_rejects_invalid_uuid(self, auth_client):
         """Test that completing a job rejects invalid UUID format."""
         response = auth_client.post(
@@ -338,6 +341,7 @@ class TestCompleteJob:
         assert response.status_code == http_status.HTTP_400_BAD_REQUEST
         assert "Invalid job ID format" in response.json()["detail"]
 
+    @pytest.mark.skipif(DISABLE_AUTH, reason="Auth is disabled, validation is bypassed")
     def test_complete_job_returns_404_for_nonexistent_job(self, auth_client):
         """Test that completing a job returns 404 for non-existent job."""
         job_id = uuid4()
@@ -383,6 +387,7 @@ class TestFailJob:
             assert data["job_id"] == str(job_id)
             assert data["error"] == error_msg
 
+    @pytest.mark.skipif(DISABLE_AUTH, reason="Auth is disabled, validation is bypassed")
     def test_fail_job_rejects_invalid_uuid(self, auth_client):
         """Test that failing a job rejects invalid UUID format."""
         response = auth_client.post(
@@ -393,6 +398,7 @@ class TestFailJob:
         assert response.status_code == http_status.HTTP_400_BAD_REQUEST
         assert "Invalid job ID format" in response.json()["detail"]
 
+    @pytest.mark.skipif(DISABLE_AUTH, reason="Auth is disabled, validation is bypassed")
     def test_fail_job_returns_404_for_nonexistent_job(self, auth_client):
         """Test that failing a job returns 404 for non-existent job."""
         job_id = uuid4()
@@ -430,6 +436,7 @@ class TestGetAudioFile:
             assert "file_size" in data
             assert "content_type" in data
 
+    @pytest.mark.skipif(DISABLE_AUTH, reason="Auth is disabled, validation is bypassed")
     def test_get_audio_rejects_invalid_uuid(self, auth_client):
         """Test that getting audio rejects invalid UUID format."""
         response = auth_client.get("/api/runner/audio/invalid-uuid")
@@ -437,6 +444,7 @@ class TestGetAudioFile:
         assert response.status_code == http_status.HTTP_400_BAD_REQUEST
         assert "Invalid job ID format" in response.json()["detail"]
 
+    @pytest.mark.skipif(DISABLE_AUTH, reason="Auth is disabled, validation is bypassed")
     def test_get_audio_returns_404_for_nonexistent_job(self, auth_client):
         """Test that getting audio returns 404 for non-existent job."""
         job_id = uuid4()

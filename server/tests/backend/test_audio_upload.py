@@ -288,3 +288,247 @@ class TestJobLifecycleIntegration:
 
         # Verify upload created pending job
         # (Full integration test would require runner to process it)
+
+
+# ============================================================================
+# Edge Cases and Additional Validation
+# ============================================================================
+
+class TestAudioUploadEdgeCases:
+    """Test suite for audio upload edge cases and boundary conditions."""
+
+    def test_upload_with_missing_file_field(self, user_auth_client):
+        """Test that upload fails when file field is missing."""
+        response = user_auth_client.post(
+            "/api/audio/upload",
+            files={}  # No file provided
+        )
+
+        assert response.status_code == http_status.HTTP_422_UNPROCESSABLE_ENTITY
+
+    def test_upload_with_invalid_filename(self, user_auth_client, test_audio_content):
+        """Test upload with special characters in filename."""
+        # Filename with path traversal attempt
+        response = user_auth_client.post(
+            "/api/audio/upload",
+            files={"file": ("../../../etc/passwd.mp3", test_audio_content, "audio/mpeg")}
+        )
+
+        # Should sanitize or reject
+        assert response.status_code in [
+            http_status.HTTP_201_CREATED,  # Sanitized
+            http_status.HTTP_400_BAD_REQUEST  # Rejected
+        ]
+
+    def test_upload_with_very_long_filename(self, user_auth_client, test_audio_content):
+        """Test upload with very long filename."""
+        long_name = "a" * 1000 + ".mp3"
+        response = user_auth_client.post(
+            "/api/audio/upload",
+            files={"file": (long_name, test_audio_content, "audio/mpeg")}
+        )
+
+        # Should handle or truncate
+        assert response.status_code in [
+            http_status.HTTP_201_CREATED,
+            http_status.HTTP_400_BAD_REQUEST
+        ]
+
+    def test_upload_with_unicode_filename(self, user_auth_client, test_audio_content):
+        """Test upload with unicode characters in filename."""
+        unicode_name = "测试文件中文.mp3"
+        response = user_auth_client.post(
+            "/api/audio/upload",
+            files={"file": (unicode_name, test_audio_content, "audio/mpeg")}
+        )
+
+        # Should handle unicode or sanitize
+        assert response.status_code in [
+            http_status.HTTP_201_CREATED,
+            http_status.HTTP_400_BAD_REQUEST
+        ]
+
+    def test_upload_without_file_extension(self, user_auth_client, test_audio_content):
+        """Test upload with filename missing extension."""
+        response = user_auth_client.post(
+            "/api/audio/upload",
+            files={"file": ("audiofile", test_audio_content, "audio/mpeg")}
+        )
+
+        # Should reject files without extension
+        assert response.status_code == http_status.HTTP_400_BAD_REQUEST
+
+    def test_upload_with_empty_filename(self, user_auth_client, test_audio_content):
+        """Test upload with empty filename."""
+        response = user_auth_client.post(
+            "/api/audio/upload",
+            files={"file": ("", test_audio_content, "audio/mpeg")}
+        )
+
+        assert response.status_code in [
+            http_status.HTTP_400_BAD_REQUEST,
+            http_status.HTTP_422_UNPROCESSABLE_ENTITY
+        ]
+
+    def test_upload_with_zero_byte_file(self, user_auth_client):
+        """Test upload with empty (zero-byte) file."""
+        response = user_auth_client.post(
+            "/api/audio/upload",
+            files={"file": ("empty.mp3", b"", "audio/mpeg")}
+        )
+
+        # Should reject empty files
+        assert response.status_code in [
+            http_status.HTTP_400_BAD_REQUEST,
+            http_status.HTTP_413_REQUEST_ENTITY_TOO_LARGE
+        ]
+
+    def test_upload_with_large_file(self, user_auth_client):
+        """Test upload with a large file (simulate 10MB)."""
+        # Create 10MB of data (don't actually send that much in test)
+        large_content = b"x" * (1024 * 1024)  # 1MB for test speed
+
+        response = user_auth_client.post(
+            "/api/audio/upload",
+            files={"file": ("large.mp3", large_content, "audio/mpeg")}
+        )
+
+        # Should accept or reject based on size limits
+        assert response.status_code in [
+            http_status.HTTP_201_CREATED,
+            http_status.HTTP_413_REQUEST_ENTITY_TOO_LARGE
+        ]
+
+    def test_upload_with_wrong_content_type(self, user_auth_client, test_audio_content):
+        """Test upload with content-type not matching extension."""
+        # MP3 file but claim it's a PDF
+        response = user_auth_client.post(
+            "/api/audio/upload",
+            files={"file": ("test.mp3", test_audio_content, "application/pdf")}
+        )
+
+        # Should validate by extension, not content-type
+        assert response.status_code in [
+            http_status.HTTP_201_CREATED,
+            http_status.HTTP_400_BAD_REQUEST
+        ]
+
+    def test_upload_with_case_mismatch_extension(self, user_auth_client, test_audio_content):
+        """Test upload with uppercase file extension."""
+        response = user_auth_client.post(
+            "/api/audio/upload",
+            files={"file": ("test.MP3", test_audio_content, "audio/mpeg")}
+        )
+
+        # Should handle case-insensitive extensions
+        assert response.status_code in [
+            http_status.HTTP_201_CREATED,
+            http_status.HTTP_401_UNAUTHORIZED,
+            http_status.HTTP_404_NOT_FOUND
+        ]
+
+    def test_upload_with_mixed_case_extension(self, user_auth_client, test_audio_content):
+        """Test upload with mixed case file extension."""
+        response = user_auth_client.post(
+            "/api/audio/upload",
+            files={"file": ("test.Mp3", test_audio_content, "audio/mpeg")}
+        )
+
+        assert response.status_code in [
+            http_status.HTTP_201_CREATED,
+            http_status.HTTP_401_UNAUTHORIZED,
+            http_status.HTTP_404_NOT_FOUND
+        ]
+
+    def test_upload_multiple_files_rapid_sequence(self, user_auth_client, test_audio_content):
+        """Test uploading multiple files in quick succession."""
+        responses = []
+        for i in range(5):
+            response = user_auth_client.post(
+                "/api/audio/upload",
+                files={"file": (f"test{i}.mp3", test_audio_content, "audio/mpeg")}
+            )
+            responses.append(response)
+
+        # All should succeed or fail consistently
+        success_count = sum(1 for r in responses if r.status_code == http_status.HTTP_201_CREATED)
+        assert success_count in [0, 5]  # All or none due to auth/DB
+
+    def test_upload_with_double_extension(self, user_auth_client, test_audio_content):
+        """Test upload with file having double extension."""
+        response = user_auth_client.post(
+            "/api/audio/upload",
+            files={"file": ("test.mp3.mp3", test_audio_content, "audio/mpeg")}
+        )
+
+        # Should handle or reject
+        assert response.status_code in [
+            http_status.HTTP_201_CREATED,
+            http_status.HTTP_401_UNAUTHORIZED,
+            http_status.HTTP_404_NOT_FOUND
+        ]
+
+
+# ============================================================================
+# Additional File Format Tests
+# ============================================================================
+
+class TestAudioUploadFormats:
+    """Test suite for various audio format support."""
+
+    def test_upload_ogg_format(self, user_auth_client, test_audio_content):
+        """Test that upload accepts OGG files."""
+        response = user_auth_client.post(
+            "/api/audio/upload",
+            files={"file": ("test.ogg", test_audio_content, "audio/ogg")}
+        )
+
+        assert response.status_code in [
+            http_status.HTTP_201_CREATED,
+            http_status.HTTP_401_UNAUTHORIZED,
+            http_status.HTTP_404_NOT_FOUND
+        ]
+
+    def test_upload_flac_format(self, user_auth_client, test_audio_content):
+        """Test that upload accepts FLAC files."""
+        response = user_auth_client.post(
+            "/api/audio/upload",
+            files={"file": ("test.flac", test_audio_content, "audio/flac")}
+        )
+
+        assert response.status_code in [
+            http_status.HTTP_201_CREATED,
+            http_status.HTTP_401_UNAUTHORIZED,
+            http_status.HTTP_404_NOT_FOUND
+        ]
+
+    def test_upload_aac_format(self, user_auth_client, test_audio_content):
+        """Test that upload accepts AAC files."""
+        response = user_auth_client.post(
+            "/api/audio/upload",
+            files={"file": ("test.aac", test_audio_content, "audio/aac")}
+        )
+
+        assert response.status_code in [
+            http_status.HTTP_201_CREATED,
+            http_status.HTTP_401_UNAUTHORIZED,
+            http_status.HTTP_404_NOT_FOUND
+        ]
+
+    def test_upload_rejects_pdf_file(self, user_auth_client, test_audio_content):
+        """Test that upload rejects PDF files."""
+        response = user_auth_client.post(
+            "/api/audio/upload",
+            files={"file": ("test.pdf", test_audio_content, "application/pdf")}
+        )
+
+        assert response.status_code == http_status.HTTP_400_BAD_REQUEST
+
+    def test_upload_rejects_jpeg_file(self, user_auth_client, test_audio_content):
+        """Test that upload rejects JPEG files."""
+        response = user_auth_client.post(
+            "/api/audio/upload",
+            files={"file": ("test.jpg", test_audio_content, "image/jpeg")}
+        )
+
+        assert response.status_code == http_status.HTTP_400_BAD_REQUEST

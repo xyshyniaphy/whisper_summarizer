@@ -168,9 +168,10 @@ def test_user(db_session: Session) -> User:
     Yields:
         User: Test user instance
     """
+    user_id = str(uuid4())
     user = User(
-        id=str(uuid4()),
-        email="test@example.com",
+        id=user_id,
+        email=f"test-{user_id[:8]}@example.com",
         is_active=True,
         is_admin=False
     )

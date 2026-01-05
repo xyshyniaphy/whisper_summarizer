@@ -99,6 +99,11 @@ def start_scheduler() -> None:
 
     The scheduler runs at CLEANUP_HOUR (default: 9 AM) every day.
     """
+    # Check if scheduler is already running (e.g., during tests)
+    if scheduler.running:
+        logger.info("Scheduler already running, skipping start")
+        return
+
     # Using cron trigger: run at specified hour daily
     trigger = CronTrigger(hour=settings.CLEANUP_HOUR, minute=0)
 
