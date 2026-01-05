@@ -448,12 +448,16 @@ def test_assign_audio_to_channels(admin_client, db_session, admin_user, regular_
         status=TranscriptionStatus.COMPLETED
     )
     db_session.add(trans)
+    db_session.commit()
 
-    # Create channels with unique names
+    # Create channels with unique names - commit separately to avoid batch insert issues
     test_suffix = uuid4().hex[:8]
     channel1 = Channel(id=uuid4(), name=f"Assign-{test_suffix}-Channel-1", created_by=admin_user.id)
+    db_session.add(channel1)
+    db_session.commit()
+
     channel2 = Channel(id=uuid4(), name=f"Assign-{test_suffix}-Channel-2", created_by=admin_user.id)
-    db_session.add_all([channel1, channel2])
+    db_session.add(channel2)
     db_session.commit()
 
     response = admin_client.post(
@@ -462,8 +466,8 @@ def test_assign_audio_to_channels(admin_client, db_session, admin_user, regular_
     )
     assert response.status_code == 200
     data = response.json()
-    assert "channels" in data
-    assert len(data["channels"]) == 2
+    assert "channel_ids" in data
+    assert len(data["channel_ids"]) == 2
 
 
 def test_get_audio_channels_as_admin(admin_client, db_session, admin_user):

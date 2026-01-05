@@ -548,8 +548,8 @@ def assign_audio_to_channels(
     # Add new assignments
     for channel_id in channel_ids:
         ta = TranscriptionChannel(
-            transcription_id=audio_id,
-            channel_id=channel_id,
+            transcription_id=UUID(audio_id),
+            channel_id=UUID(channel_id),
             assigned_by=current_admin.id
         )
         db.add(ta)
