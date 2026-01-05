@@ -74,7 +74,7 @@ describe('cn utility function', () => {
       expect(cn(['text-red-500', 'bg-blue-500'], 'p-4')).toBe('text-red-500 bg-blue-500 p-4')
     })
 
-    it 'オブジェクト形式の条件付きクラスを処理する', () => {
+    it('オブジェクト形式の条件付きクラスを処理する', () => {
       expect(cn({
         'text-red-500': true,
         'bg-blue-500': true,
@@ -130,11 +130,11 @@ describe('cn utility function', () => {
       expect(cn('', false, undefined, null)).toBe('')
     })
 
-    it '数字の0と1を正しく処理する', () => {
+    it('数字の0と1を正しく処理する', () => {
       expect(cn(0, 1, 'text-red-500')).toBe('0 1 text-red-500')
     })
 
-    it '非常に長いクラスリストを処理する', () => {
+    it('非常に長いクラスリストを処理する', () => {
       const classes = Array(100).fill(0).map((_, i) => `class-${i}`)
       const result = cn(...classes)
       expect(result).toBe(classes.join(' '))

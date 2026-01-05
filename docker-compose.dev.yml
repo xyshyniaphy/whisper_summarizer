@@ -17,12 +17,12 @@ services:
     networks:
       - whisper_network_dev
 
-  # FastAPIバックエンド (開発モード - ホットリロード + faster-whisper + Local PostgreSQL)
-  backend:
+  # FastAPI Server (Lightweight - No GPU, No Whisper)
+  server:
     build:
-      context: ./backend
+      context: ./server
       dockerfile: Dockerfile
-    container_name: whisper_backend_dev
+    container_name: whisper_server_dev
     environment:
       # Database (Local PostgreSQL)
       DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-whisper_summarizer}
@@ -32,16 +32,50 @@ services:
       SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
       SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
 
-      # GLM API (OpenAI-compatible)
+      # Runner Authentication
+      RUNNER_API_KEY: ${RUNNER_API_KEY:-dev-secret-key}
+
+      # Server Config
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+      LOG_LEVEL: ${LOG_LEVEL:-DEBUG}
+      DISABLE_AUTH: ${DISABLE_AUTH:-false}
+    ports:
+      - "8000:8000"
+    volumes:
+      # Source code mount for hot reload
+      - ./server:/app
+      # Data directory mount
+      - ./data:/app/data
+      # Logs directory
+      - ./logs:/app/logs
+    command: /bin/sh -c "uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --log-level debug 2>&1 | tee /app/logs/server.log"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - whisper_network_dev
+
+  # GPU Runner (faster-whisper + GLM)
+  runner:
+    build:
+      context: ./runner
+      dockerfile: Dockerfile
+    container_name: whisper_runner_dev
+    environment:
+      # Server Connection
+      SERVER_URL: http://server:8000
+      RUNNER_API_KEY: ${RUNNER_API_KEY:-dev-secret-key}
+      RUNNER_ID: runner-dev
+
+      # Polling Config
+      POLL_INTERVAL_SECONDS: ${POLL_INTERVAL_SECONDS:-10}
+      MAX_CONCURRENT_JOBS: ${MAX_CONCURRENT_JOBS:-2}
+
+      # GLM API (moved from server)
       GLM_API_KEY: ${GLM_API_KEY}
       GLM_MODEL: ${GLM_MODEL:-GLM-4.5-Air}
       GLM_BASE_URL: ${GLM_BASE_URL:-https://api.z.ai/api/paas/v4/}
       REVIEW_LANGUAGE: ${REVIEW_LANGUAGE:-zh}
-
-      # Backend Config
-      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
-      LOG_LEVEL: ${LOG_LEVEL:-DEBUG}
-      DISABLE_AUTH: ${DISABLE_AUTH:-false}
 
       # faster-whisper Config (GPU-accelerated transcription)
       FASTER_WHISPER_DEVICE: ${FASTER_WHISPER_DEVICE:-cuda}
@@ -54,28 +88,23 @@ services:
       ENABLE_CHUNKING: ${ENABLE_CHUNKING:-true}
       CHUNK_SIZE_MINUTES: ${CHUNK_SIZE_MINUTES:-10}
       CHUNK_OVERLAP_SECONDS: ${CHUNK_OVERLAP_SECONDS:-15}
-      MAX_CONCURRENT_CHUNKS: ${MAX_CONCURRENT_CHUNKS:-2}
-      USE_VAD_SPLIT: ${USE_VAD_SPLIT:-false}
+      MAX_CONCURRENT_CHUNKS: ${MAX_CONCURRENT_CHUNKS:-4}
+      USE_VAD_SPLIT: ${USE_VAD_SPLIT:-true}
       VAD_SILENCE_THRESHOLD: ${VAD_SILENCE_THRESHOLD:--30}
       VAD_MIN_SILENCE_DURATION: ${VAD_MIN_SILENCE_DURATION:-0.5}
       MERGE_STRATEGY: ${MERGE_STRATEGY:-lcs}
 
-      # Audio Processing
-      AUDIO_PARALLELISM: ${AUDIO_PARALLELISM:-1}
-    ports:
-      - "5678:5678"  # デバッグポート
+      # Logging
+      LOG_LEVEL: ${LOG_LEVEL:-DEBUG}
     volumes:
-      # ソースコードをマウント (ホットリロード用)
-      - ./backend:/app
-      # ログディレクトリをマウント
-      - ./logs:/app/logs
-      # データディレクトリをマウント
+      # Source code mount for hot reload
+      - ./runner:/app
+      # Data directory mount (shared with server)
       - ./data:/app/data
-      # Pythonキャッシュを除外
-      - /app/__pycache__
-      - /app/.pytest_cache
-      # venvは除外 (ビルド時に作成されたものを使用)
-      - /opt/venv
+      # Logs directory
+      - ./logs:/app/logs
+      # Whisper model cache
+      - runner_cache:/tmp/whisper_models
     # GPU Support (faster-whisper with cuDNN)
     deploy:
       resources:
@@ -84,14 +113,12 @@ services:
             - driver: nvidia
               device_ids: ['0']
               capabilities: [gpu]
-    command: /bin/sh -c "uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --log-level debug 2>&1 | tee /app/logs/backend.log"
     depends_on:
-      postgres:
-        condition: service_healthy
+      - server
     networks:
       - whisper_network_dev
 
-  # Reactフロントエンド (開発モード - Vite Dev Server)
+  # React Frontend (Development - Vite Dev Server)
   frontend:
     build:
       context: ./frontend
@@ -105,17 +132,17 @@ services:
     ports:
       - "3000:3000"
     volumes:
-      # ソースコードをマウント (ホットリロード用)
+      # Source code mount for hot reload
       - ./frontend:/app
-      # ログディレクトリをマウント
+      # Logs directory
       - ./logs:/app/logs
-      # node_modulesを除外
+      # node_modules excluded
       - /app/node_modules
-      # Viteキャッシュを除外
+      # Vite cache excluded
       - /app/.vite
     command: /bin/sh -c "bun run dev -- --host 0.0.0.0 2>&1 | tee /app/logs/frontend.log"
     depends_on:
-      - backend
+      - server
     networks:
       - whisper_network_dev
 
@@ -125,4 +152,6 @@ networks:
 
 volumes:
   postgres_data_dev:
+    driver: local
+  runner_cache:
     driver: local

@@ -5,12 +5,12 @@
  * ポーリングをテストする。
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { Provider } from 'jotai'
-import TranscriptionDetail from '../../../src/pages/TranscriptionDetail'
+import { TranscriptionDetail } from '../../../src/pages/TranscriptionDetail'
 
 // Mock Supabase client
 vi.mock('../../../src/services/supabase', () => ({
@@ -291,7 +291,7 @@ describe('TranscriptionDetail', () => {
       vi.advanceTimersByTime(3000)
     })
 
-    it '完了した転写はポーリングされない', async () => {
+    it('完了した転写はポーリングされない', async () => {
       renderWithRoute('test-1')
 
       await waitFor(() => {

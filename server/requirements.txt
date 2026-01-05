@@ -1,0 +1,47 @@
+# FastAPI and web server
+fastapi==0.116.1
+uvicorn[standard]==0.34.0
+python-multipart==0.0.20
+
+# Database
+sqlalchemy==2.0.42
+psycopg2-binary==2.9.9
+alembic==1.14.0
+
+# Validation and settings
+pydantic[email]==2.10.5
+pydantic-settings==2.7.1
+
+# Authentication
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+
+# HTTP client
+httpx==0.28.1
+
+# Supabase client
+supabase
+
+# Utilities
+python-dotenv==1.0.1
+aiofiles==24.1.0
+python-dateutil==2.9.0
+
+# Scheduled tasks
+APScheduler>=3.10.0
+
+# Document generation (for PPTX export feature)
+python-pptx>=1.0.0
+python-docx>=1.0.0
+
+# Development dependencies
+ruff>=0.8.0
+pytest>=8.3.0
+pytest-cov>=6.0.0
+pytest-asyncio>=0.24.0
+
+# NOTE: Removed from backend:
+# - faster-whisper (moved to runner)
+# - pydub (moved to runner)
+# - openai (GLM API moved to runner)
+# - torch/CUDA/ffmpeg (not needed for server)

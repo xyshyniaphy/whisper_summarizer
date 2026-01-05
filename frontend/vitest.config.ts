@@ -5,9 +5,24 @@ import path from 'path'
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react()],
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, './src'),
+    },
+  },
   test: {
     // テスト環境 (jsdom: ブラウザ環境をシミュレート)
     environment: 'jsdom',
+
+    // jsdom environment options for React 19 compatibility
+    environmentOptions: {
+      jsdom: {
+        resources: 'usable',
+        runScripts: 'dangerously',
+        url: 'http://localhost:3000',
+        pretendToBeVisual: true,
+      },
+    },
 
     // グローバルなテストユーティリティ
     globals: true,
@@ -40,11 +55,6 @@ export default defineConfig({
         branches: 60,
         statements: 60,
       },
-    },
-  },
-  resolve: {
-    alias: {
-      '@': path.resolve(__dirname, './src'),
     },
   },
 })

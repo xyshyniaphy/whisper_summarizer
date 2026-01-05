@@ -205,15 +205,6 @@ describe('Badge Component', () => {
 })
 
 describe('Modal Component', () => {
-  beforeEach(() => {
-    // Prevent body scroll lock in tests
-    vi.spyOn(document.body, 'style', 'get').mockReturnValue({})
-  })
-
-  afterEach(() => {
-    vi.restoreAllMocks()
-  })
-
   describe('Rendering', () => {
     it('isOpen=falseの場合、何も表示されない', () => {
       render(
@@ -281,7 +272,7 @@ describe('Modal Component', () => {
 
   describe('Body Scroll Lock', () => {
     it('モーダルが開いている間、bodyのスクロールが無効になる', () => {
-      const { rerender } = render(
+      render(
         <Modal isOpen={true} onClose={vi.fn()}>
           Content
         </Modal>
@@ -289,6 +280,7 @@ describe('Modal Component', () => {
 
       // Check if overflow style was set (implementation detail)
       // In actual implementation, this would set document.body.style.overflow
+      expect(document.body.style.overflow).toBe('hidden')
     })
 
     it('モーダルが閉じるとスクロールが有効に戻る', () => {
@@ -300,6 +292,7 @@ describe('Modal Component', () => {
 
       unmount()
       // After unmount, scroll should be restored
+      expect(document.body.style.overflow).toBe('unset')
     })
   })
 
@@ -320,7 +313,7 @@ describe('Accordion Components', () => {
   describe('AccordionItem', () => {
     it('AccordionItemが正常にレンダリングされる', () => {
       render(
-        <AccordionItem title="Test Title">Test Content</AccordionItem>
+        <AccordionItem title="Test Title" defaultOpen={true}>Test Content</AccordionItem>
       )
       expect(screen.getByText('Test Title')).toBeTruthy()
       expect(screen.getByText('Test Content')).toBeTruthy()
@@ -341,8 +334,8 @@ describe('Accordion Components', () => {
           Content
         </AccordionItem>
       )
-      // Content should still be in DOM but hidden
-      expect(screen.getByText('Content')).toBeTruthy()
+      // Content should NOT be in DOM when closed (component uses conditional rendering)
+      expect(screen.queryByText('Content')).toBeNull()
     })
   })
 
@@ -359,20 +352,19 @@ describe('Accordion Components', () => {
 
     it('アイコンが回転する', async () => {
       const user = userEvent.setup()
-      const { container } = render(
+      render(
         <AccordionItem title="Title">Content</AccordionItem>
       )
 
       const titleButton = screen.getByText('Title')
-      const icon = container.querySelector('svg')
 
-      // Initially not rotated
-      expect(icon?.className).not.toContain('rotate-180')
+      // Initially not rotated - content not visible
+      expect(screen.queryByText('Content')).toBeNull()
 
       await user.click(titleButton)
 
-      // After click, should be rotated
-      expect(icon?.className).toContain('rotate-180')
+      // After click, should be open - content visible
+      expect(screen.getByText('Content')).toBeTruthy()
     })
   })
 

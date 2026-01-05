@@ -1,3 +1,17 @@
+/**
+ * Test setup for Vitest with React 19 + jsdom
+ *
+ * IMPORTANT: This file runs BEFORE each test file.
+ * Ensure jsdom globals are available before any imports.
+ */
+
+// Ensure jsdom globals are available (fixes "document is not defined")
+if (typeof document === 'undefined') {
+  // This should never happen with environment: 'jsdom', but adding as safety check
+  throw new Error('jsdom environment not loaded. Check vitest.config.ts has environment: "jsdom"')
+}
+
+// Import testing utilities after jsdom is confirmed available
 import { expect, afterEach, vi, beforeAll } from 'vitest'
 import { cleanup } from '@testing-library/react'
 import * as matchers from '@testing-library/jest-dom/matchers'
@@ -110,6 +124,47 @@ vi.mock('axios', () => ({
         response: { use: vi.fn() }
       }
     }))
+  }
+}))
+
+// Mock Supabase client
+vi.mock('@/services/supabase', () => ({
+  supabase: {
+    auth: {
+      getSession: vi.fn(() => Promise.resolve({ data: { session: null }, error: null })),
+      getUser: vi.fn(() => Promise.resolve({ data: { user: null }, error: null })),
+      signInWithOAuth: vi.fn(() => Promise.resolve({ data: { url: 'http://localhost:3000' }, error: null })),
+      signOut: vi.fn(() => Promise.resolve({ error: null })),
+      onAuthStateChange: vi.fn(() => ({ data: { subscription: { unsubscribe: vi.fn() } } })),
+    },
+    from: vi.fn(() => ({
+      select: vi.fn(() => ({
+        eq: vi.fn(() => ({
+          data: [],
+          error: null,
+        })),
+        order: vi.fn(() => ({
+          data: [],
+          error: null,
+        })),
+      })),
+      insert: vi.fn(() => ({
+        data: null,
+        error: null,
+      })),
+      update: vi.fn(() => ({
+        eq: vi.fn(() => ({
+          data: null,
+          error: null,
+        })),
+      })),
+      delete: vi.fn(() => ({
+        eq: vi.fn(() => ({
+          data: null,
+          error: null,
+        })),
+      })),
+    })),
   }
 }))
 

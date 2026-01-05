@@ -1,0 +1,69 @@
+services:
+  # GPU Runner (for deployment on separate GPU server)
+  runner:
+    build:
+      context: ./runner
+      dockerfile: Dockerfile
+    container_name: whisper_runner_prod
+    environment:
+      # Server Connection (point to main server)
+      SERVER_URL: ${SERVER_URL}
+      RUNNER_API_KEY: ${RUNNER_API_KEY}
+      RUNNER_ID: ${RUNNER_ID:-runner-prod-01}
+
+      # Polling Config
+      POLL_INTERVAL_SECONDS: ${POLL_INTERVAL_SECONDS:-10}
+      MAX_CONCURRENT_JOBS: ${MAX_CONCURRENT_JOBS:-4}
+      JOB_TIMEOUT_SECONDS: ${JOB_TIMEOUT_SECONDS:-3600}
+
+      # GLM API (OpenAI-compatible)
+      GLM_API_KEY: ${GLM_API_KEY}
+      GLM_MODEL: ${GLM_MODEL:-GLM-4.5-Air}
+      GLM_BASE_URL: ${GLM_BASE_URL:-https://api.z.ai/api/paas/v4/}
+      REVIEW_LANGUAGE: ${REVIEW_LANGUAGE:-zh}
+
+      # faster-whisper Config (GPU-accelerated transcription)
+      FASTER_WHISPER_DEVICE: ${FASTER_WHISPER_DEVICE:-cuda}
+      FASTER_WHISPER_COMPUTE_TYPE: ${FASTER_WHISPER_COMPUTE_TYPE:-int8_float16}
+      FASTER_WHISPER_MODEL_SIZE: ${FASTER_WHISPER_MODEL_SIZE:-large-v3-turbo}
+      WHISPER_LANGUAGE: ${WHISPER_LANGUAGE:-zh}
+      WHISPER_THREADS: ${WHISPER_THREADS:-4}
+
+      # Audio Chunking
+      ENABLE_CHUNKING: ${ENABLE_CHUNKING:-true}
+      CHUNK_SIZE_MINUTES: ${CHUNK_SIZE_MINUTES:-10}
+      CHUNK_OVERLAP_SECONDS: ${CHUNK_OVERLAP_SECONDS:-15}
+      MAX_CONCURRENT_CHUNKS: ${MAX_CONCURRENT_CHUNKS:-4}
+      USE_VAD_SPLIT: ${USE_VAD_SPLIT:-true}
+      VAD_SILENCE_THRESHOLD: ${VAD_SILENCE_THRESHOLD:--30}
+      VAD_MIN_SILENCE_DURATION: ${VAD_MIN_SILENCE_DURATION:-0.5}
+      MERGE_STRATEGY: ${MERGE_STRATEGY:-lcs}
+
+      # Logging
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    volumes:
+      # Data directory mount (if using NFS/shared storage)
+      - ${DATA_DIR:-./data}:/app/data
+      # Logs directory
+      - ${LOG_DIR:-./logs}:/app/logs
+      # Whisper model cache
+      - runner_cache:/tmp/whisper_models
+    # GPU Support (faster-whisper with cuDNN)
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ['0']
+              capabilities: [gpu]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "pgrep", "-f", "python.*poller"]
+      interval: 60s
+      timeout: 30s
+      retries: 3
+      start_period: 30s
+
+volumes:
+  runner_cache:
+    driver: local

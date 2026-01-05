@@ -1,0 +1,21 @@
+# HTTP client for server communication
+httpx==0.28.1
+
+# Configuration
+pydantic-settings==2.7.1
+python-dotenv==1.0.1
+
+# Audio transcription (GPU required)
+faster-whisper>=1.0.0
+
+# Audio processing
+pydub>=0.25.0
+
+# LLM API (OpenAI-compatible for GLM)
+openai>=1.0.0
+
+# Logging
+python-dateutil==2.9.0
+
+# Copy from backend for compatibility:
+sqlalchemy==2.0.42  # For models/schemas compatibility

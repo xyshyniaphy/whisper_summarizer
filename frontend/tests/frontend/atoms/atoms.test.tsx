@@ -7,6 +7,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { Provider, useAtom, useSetAtom } from 'jotai'
 import { renderHook, act } from '@testing-library/react'
+
+// Unmock Jotai for atoms tests
+vi.unmock('jotai')
+
 import {
   userAtom,
   sessionAtom,
