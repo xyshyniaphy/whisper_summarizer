@@ -114,14 +114,14 @@ def auth_client() -> Generator[TestClient, None, None]:
     Yields:
         TestClient: Authenticated test client for runner API
     """
-    # Override authentication to return a valid runner token
-    async def override_runner_auth():
-        return "test-runner-api-key"
+    # Get the actual RUNNER_API_KEY from environment
+    import os
+    runner_api_key = os.environ.get("RUNNER_API_KEY", "test-runner-api-key")
 
     # For runner API, we just need to pass the Bearer token
     with TestClient(app) as client:
         # Set default authorization header for runner API calls
-        client.headers["Authorization"] = "Bearer test-runner-api-key"
+        client.headers["Authorization"] = f"Bearer {runner_api_key}"
         yield client
 
 
