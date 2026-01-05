@@ -129,15 +129,20 @@
 - [ ] **Phase 5**: E2E test fixes
 - [ ] **Phase 6**: Achieve 100% coverage
 
-### Latest Changes (2026-01-06 - Ralph Loop Iteration 2)
+### Latest Changes (2026-01-06 - Ralph Loop Iteration 3)
 
 - **Iteration 1** (08:31): Removed Jotai global mock, improved atoms to 23/24 passing
 - **Iteration 2** (08:33): Confirmed test stability, analyzed remaining issues
-- Both iterations maintained 75.1% pass rate (325 passing / 108 failing)
+- **Iteration 3** (Current): Investigated useAuth mock complexity - identified root cause
+  - UserMenu/NavBar/TranscriptionDetail tests fail because useAuth hook's useEffect calls Jotai setters during render
+  - Standard mocking approach doesn't work because the real hook is still executed
+  - Potential solutions: (1) Refactor useAuth to not call setters in useEffect, (2) Mock Jotai atoms directly, (3) Integration tests instead of unit tests
+  - Added documentation note to UserMenu test explaining the issue
 
 **Iteration Logs**:
 - `claudelogs/i_260106_0831.md` - Iteration 1: Atoms tests fix
 - `claudelogs/i_260106_0833.md` - Iteration 2: Status confirmation & analysis
+- `claudelogs/i_260106_XXXX.md` - Iteration 3: useAuth mock investigation (to be written)
 
 ---
 
