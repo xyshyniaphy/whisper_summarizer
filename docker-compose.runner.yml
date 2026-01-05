@@ -42,8 +42,8 @@ services:
       # Logging
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
     volumes:
-      # Data directory mount (if using NFS/shared storage)
-      - ${DATA_DIR:-./data}:/app/data
+      # Data directory mount (runner-specific storage)
+      - ${DATA_DIR:-./data/runner}:/app/data
       # Logs directory
       - ${LOG_DIR:-./logs}:/app/logs
       # Whisper model cache

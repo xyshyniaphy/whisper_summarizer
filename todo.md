@@ -1,14 +1,106 @@
 # Whisper Summarizer - Development Tasks
 
-**Last Updated**: 2026-01-05
+**Last Updated**: 2026-01-06
 **Project Status**: Active Development
 
 ---
 
-## Active Work: Frontend Test Fixes (PRIORITY)
+## 🚀 Active Work: Complete Backend API Test Suite (CURRENT PRIORITY)
 
-**Status**: In Progress - Phase 1-2 Complete ✅
-**Goal**: Fix 162 failing frontend tests and achieve 100% coverage
+**Status**: Test Files Created | Integration Test Verified ✅
+**Goal**: Complete test coverage for all backend APIs (transcriptions, admin, runner, integration)
+
+### Backend Test Coverage
+
+| Test File | Endpoints | Status | Test Count |
+|-----------|-----------|--------|------------|
+| `test_runner_api.py` | 6 (Runner API) | ✅ Complete | 35 tests |
+| `test_audio_upload.py` | 2 (Upload, Health) | ✅ Complete | 72 tests |
+| `test_transcriptions_api.py` | 14 (CRUD, Download, Chat, Share) | ✅ Created | ~45 tests |
+| `test_admin_api.py` | 15 (User, Channel, Audio mgmt) | ✅ Created | ~30 tests |
+| `test_integration.py` | End-to-end workflows | ✅ Created | ~20 tests |
+
+**Total**: ~202 comprehensive backend tests
+
+### New Test Files Created
+
+#### 1. test_transcriptions_api.py
+**Coverage**: 14 endpoints
+- List transcriptions (pagination, status filtering)
+- Get single transcription
+- Delete transcription (single, all)
+- Download endpoints (text, DOCX, NotebookLM)
+- Chat endpoints (history, send, stream)
+- Share link creation
+- Channel assignment
+- Edge cases (invalid UUID, pagination errors, validation)
+
+#### 2. test_admin_api.py
+**Coverage**: 15 endpoints
+- User management (list, activate, toggle admin, delete)
+- Channel management (list, create, update, delete)
+- Channel members (add, remove, list)
+- Audio management (list all, assign to channels)
+- Authorization tests (admin required)
+- Edge cases (duplicate names, missing fields, pagination)
+
+#### 3. test_integration.py
+**Coverage**: End-to-end workflows
+- Upload → Process → Complete workflow
+- Failure handling and recovery
+- Channel assignment lifecycle
+- User lifecycle (activation, admin toggle, soft delete)
+- Heartbeat monitoring
+- Error handling (404, 400, 403, 422, 500)
+- Performance tests (concurrent uploads, large files)
+- Data consistency checks
+- Race conditions (duplicate claims, concurrent updates)
+- Security (auth required, admin-only endpoints)
+
+### Integration Test Status (COMPLETED ✅)
+
+| Step | Status | Notes |
+|------|--------|-------|
+| Dev environment start | ✅ Complete | docker-compose.dev.yml running |
+| Audio upload API | ✅ Complete | testdata/2_min.m4a uploaded |
+| Runner processing | ✅ Complete | Transcription successful |
+| Status callback | ✅ Complete | status: pending → completed |
+| Result verification | ✅ Complete | Text + summary returned |
+
+**Fixes Applied During Integration Test**:
+- Fixed `audio_processor.py`: Changed `audio_path` → `audio_file_path`
+- Fixed `audio_processor.py`: Removed invalid `language` parameter
+- Fixed `job_client.py`: Changed fail endpoint to use query params
+- Set `DISABLE_AUTH=true` in .env for testing
+
+### Remaining Tasks
+
+1. **Execute new test files**
+   ```bash
+   # Run all backend tests
+   cd server && python -m pytest tests/backend/ -v
+
+   # Run specific test files
+   python -m pytest tests/backend/test_transcriptions_api.py -v
+   python -m pytest tests/backend/test_admin_api.py -v
+   python -m pytest tests/backend/test_integration.py -v
+   ```
+
+2. **Enhance existing test files** with edge cases
+   - Add more edge cases to `test_runner_api.py`
+   - Add more edge cases to `test_audio_upload.py`
+   - Add authentication tests to all files
+
+3. **Verify 100% test pass rate**
+   - All ~202 tests should pass
+   - Fix any failing tests
+   - Update test coverage reports
+
+---
+
+## Frontend Test Fixes (ON HOLD)
+
+**Status**: Phase 1-2 Complete ✅ | Phase 3-6 On Hold ⏸️
 
 ### Progress Summary
 
@@ -20,143 +112,192 @@
 ### Completed ✅
 
 - [x] **Phase 1**: Fix jsdom environment
-  - [x] Update vitest.config.ts with jsdom options
-  - [x] Add jsdom safety check in tests/setup.ts
-  - [x] Fix syntax errors in cn.test.tsx
-
 - [x] **Phase 2**: Fix React 19 compatibility
-  - [x] Verify @testing-library/react works with React 19
-  - [x] Confirm Modal tests pass (11/11)
-  - [x] Confirm utils tests pass (25/26)
 
-### In Progress 🔄
+### On Hold ⏸️
 
 - [ ] **Phase 3**: Fix remaining 112 test failures
-  - [ ] Fix test expectation mismatches (~50 tests)
-  - [ ] Fix Jotai atom mocking issues (~30 tests)
-  - [ ] Fix async timing issues (~20 tests)
-  - [ ] Fix other component issues (~12 tests)
-
-### Pending ⏳
-
 - [ ] **Phase 4**: Add missing test cases
-  - [ ] Channel components (Badge, Filter, AssignModal)
-  - [ ] Dashboard components (UsersTab, ChannelsTab, AudioTab)
-  - [ ] Error boundary tests
-  - [ ] Export feature tests (DOCX, PPTX, Markdown)
-
 - [ ] **Phase 5**: E2E test fixes
-  - [ ] Fix file upload tests (use API calls)
-  - [ ] Fix authentication flow
-  - [ ] Fix dynamic content waits
-
 - [ ] **Phase 6**: Achieve 100% coverage
-  - [ ] Run coverage report
-  - [ ] Identify remaining gaps
-  - [ ] Write missing tests
-
-### Documentation
-
-- [x] Created `FRONTEND_TEST_FIXES.md` - Comprehensive 9-phase fix plan
-- [x] Preserved `SERVER_RUNNER_SPLIT_PLAN.md` - Original server/runner architecture plan
 
 ---
 
-## Server Tests (COMPLETE)
+## Server/Runner Split (IMPLEMENTED ✅)
+
+**Status**: ✅ Complete | ✅ Fixed I/O conflict (separate data dirs)
+
+### Completed
+
+- [x] Split monolithic backend into server + runner
+- [x] Docker compose with separate data mounts:
+  - Server: `./data/server:/app/data`
+  - Runner: `./data/runner:/app/data`
+- [x] Runner API endpoints (6 endpoints, 35 tests)
+- [x] Job polling and processing workflow
+- [x] Production deployment scripts:
+  - `upload_runner.sh` - Build & push to Docker Hub
+  - `start_runner.sh` - Deploy from Docker Hub
+  - `.env.runner` - Runner environment template
+  - `docker-compose.runner.prod.yml` - Production compose
+
+### Docker Hub Image
+
+- **Repository**: `xyshyniaphy/whisper-summarizer-runner`
+- **Latest**: `xyshyniaphy/whisper-summarizer-runner:latest`
+
+---
+
+## Server Tests (COMPLETE ✅)
 
 **Status**: ✅ All tests passing (107/107)
 **Coverage**: 100%
 
-### Created Test Files
-
-- [x] `server/tests/conftest.py` - Main pytest configuration
-- [x] `server/tests/backend/conftest.py` - Backend fixtures
-- [x] `server/tests/backend/test_runner_api.py` - 35 tests for 6 runner endpoints
-- [x] `server/tests/backend/test_audio_upload.py` - Audio upload tests
-- [x] `server/tests/backend/test_health.py` - Health check tests
-
 ---
 
-## Backend Tests (COMPLETE)
+## Bug Fixes (COMPLETED ✅)
 
-**Status**: ✅ All tests passing (107/107)
-**Coverage**: 100%
+### Docker Volume I/O Conflict
 
----
+**Problem**: 2GB/s disk reads after server/runner split
+**Root Cause**: Both containers mounted same `./data` directory
+**Fix**: Separate mounts (`./data/server` and `./data/runner`)
 
-## On Hold: Server/Runner Split
-
-**Status**: Planned (see `SERVER_RUNNER_SPLIT_PLAN.md`)
-
-The server/runner split architecture implementation plan is documented in `SERVER_RUNNER_SPLIT_PLAN.md`. This work is on hold while we focus on fixing frontend tests first.
-
-**Key Points**:
-- Split monolithic backend into lightweight server + GPU runner
-- Server runs on cheap VPS (no GPU needed)
-- Runner processes audio with faster-whisper + GLM API
-- HTTP-based job queue communication
-
-**Estimated Time**: 8-12 hours (when ready to implement)
+| File | Change |
+|------|--------|
+| `docker-compose.dev.yml:48` | Server: `./data/server:/app/data` |
+| `docker-compose.dev.yml:103` | Runner: `./data/runner:/app/data` |
+| `docker-compose.runner.yml:46` | Runner prod: `./data/runner:/app/data` |
+| `clear_cache.sh:22-23` | Updated paths |
 
 ---
 
 ## Quick Reference
 
-### Test Commands
+### Development Commands
 
 ```bash
-# Frontend tests
-cd frontend
-npm test                          # Run tests
-npm run test:coverage            # Coverage report
-npx vitest run --reporter=verbose # Detailed output
+# Start dev environment
+./run_dev.sh up-d          # Start in background
+./run_dev.sh logs         # View logs
+./run_dev.sh down         # Stop services
 
-# Backend tests (legacy - being replaced by server/)
-cd backend
-pytest tests/backend/ -v
+# Integration test
+curl -X POST http://localhost:8000/api/audio/upload \
+  -F "file=@testdata/2_min.m4a"
 
-# Server tests
-cd server
-pytest tests/backend/ -v
-
-# All tests
-./run_test.sh all
+# Check job status
+curl http://localhost:8000/api/transcriptions/{id}
 ```
 
-### Test Status Dashboard
+### Runner Deployment
 
-```
-┌─────────────────────┬─────────┬──────────┬─────────┐
-│ Component           │ Passing │ Failing  │ Coverage│
-├─────────────────────┼─────────┼──────────┼─────────┤
-│ Frontend Utils      │   25    │    1     │   96%   │
-│ Frontend UI         │  100+   │   ~60    │   ~70%  │
-│ Frontend Pages      │   ~30   │   ~30    │   ~50%  │
-│ Frontend Services   │    2    │   ~20    │   ~10%  │
-│ Server (new)        │   35+   │    0     │  100%   │
-│ Backend (legacy)    │  107    │    0     │  100%   │
-└─────────────────────┴─────────┴──────────┴─────────┘
+```bash
+# Build and push to Docker Hub
+./upload_runner.sh [tag]
+
+# Deploy on GPU server
+scp .env.runner user@server:/path/
+ssh user@server
+./start_runner.sh up
 ```
 
 ---
 
 ## Priority Order
 
-1. **HIGHEST**: Fix remaining 112 frontend test failures
-2. **HIGH**: Add missing frontend test cases
-3. **MEDIUM**: E2E test fixes
-4. **LOW**: Server/Runner split implementation
+1. **HIGHEST**: Execute and verify new backend test files (~202 tests total)
+2. **HIGH**: Enhance existing test files with edge cases
+3. **MEDIUM**: Frontend test fixes (Phase 3-6) - resume after backend tests complete
+4. **LOW**: Production runner deployment
+5. **LOW**: Documentation updates
+
+---
+
+## Backend Testing Quick Reference
+
+### Test Files
+
+```bash
+server/tests/backend/
+├── test_runner_api.py           # 6 endpoints, 35 tests
+├── test_audio_upload.py         # 2 endpoints, 72 tests
+├── test_transcriptions_api.py   # 14 endpoints, ~45 tests
+├── test_admin_api.py            # 15 endpoints, ~30 tests
+└── test_integration.py          # E2E workflows, ~20 tests
+```
+
+### Running Tests
+
+```bash
+# All backend tests
+cd server && python -m pytest tests/backend/ -v --tb=short
+
+# With coverage
+cd server && python -m pytest tests/backend/ -v --cov=app --cov-report=term-missing
+
+# Specific test file
+cd server && python -m pytest tests/backend/test_transcriptions_api.py -v
+
+# Specific test
+cd server && python -m pytest tests/backend/test_transcriptions_api.py::test_list_transcriptions_with_data -v
+```
+
+### Endpoints Covered (37 total)
+
+**Transcriptions API (14)**:
+- GET /api/transcriptions (list, pagination, filter)
+- GET /api/transcriptions/{id}
+- DELETE /api/transcriptions/{id}
+- DELETE /api/transcriptions/all
+- GET /api/transcriptions/{id}/download
+- GET /api/transcriptions/{id}/download-docx
+- GET /api/transcriptions/{id}/download-notebooklm
+- GET /api/transcriptions/{id}/chat
+- POST /api/transcriptions/{id}/chat
+- GET /api/transcriptions/{id}/chat/stream
+- POST /api/transcriptions/{id}/share
+- GET /api/transcriptions/{id}/channels
+- POST /api/transcriptions/{id}/channels
+
+**Admin API (15)**:
+- GET /api/admin/users
+- PUT /api/admin/users/{id}/activate
+- PUT /api/admin/users/{id}/admin
+- DELETE /api/admin/users/{id}
+- GET /api/admin/channels
+- POST /api/admin/channels
+- PUT /api/admin/channels/{id}
+- DELETE /api/admin/channels/{id}
+- GET /api/admin/channels/{id}
+- POST /api/admin/channels/{id}/members
+- DELETE /api/admin/channels/{id}/members/{user_id}
+- GET /api/admin/audio
+- POST /api/admin/audio/{id}/channels
+- GET /api/admin/audio/{id}/channels
+
+**Runner API (6)**:
+- GET /api/runner/jobs
+- POST /api/runner/jobs/{id}/start
+- GET /api/runner/audio/{id}
+- POST /api/runner/jobs/{id}/complete
+- POST /api/runner/jobs/{id}/fail
+- POST /api/runner/heartbeat
+
+**Upload & Health (2)**:
+- POST /api/audio/upload
+- GET /api/health
 
 ---
 
 ## Notes
 
-- **Test Environment**: Vitest with jsdom for frontend, pytest for backend
-- **Frontend Framework**: React 19 + Vite + TypeScript
-- **Backend Framework**: FastAPI + SQLAlchemy
-- **Key Issues**: React 19 compatibility, Jotai mocking, async timing
-- **Documentation**: See `FRONTEND_TEST_FIXES.md` for detailed fix plan
+- **Test File**: `testdata/2_min.m4a` (2-minute audio for integration test)
+- **Dev Environment**: docker-compose.dev.yml (local server + runner)
+- **Production**: docker-compose.runner.prod.yml (Docker Hub image)
+- **Data Separation**: Server (`./data/server`) vs Runner (`./data/runner`)
+- **Shared Directory**: `./data/uploads:/app/data/uploads` (file exchange)
 
 ---
 
-**Next Action**: Continue fixing remaining 112 frontend test failures (Phase 3)
+**Next Action**: Run new backend test files and verify ~202 tests pass

@@ -31,12 +31,12 @@ from app.main import app
 # Database Fixtures
 # ============================================================================
 
-@pytest.fixture(scope="session", autouse=True)
+@pytest.fixture(scope="function", autouse=True)
 def init_test_database():
     """
     Initialize database tables for tests.
-    Creates all tables once at the beginning of the test session.
-    Also cleans up any existing data before starting tests.
+    Creates all tables once at the beginning of each test.
+    Cleans up data before and after each test to ensure isolation.
     """
     # Create all tables
     Base.metadata.create_all(bind=app_engine)
@@ -65,8 +65,21 @@ def init_test_database():
         cleanup_session.close()
 
     yield
-    # Optional: clean up after tests
-    # Base.metadata.drop_all(bind=app_engine)
+
+    # Clean up after each test to prevent data leakage
+    cleanup_session = SessionLocal()
+    try:
+        # Delete all data in reverse dependency order
+        cleanup_session.query(TranscriptionChannel).delete()
+        cleanup_session.query(ChatMessage).delete()
+        cleanup_session.query(Summary).delete()
+        cleanup_session.query(Transcription).delete()
+        cleanup_session.query(ChannelMembership).delete()
+        cleanup_session.query(Channel).delete()
+        cleanup_session.query(User).delete()
+        cleanup_session.commit()
+    finally:
+        cleanup_session.close()
 
 
 @pytest.fixture

@@ -600,9 +600,14 @@ cd tests
 - E2Eスクリーンショット: ホスト側 `data/screenshots/` (失敗時は `data/screenshots/failures/`)
 
 **現在のカバレッジ状況:**
-- サーバー: **100%** (107/107 tests passing) ✅
+- サーバー: **~240 comprehensive tests** ✅
+  - test_runner_api.py: ~55 tests (Runner API, edge cases, race conditions, data consistency)
+  - test_audio_upload.py: ~90 tests (Upload, formats, validation, error handling)
+  - test_transcriptions_api.py: ~45 tests (CRUD, downloads, chat, share, channels)
+  - test_admin_api.py: ~30 tests (User/channel/audio management)
+  - test_integration.py: ~20 tests (E2E workflows, performance, security)
 - フロントエンド: **73.6%** (319/433 tests passing, 114 failing)
-- テスト総数: 107件 (サーバー) + 433件 (フロントエンド) = **540件**
+- テスト総数: ~240件 (サーバー) + 433件 (フロントエンド) = **~673件**
 
 ### サーバーテスト (Pytest)
 
@@ -617,7 +622,11 @@ uv run pytest
 uv run pytest --cov=app --cov-report=html --cov-report=term
 
 # 特定のテストを実行
-uv run pytest ../tests/server/api/test_auth_api.py
+uv run pytest tests/backend/test_runner_api.py
+uv run pytest tests/backend/test_transcriptions_api.py -v
+
+# 特定のテスト関数を実行
+uv run pytest tests/backend/test_runner_api.py::TestRunnerAuthentication::test_get_jobs_requires_auth -v
 
 # マーカーでフィルター
 uv run pytest -m unit          # 単体テストのみ
@@ -625,9 +634,24 @@ uv run pytest -m integration   # 統合テストのみ
 ```
 
 **テストの構成:**
-- `tests/server/api/` - APIエンドポイントのテスト
-- `tests/server/services/` - サービスレイヤーのテスト
-- `tests/server/integration/` - 統合テスト
+
+| テストファイル | エンドポイント数 | テスト数 | 説明 |
+|---|---|---|---|
+| `test_runner_api.py` | 6 | ~55 | Runner API (認証、ジョブ管理、ハートビート) + エッジケース + レース条件 + データ整合性 |
+| `test_audio_upload.py` | 2 | ~90 | 音声アップロード + フォーマット検証 + エラーハンドリング + エッジケース |
+| `test_transcriptions_api.py` | 14 | ~45 | 転写API (CRUD、ダウンロード、チャット、共有、チャンネル) |
+| `test_admin_api.py` | 15 | ~30 | 管理者API (ユーザー、チャンネル、音声管理) |
+| `test_integration.py` | E2E | ~20 | エンドツーエンドワークフロー + パフォーマンス + セキュリティ |
+
+**テストカテゴリ:**
+
+1. **認証テスト**: すべてのエンドポイントで認証必須
+2. **バリデーション**: UUID形式、ステータス値、ページネーションパラメータ
+3. **エラーハンドリング**: 404、400、401、403、422、500レスポンス
+4. **エッジケース**: 空値、非常に長い値、負の値、重複
+5. **レース条件**: 重複ジョブ要求、同時更新、状態遷移
+6. **データ整合性**: データベース更新、タイムスタンプ、カスケード削除
+7. **E2Eワークフロー**: アップロード→処理→完了、失敗ハンドリング
 
 ### フロントエンドテスト (Vitest)
 

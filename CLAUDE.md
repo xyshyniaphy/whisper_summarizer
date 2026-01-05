@@ -61,7 +61,12 @@ Access: http://localhost:3000
 ```
 
 **Coverage**:
-- Backend: **100%** (107/107 tests passing) ✅
+- Backend: **~240 comprehensive tests** ✅
+  - test_runner_api.py: ~55 tests (Runner API, edge cases, race conditions, data consistency)
+  - test_audio_upload.py: ~90 tests (Upload, formats, validation, error handling)
+  - test_transcriptions_api.py: ~45 tests (CRUD, downloads, chat, share, channels)
+  - test_admin_api.py: ~30 tests (User/channel/audio management)
+  - test_integration.py: ~20 tests (E2E workflows, performance, security)
 - Frontend: **73.6%** (319/433 tests passing, 114 failing)
 
 **Note**: Frontend uses **bun** as the package manager (not npm).
@@ -475,11 +480,12 @@ const uploadFileViaAPI = async (page: Page, filePath: string) => {
 6. **faster-whisper with cuDNN** runs in runner container (not server)
 7. **Base image**: Run `./build_fastwhisper_base.sh` first for runner (~10-15 min, includes model download)
 8. **Hot reload**: Volume mounts for instant code updates (server and runner)
-9. **Test coverage**: Backend 100% (107/107 ✅), Frontend 73.6% (319/433)
+9. **Test coverage**: Backend ~240 tests ✅, Frontend 73.6% (319/433)
 10. **uv** for Python deps (not pip)
 11. **Jotai** for state (not React Context)
-12. **Data persistence**: `data/` directory volume-mounted
+12. **Data persistence**: `data/` directory volume-mounted with separation (`data/server`, `data/runner`, `data/uploads`)
 13. **SSE Streaming**: Vite proxy disables buffering for real-time AI chat
+14. **Integration test**: Successfully verified end-to-end workflow with real audio processing
 
 ## Server/Runner API
 

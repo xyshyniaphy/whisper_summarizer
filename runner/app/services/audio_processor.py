@@ -59,8 +59,7 @@ class AudioProcessor:
         logger.info("Step 1: Transcribing with Whisper...")
         try:
             transcription_result = self.whisper_service.transcribe(
-                audio_path=audio_path,
-                language=language
+                audio_file_path=audio_path
             )
 
             if not transcription_result or not transcription_result.get("text"):
@@ -120,8 +119,7 @@ class AudioProcessor:
 
         # Transcribe
         transcription_result = self.whisper_service.transcribe(
-            audio_path=audio_path,
-            language=language or settings.whisper_language
+            audio_file_path=audio_path
         )
 
         raw_text = transcription_result["text"]

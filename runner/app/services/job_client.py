@@ -140,8 +140,7 @@ class JobClient:
         try:
             response = self.client.post(
                 f"/jobs/{job_id}/fail",
-                content=error.encode(),
-                headers={"Content-Type": "text/plain"}
+                params={"error_message": error}
             )
             response.raise_for_status()
             logger.error(f"Job {job_id} failed: {error}")

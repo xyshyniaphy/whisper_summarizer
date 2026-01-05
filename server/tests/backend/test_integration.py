@@ -66,7 +66,11 @@ def admin_user(db_session):
 def auth_client(test_client, test_user):
     """Create authenticated test client."""
     def mock_get_current_user():
-        return test_user
+        return {
+            "id": str(test_user.id),
+            "email": test_user.email,
+            "email_confirmed_at": "2025-01-01T00:00:00Z"
+        }
 
     from app.core.supabase import get_current_user
     from app.main import app
@@ -83,7 +87,11 @@ def auth_client(test_client, test_user):
 def admin_auth_client(test_client, admin_user):
     """Create admin authenticated test client."""
     def mock_get_current_user():
-        return admin_user
+        return {
+            "id": str(admin_user.id),
+            "email": admin_user.email,
+            "email_confirmed_at": "2025-01-01T00:00:00Z"
+        }
 
     from app.core.supabase import get_current_user
     from app.main import app
