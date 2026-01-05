@@ -71,8 +71,9 @@ def init_test_database():
 def db_session() -> Generator[Session, None, None]:
     """
     Create a new database session for each test.
-    Uses a nested transaction (SAVEPOINT) that gets rolled back after each test
-    to ensure complete isolation between tests.
+
+    Note: This fixture commits data so it's visible to test_client requests.
+    Data is cleaned up by the session-scoped init_test_database fixture.
 
     Yields:
         Session: Database session
@@ -80,15 +81,10 @@ def db_session() -> Generator[Session, None, None]:
     TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=app_engine)
     session = TestingSessionLocal()
 
-    # Begin outer transaction and create a SAVEPOINT
-    session.begin_nested()
-
     try:
         yield session
     finally:
-        # Rollback to the SAVEPOINT, undoing all changes including commits
-        session.rollback()
-        # Close the session
+        # Close the session (don't rollback - test_client needs to see committed data)
         session.close()
 
 
