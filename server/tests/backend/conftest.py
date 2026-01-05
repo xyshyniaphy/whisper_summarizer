@@ -36,9 +36,32 @@ def init_test_database():
     """
     Initialize database tables for tests.
     Creates all tables once at the beginning of the test session.
+    Also cleans up any existing data before starting tests.
     """
     # Create all tables
     Base.metadata.create_all(bind=app_engine)
+
+    # Clean up any existing data from previous test runs
+    SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=app_engine)
+    cleanup_session = SessionLocal()
+
+    try:
+        # Delete all data in reverse dependency order
+        from app.models.transcription import Transcription
+        from app.models.channel import ChannelMembership, TranscriptionChannel, Channel
+        from app.models.user import User
+        from app.models.chat_message import ChatMessage
+
+        cleanup_session.query(TranscriptionChannel).delete()
+        cleanup_session.query(ChatMessage).delete()
+        cleanup_session.query(Transcription).delete()
+        cleanup_session.query(ChannelMembership).delete()
+        cleanup_session.query(Channel).delete()
+        cleanup_session.query(User).delete()
+        cleanup_session.commit()
+    finally:
+        cleanup_session.close()
+
     yield
     # Optional: clean up after tests
     # Base.metadata.drop_all(bind=app_engine)
@@ -48,6 +71,8 @@ def init_test_database():
 def db_session() -> Generator[Session, None, None]:
     """
     Create a new database session for each test.
+    Uses a nested transaction (SAVEPOINT) that gets rolled back after each test
+    to ensure complete isolation between tests.
 
     Yields:
         Session: Database session
@@ -55,12 +80,16 @@ def db_session() -> Generator[Session, None, None]:
     TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=app_engine)
     session = TestingSessionLocal()
 
+    # Begin outer transaction and create a SAVEPOINT
+    session.begin_nested()
+
     try:
         yield session
     finally:
-        session.close()
-        # Rollback to clean up test data
+        # Rollback to the SAVEPOINT, undoing all changes including commits
         session.rollback()
+        # Close the session
+        session.close()
 
 
 # ============================================================================
