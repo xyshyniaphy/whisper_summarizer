@@ -19,8 +19,8 @@ if [ ! -d "data" ]; then
 fi
 
 # クリア対象のディレクトリ
-UPLOAD_DIR="data/uploads"
-OUTPUT_DIR="data/output"
+UPLOAD_DIR="data/server/uploads"
+OUTPUT_DIR="data/runner/transcribes"
 SCREENSHOTS_DIR="data/screenshots"
 REPORT_DIR="data/playwright-report"
 TEST_RESULTS_DIR="data/test-results"

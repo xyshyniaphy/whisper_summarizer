@@ -45,7 +45,7 @@ services:
       # Source code mount for hot reload
       - ./server:/app
       # Data directory mount
-      - ./data:/app/data
+      - ./data/server:/app/data
       # Logs directory
       - ./logs:/app/logs
     command: /bin/sh -c "uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --log-level debug 2>&1 | tee /app/logs/server.log"
@@ -99,8 +99,8 @@ services:
     volumes:
       # Source code mount for hot reload
       - ./runner:/app
-      # Data directory mount (shared with server)
-      - ./data:/app/data
+      # Data directory mount (separate from server)
+      - ./data/runner:/app/data
       # Logs directory
       - ./logs:/app/logs
       # Whisper model cache
