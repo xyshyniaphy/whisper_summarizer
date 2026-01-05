@@ -3,11 +3,6 @@
  *
  * ドロップダウン、ユーザー情報表示、サインアウト、
  * 外部クリックで閉じる機能をテストする。
- *
- * NOTE: Tests temporarily skipped due to useAuth mock complexity.
- * The useAuth hook has internal useEffect that calls Jotai setters,
- * causing state updates during render. Mocking it properly requires
- * deeper refactoring of the hook or testing infrastructure.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
@@ -15,6 +10,36 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Provider } from 'jotai'
 import { UserMenu } from '../../../src/components/UserMenu'
+import { userAtom, sessionAtom, roleAtom, isActiveAtom, loadingAtom } from '../../../src/atoms/auth'
+
+// Create a wrapper that initializes Jotai atoms with test values
+const createTestWrapper = () => {
+  // Initialize atoms with test values BEFORE rendering
+  const initializeStore = ({ set }: any) => {
+    set(userAtom, {
+      id: 'user-1',
+      email: 'test@example.com',
+      user_metadata: { full_name: 'Test User', role: 'user' },
+      aud: 'authenticated',
+      role: 'authenticated',
+      email_confirmed_at: new Date().toISOString(),
+      phone: '',
+      updated_at: new Date().toISOString(),
+      created_at: new Date().toISOString(),
+      app_metadata: {},
+    })
+    set(sessionAtom, {})
+    set(roleAtom, 'user')
+    set(isActiveAtom, true)
+    set(loadingAtom, false)
+  }
+
+  return ({ children }: { children: React.ReactNode }) => (
+    <Provider initialValues={initializeStore}>
+      {children}
+    </Provider>
+  )
+}
 
 // Mock Supabase client
 vi.mock('../../../src/services/supabase', () => ({
@@ -28,27 +53,33 @@ vi.mock('../../../src/services/supabase', () => ({
   }
 }))
 
-// Mock useAuth
-const mockSignOut = vi.fn()
+// Note: useAuth is mocked to provide stable references
+// Test mode detection in the hook prevents useEffect from running
+const mockSignOut = vi.fn().mockResolvedValue({ error: null })
+const mockAuthState = {
+  user: {
+    id: 'user-1',
+    email: 'test@example.com',
+    user_metadata: { full_name: 'Test User', role: 'user' },
+    aud: 'authenticated',
+    role: 'authenticated',
+    email_confirmed_at: new Date().toISOString(),
+    phone: '',
+    updated_at: new Date().toISOString(),
+    created_at: new Date().toISOString(),
+    app_metadata: {},
+  },
+  session: {},
+  role: 'user' as const,
+  loading: false
+}
+const mockAuthActions = { signOut: mockSignOut }
+
 vi.mock('../../../src/hooks/useAuth', () => ({
-  useAuth: () => [
-    {
-      user: {
-        id: 'user-1',
-        email: 'test@example.com',
-        user_metadata: { full_name: 'Test User', role: 'user' }
-      },
-      session: {},
-      role: 'user',
-      loading: false
-    },
-    { signOut: mockSignOut }
-  ]
+  useAuth: () => [mockAuthState, mockAuthActions]
 }))
 
-const wrapper = ({ children }: { children: React.ReactNode }) => (
-  <Provider>{children}</Provider>
-)
+const wrapper = createTestWrapper()
 
 describe('UserMenu', () => {
   beforeEach(() => {
@@ -56,12 +87,12 @@ describe('UserMenu', () => {
   })
 
   describe('Rendering', () => {
-    it.skip('ユーザーメニューが正常にレンダリングされる', () => {
+    it('ユーザーメニューが正常にレンダリングされる', () => {
       render(<UserMenu />, { wrapper })
       expect(screen.getByText('Test User')).toBeTruthy()
     })
 
-    it.skip('ユーザーのイニシャルが表示される', () => {
+    it('ユーザーのイニシャルが表示される', () => {
       render(<UserMenu />, { wrapper })
       expect(screen.getByText('TU')).toBeTruthy()
     })

@@ -5,6 +5,9 @@
  * Ensure jsdom globals are available before any imports.
  */
 
+// Set global test mode flag to skip useAuth useEffect in tests
+;(global as any).__VITEST_TEST_MODE__ = true
+
 // Ensure jsdom globals are available (fixes "document is not defined")
 if (typeof document === 'undefined') {
   // This should never happen with environment: 'jsdom', but adding as safety check

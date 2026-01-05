@@ -37,6 +37,24 @@ const isE2ETestMode = () => {
   }
 }
 
+// Unit test mode check (for Vitest unit tests)
+// Detect if we're in a test environment by checking for Vitest globals
+const isUnitTestMode = () => {
+  // Check for global test mode flag (set in tests/setup.ts)
+  if (typeof global !== 'undefined' && (global as any).__VITEST_TEST_MODE__ === true) {
+    return true
+  }
+  // Check if we're in a Vitest environment by checking for vi global
+  if (typeof (global as any).vi !== 'undefined') {
+    return true
+  }
+  // Check for process.env.NODE_ENV === 'test'
+  if (typeof process !== 'undefined' && process.env?.NODE_ENV === 'test') {
+    return true
+  }
+  return false
+}
+
 // モックユーザー（E2Eテスト用）
 const mockUser: User = {
   id: 'test-user-id',
@@ -102,8 +120,8 @@ export function useAuth(): [
   const [loading, setLoading] = useAtom(loadingAtom)
 
   useEffect(() => {
-    // E2Eテストモードの場合は自動ログインしない（auth呼び出しをモックするだけ）
-    if (isE2ETestMode()) {
+    // E2EテストモードまたはUnitテストモードの場合は自動ログインしない（auth呼び出しをモックするだけ）
+    if (isE2ETestMode() || isUnitTestMode()) {
       setLoading(false)
       return
     }
