@@ -132,7 +132,10 @@ def test_toggle_admin_status(admin_client, db_session, regular_user):
     assert regular_user.is_admin is False
 
     # Grant admin
-    response = admin_client.put(f"/api/admin/users/{regular_user.id}/admin")
+    response = admin_client.put(
+        f"/api/admin/users/{regular_user.id}/admin",
+        json={"is_admin": True}
+    )
     assert response.status_code == 200
     data = response.json()
     assert data["is_admin"] is True
@@ -142,7 +145,10 @@ def test_toggle_admin_status(admin_client, db_session, regular_user):
     assert regular_user.is_admin is True
 
     # Revoke admin
-    response = admin_client.put(f"/api/admin/users/{regular_user.id}/admin")
+    response = admin_client.put(
+        f"/api/admin/users/{regular_user.id}/admin",
+        json={"is_admin": False}
+    )
     assert response.status_code == 200
     data = response.json()
     assert data["is_admin"] is False

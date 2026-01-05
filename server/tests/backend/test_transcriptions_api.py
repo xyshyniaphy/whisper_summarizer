@@ -110,8 +110,7 @@ def test_list_transcriptions_filter_by_status(test_client, db_session):
     )
     completed = Transcription(
         id=uuid4(), user_id=user.id, file_name="completed.m4a",
-        file_path="/tmp/completed.m4a", status=TranscriptionStatus.COMPLETED,
-        text="Completed text"
+        file_path="/tmp/completed.m4a", status=TranscriptionStatus.COMPLETED
     )
     db_session.add_all([pending, completed])
     db_session.commit()
@@ -139,8 +138,7 @@ def test_get_transcription_success(test_client, db_session):
         user_id=user.id,
         file_name="test.m4a",
         file_path="/tmp/test.m4a",
-        status=TranscriptionStatus.COMPLETED,
-        text="Test transcription text"
+        status=TranscriptionStatus.COMPLETED
     )
     db_session.add(trans)
     db_session.commit()
@@ -228,6 +226,8 @@ def test_delete_all_transcriptions(test_client, db_session):
 
 def test_download_transcription_text(test_client, db_session):
     """Test downloading transcription as text."""
+    from app.services.storage_service import get_storage_service
+
     user = User(id=UUID("123e4567-e89b-42d3-a456-426614174000"), email=f"test-{uuid4().hex[:8]}@example.com", is_active=True)
     db_session.add(user)
     db_session.commit()
@@ -237,11 +237,14 @@ def test_download_transcription_text(test_client, db_session):
         user_id=user.id,
         file_name="test.m4a",
         file_path="/tmp/test.m4a",
-        status=TranscriptionStatus.COMPLETED,
-        text="Test transcription text for download"
+        status=TranscriptionStatus.COMPLETED
     )
     db_session.add(trans)
     db_session.commit()
+
+    # Create the text file using storage service
+    storage = get_storage_service()
+    storage.save_transcription_text(trans.id, "Test transcription text for download")
 
     response = test_client.get(f"/api/transcriptions/{trans.id}/download")
     assert response.status_code == 200
@@ -260,8 +263,7 @@ def test_download_transcription_text_empty(test_client, db_session):
         user_id=user.id,
         file_name="test.m4a",
         file_path="/tmp/test.m4a",
-        status=TranscriptionStatus.PENDING,
-        text=""
+        status=TranscriptionStatus.PENDING
     )
     db_session.add(trans)
     db_session.commit()
@@ -282,8 +284,7 @@ def test_download_transcription_docx(mock_doc_gen, test_client, db_session):
         user_id=user.id,
         file_name="test.m4a",
         file_path="/tmp/test.m4a",
-        status=TranscriptionStatus.COMPLETED,
-        text="Test transcription"
+        status=TranscriptionStatus.COMPLETED
     )
     db_session.add(trans)
     db_session.commit()
@@ -311,8 +312,7 @@ def test_get_chat_history_empty(test_client, db_session):
         user_id=user.id,
         file_name="test.m4a",
         file_path="/tmp/test.m4a",
-        status=TranscriptionStatus.COMPLETED,
-        text="Test text"
+        status=TranscriptionStatus.COMPLETED
     )
     db_session.add(trans)
     db_session.commit()
@@ -335,8 +335,7 @@ def test_get_chat_history_with_messages(test_client, db_session):
         user_id=user.id,
         file_name="test.m4a",
         file_path="/tmp/test.m4a",
-        status=TranscriptionStatus.COMPLETED,
-        text="Test text"
+        status=TranscriptionStatus.COMPLETED
     )
     db_session.add(trans)
     db_session.commit()
@@ -360,8 +359,7 @@ def test_send_chat_message(test_client, db_session):
         user_id=user.id,
         file_name="test.m4a",
         file_path="/tmp/test.m4a",
-        status=TranscriptionStatus.COMPLETED,
-        text="Test transcription text"
+        status=TranscriptionStatus.COMPLETED
     )
     db_session.add(trans)
     db_session.commit()
@@ -406,8 +404,7 @@ def test_assign_transcription_to_channels(test_client, db_session):
         user_id=user.id,
         file_name="test.m4a",
         file_path="/tmp/test.m4a",
-        status=TranscriptionStatus.COMPLETED,
-        text="Test text"
+        status=TranscriptionStatus.COMPLETED
     )
     db_session.add(trans)
     db_session.commit()
@@ -439,8 +436,7 @@ def test_get_transcription_channels(test_client, db_session):
         user_id=user.id,
         file_name="test.m4a",
         file_path="/tmp/test.m4a",
-        status=TranscriptionStatus.COMPLETED,
-        text="Test text"
+        status=TranscriptionStatus.COMPLETED
     )
     db_session.add(trans)
     db_session.commit()
@@ -500,8 +496,7 @@ def test_create_share_link(test_client, db_session):
         user_id=user.id,
         file_name="test.m4a",
         file_path="/tmp/test.m4a",
-        status=TranscriptionStatus.COMPLETED,
-        text="Test text to share"
+        status=TranscriptionStatus.COMPLETED
     )
     db_session.add(trans)
     db_session.commit()

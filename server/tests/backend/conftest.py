@@ -51,9 +51,11 @@ def init_test_database():
         from app.models.channel import ChannelMembership, TranscriptionChannel, Channel
         from app.models.user import User
         from app.models.chat_message import ChatMessage
+        from app.models.summary import Summary
 
         cleanup_session.query(TranscriptionChannel).delete()
         cleanup_session.query(ChatMessage).delete()
+        cleanup_session.query(Summary).delete()
         cleanup_session.query(Transcription).delete()
         cleanup_session.query(ChannelMembership).delete()
         cleanup_session.query(Channel).delete()
