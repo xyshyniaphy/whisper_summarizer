@@ -26,7 +26,8 @@ from app.models.transcription import Transcription, TranscriptionStatus
 from app.models.user import User
 
 # Check if DISABLE_AUTH is enabled
-DISABLE_AUTH = os.environ.get("DISABLE_AUTH", "false").lower() == "true"
+# Set to False to run all auth tests even when DISABLE_AUTH=true in environment
+DISABLE_AUTH = False
 
 
 # ============================================================================

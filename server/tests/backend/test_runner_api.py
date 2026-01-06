@@ -27,7 +27,8 @@ from fastapi import status as http_status
 from app.models.transcription import Transcription, TranscriptionStatus
 
 # Skip auth tests when DISABLE_AUTH is enabled
-DISABLE_AUTH = os.environ.get("DISABLE_AUTH", "false").lower() == "true"
+# Set to False to run all auth tests even when DISABLE_AUTH=true in environment
+DISABLE_AUTH = False
 
 
 # ============================================================================

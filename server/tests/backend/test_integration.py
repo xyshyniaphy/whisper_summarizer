@@ -108,8 +108,6 @@ def admin_auth_client(test_client, admin_user):
 # End-to-End Workflow: Upload → Process → Complete
 # ============================================================================
 
-@pytest.mark.skip(reason="Requires complex audio file setup and runner simulation")
-@pytest.mark.skip(reason="Complex integration test - requires refactoring")
 def test_e2e_workflow_upload_to_complete(auth_client, test_audio_file, db_session):
     """
     Test complete workflow:
@@ -178,7 +176,6 @@ def test_e2e_workflow_upload_to_complete(auth_client, test_audio_file, db_sessio
     assert result["text"] == "This is the transcribed text from the audio."
 
 
-@pytest.mark.skip(reason="Complex integration test - requires refactoring")
 def test_e2e_workflow_with_failure(auth_client, test_audio_file, db_session):
     """
     Test workflow with processing failure:
@@ -225,7 +222,6 @@ def test_e2e_workflow_with_failure(auth_client, test_audio_file, db_session):
 # Channel Assignment Integration
 # ============================================================================
 
-@pytest.mark.skip(reason="Complex integration test - requires refactoring")
 def test_e2e_channel_assignment_and_filtering(auth_client, admin_auth_client, db_session, test_user, admin_user):
     """
     Test complete channel workflow:
@@ -306,8 +302,6 @@ def test_e2e_channel_assignment_and_filtering(auth_client, admin_auth_client, db
 # Admin User Management Integration
 # ============================================================================
 
-@pytest.mark.skip(reason="Requires complex user lifecycle setup")
-@pytest.mark.skip(reason="Complex integration test - requires refactoring")
 def test_e2e_user_lifecycle(admin_auth_client, db_session):
     """
     Test complete user lifecycle:
@@ -385,7 +379,6 @@ def test_runner_heartbeat_integration(auth_client):
 # Error Handling Integration Tests
 # ============================================================================
 
-@pytest.mark.skip(reason="Complex integration test - requires refactoring")
 def test_e2e_invalid_audio_upload(auth_client):
     """Test upload with invalid file."""
     response = auth_client.post(
@@ -396,7 +389,6 @@ def test_e2e_invalid_audio_upload(auth_client):
     assert response.status_code in [201, 400]
 
 
-@pytest.mark.skip(reason="Complex integration test - requires refactoring")
 def test_e2e_complete_non_existent_job(auth_client):
     """Test completing a job that doesn't exist."""
     auth_client.headers["Authorization"] = f"Bearer {os.environ.get('RUNNER_API_KEY', 'test-runner-api-key')}"
@@ -409,7 +401,6 @@ def test_e2e_complete_non_existent_job(auth_client):
     assert response.status_code == 404
 
 
-@pytest.mark.skip(reason="Complex integration test - requires refactoring")
 def test_e2e_double_start_job(auth_client, test_audio_file, db_session):
     """Test that a job can't be started twice."""
     # Upload audio
@@ -436,8 +427,6 @@ def test_e2e_double_start_job(auth_client, test_audio_file, db_session):
     assert start_response2.status_code == 400  # Bad request - already processing
 
 
-@pytest.mark.skip(reason="Requires complex workflow setup")
-@pytest.mark.skip(reason="Complex integration test - requires refactoring")
 def test_e2e_download_before_completion(auth_client, test_audio_file):
     """Test downloading transcription before processing is complete."""
     # Upload audio
@@ -458,7 +447,6 @@ def test_e2e_download_before_completion(auth_client, test_audio_file):
 # Performance Tests
 # ============================================================================
 
-@pytest.mark.skip(reason="Complex integration test - requires refactoring")
 def test_e2e_bulk_operations_performance(auth_client, admin_auth_client, db_session, test_user, admin_user):
     """
     Test performance of bulk operations:
@@ -506,8 +494,6 @@ def test_e2e_bulk_operations_performance(auth_client, admin_auth_client, db_sess
 # Data Consistency Tests
 # ============================================================================
 
-@pytest.mark.skip(reason="Requires complex workflow setup")
-@pytest.mark.skip(reason="Complex integration test - requires refactoring")
 def test_e2e_data_consistency_after_deletion(auth_client, admin_auth_client, db_session, test_user):
     """
     Test data consistency when related entities are deleted:
@@ -578,7 +564,6 @@ def test_e2e_data_consistency_after_deletion(auth_client, admin_auth_client, db_
 # Race Condition Tests
 # ============================================================================
 
-@pytest.mark.skip(reason="Complex integration test - requires refactoring")
 def test_e2e_concurrent_job_claims(auth_client, test_audio_file):
     """
     Test that concurrent runners can't claim the same job:
@@ -614,8 +599,6 @@ def test_e2e_concurrent_job_claims(auth_client, test_audio_file):
 # Security Tests
 # ============================================================================
 
-@pytest.mark.skip(reason="Requires complex auth setup")
-@pytest.mark.skip(reason="Complex integration test - requires refactoring")
 def test_e2e_unauthorized_admin_access(test_client):
     """Test that regular users cannot access admin endpoints."""
     # Create a regular (non-admin) user
@@ -648,7 +631,6 @@ def test_e2e_unauthorized_admin_access(test_client):
     app.dependency_overrides = {}
 
 
-@pytest.mark.skip(reason="Complex integration test - requires refactoring")
 def test_e2e_invalid_runner_api_key(auth_client, test_audio_file):
     """Test that invalid runner API key is rejected."""
     # Upload audio
