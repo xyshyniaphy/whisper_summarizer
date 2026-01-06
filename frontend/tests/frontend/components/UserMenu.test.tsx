@@ -86,7 +86,7 @@ vi.mock('../../../src/hooks/useAuth', () => ({
 
 const wrapper = createTestWrapper()
 
-describe.skip('UserMenu', () => {
+describe('UserMenu', () => {
   beforeEach(() => {
     vi.clearAllMocks()
   })

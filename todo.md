@@ -104,20 +104,20 @@
 
 ### Progress Summary
 
-| Metric | Before | Phase 1-2 | Phase 3 (Iter 6) | Phase 3 (Iter 7) | Phase 3 (Iter 8) | Phase 3 (Iter 9) | Phase 3 (Iter 10) | Phase 3 (Iter 11) | Phase 3 (Iter 12) | Phase 3 (Iter 13) | Phase 3 (Iter 14) | Phase 3 (Iter 15) | Phase 3 (Iter 16) | Phase 3 (Iter 17) | Phase 3 (Iter 18) | Phase 3 (Iter 21) | Target |
-|--------|--------|-----------|------------------|-----------------|-----------------|-----------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|--------|
-| Test Pass Rate | 1.2% (2/164) | 62.4% (186/298) | 75.1% (325/433) | 69.4% (229/330) | 70.3% (232/330) | 72.1% (238/330) | 75.2% (248/330) | 75.8% (250/330) | 72.4% (239/330) | 68.5% (237/346) | 68.5% (237/346) | 68.5% (237/346) | 68.8% (238/346) | 69.1% (239/346) | 70.2% (243/346) | **73.8% (251/340)** | 100% |
-| Active Pass Rate | - | - | - | - | - | - | - | - | 98.4% (239/243) | 100% (237/237) ✅ | 100% (237/237) ✅ | 100% (237/237) ✅ | 100% (238/238) ✅ | 100% (239/239) ✅ | 100% (243/243) ✅ | **100% (251/251)** ✅ | 100% |
-| Skipped Tests | 0 | 0 | 47 | 47 | 47 | 47 | 55 | 55 | 87 | 109 | 109 | 109 | 108 | 107 | 103 | **89** | - |
+| Metric | Before | Phase 1-2 | Phase 3 (Iter 6) | Phase 3 (Iter 7) | Phase 3 (Iter 8) | Phase 3 (Iter 9) | Phase 3 (Iter 10) | Phase 3 (Iter 11) | Phase 3 (Iter 12) | Phase 3 (Iter 13) | Phase 3 (Iter 14) | Phase 3 (Iter 15) | Phase 3 (Iter 16) | Phase 3 (Iter 17) | Phase 3 (Iter 18) | Phase 3 (Iter 21) | Phase 3 (Iter 22) | Target |
+|--------|--------|-----------|------------------|-----------------|-----------------|-----------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|--------|
+| Test Pass Rate | 1.2% (2/164) | 62.4% (186/298) | 75.1% (325/433) | 69.4% (229/330) | 70.3% (232/330) | 72.1% (238/330) | 75.2% (248/330) | 75.8% (250/330) | 72.4% (239/330) | 68.5% (237/346) | 68.5% (237/346) | 68.5% (237/346) | 68.8% (238/346) | 69.1% (239/346) | 70.2% (243/346) | **73.8% (251/340)** | **81.8% (278/340)** | 100% |
+| Active Pass Rate | - | - | - | - | - | - | - | - | 98.4% (239/243) | 100% (237/237) ✅ | 100% (237/237) ✅ | 100% (237/237) ✅ | 100% (238/238) ✅ | 100% (239/239) ✅ | 100% (243/243) ✅ | **100% (251/251)** ✅ | **100% (278/278)** ✅ | 100% |
+| Skipped Tests | 0 | 0 | 47 | 47 | 47 | 47 | 55 | 55 | 87 | 109 | 109 | 109 | 108 | 107 | 103 | **89** | **62** | - |
 | Atoms Tests | - | - | 95.8% (23/24) | 100% (24/24) | 100% (24/24) | 100% (24/24) | 100% (24/24) | 100% (24/24) | 100% (24/24) | 100% (24/24) | **100% (24/24)** | 100% | 100% | 100% |
 | ConfirmDialog Tests | - | - | - | - | 100% (10/10) | 100% (10/10) | 100% (10/10) | 100% (10/10) | 100% (10/10) | 100% (10/10) | **100% (10/10)** | 100% | 100% | 100% |
 | TranscriptionList Tests | - | - | - | - | - | 76.9% (10/13) | 76.9% (10/13) | 76.9% (10/13) | 76.9% (10/13) | 100% (9/9) ✅ | **100% (9/9)** ✅ | **100% (13/13)** ✅ | **100% (13/13)** ✅ |
 | AudioUploader Tests | - | - | - | - | - | 44.4% (8/18) | 100% (18/18) | 100% (18/18) | 100% (18/18) | 100% (18/18) | **100% (18/18)** | 100% | 100% | 100% |
 | Chat Tests | - | - | - | - | - | - | 88.2% (15/17) | 94.1% (16/17) | 94.1% (16/17) | 100% (16/16) ✅ | 100% (16/16) ✅ | **100% (17/17)** ✅ | **100% (17/17)** ✅ |
 | API Service Tests | - | - | - | - | - | - | - | - | 100% (11/11) | 0% (0/11) ⏸️ | **0% (0/11)** ⏸️ | 0% | 0% | 0% |
-| Files Passing | 0% (0/59) | 20% (4/20) | 50% (11/22) | 45% (9/20) | 55% (11/20) | 55% (11/20) | 60% (12/20) | 60% (12/20) | 60% (12/20) | 100% (14/14) ✅ | **100% (14/14)** ✅ | 100% | 100% | 100% |
+| Files Passing | 0% (0/59) | 20% (4/20) | 50% (11/22) | 45% (9/20) | 55% (11/20) | 55% (11/20) | 60% (12/20) | 60% (12/20) | 60% (12/20) | 100% (14/14) ✅ | **100% (14/14)** ✅ | 100% | 100% | 100% | 100% | **100% (16/16)** ✅ |
 
-**Note**: Iteration 7-11 apparent decrease is because `describe.skip` now properly excludes entire test files (47 tests from NavBar/UserMenu/TranscriptionDetail). Iteration 13 skipped problematic tests to achieve 100% pass rate on active tests. Iteration 14 investigated api.test.ts and date formatting test - both require deeper architectural fixes. Iteration 15 attempted to fix TranscriptionList delete tests - caused cascading failures (131 tests) due to userEvent.setup() document state corruption, reverted to maintain baseline. **Iteration 16 fixed Chat reload test (+1 test, 238/346 passing)** by using explicit call count tracking and delays to handle fire-and-forget async patterns. **Iteration 17 fixed TranscriptionList date formatting test (+1 test, 239/346 passing)** by mocking Date.prototype.toLocaleString to bypass jsdom locale limitations. **Iteration 18 fixed TranscriptionList delete tests (+4 tests, 243/346 passing)** by using fireEvent.click() instead of userEvent.setup() to avoid document state corruption. **Iteration 19-20 investigated api.test.ts timeout and Dashboard tests** - both require deeper work (api.test.ts has architectural issues, Dashboard tests were outdated). **Iteration 21 rewrote Dashboard tests (+8 tests, 251/340 passing)** by complete rewrite to match current admin dashboard UI with tabbed navigation, fixed useAuth mock structure, and removed duplicate test file.
+**Note**: Iteration 7-11 apparent decrease is because `describe.skip` now properly excludes entire test files (47 tests from NavBar/UserMenu/TranscriptionDetail). Iteration 13 skipped problematic tests to achieve 100% pass rate on active tests. Iteration 14 investigated api.test.ts and date formatting test - both require deeper architectural fixes. Iteration 15 attempted to fix TranscriptionList delete tests - caused cascading failures (131 tests) due to userEvent.setup() document state corruption, reverted to maintain baseline. **Iteration 16 fixed Chat reload test (+1 test, 238/346 passing)** by using explicit call count tracking and delays to handle fire-and-forget async patterns. **Iteration 17 fixed TranscriptionList date formatting test (+1 test, 239/346 passing)** by mocking Date.prototype.toLocaleString to bypass jsdom locale limitations. **Iteration 18 fixed TranscriptionList delete tests (+4 tests, 243/346 passing)** by using fireEvent.click() instead of userEvent.setup() to avoid document state corruption. **Iteration 19-20 investigated api.test.ts timeout and Dashboard tests** - both require deeper work (api.test.ts has architectural issues, Dashboard tests were outdated). **Iteration 21 rewrote Dashboard tests (+8 tests, 251/340 passing)** by complete rewrite to match current admin dashboard UI with tabbed navigation, fixed useAuth mock structure, and removed duplicate test file. **Iteration 22 unskipped working tests (+27 tests, 278/340 passing)** - biggest single-iteration gain yet - UserMenu 14/14 passing, Login 13/16 passing (3 skipped with it.skip).
 
 ### Completed ✅
 
@@ -150,13 +150,13 @@
   - **MAJOR MILESTONE**: Zero failing tests on all active test suites
   - Skipped problematic tests: api.test.ts (11-16), Dashboard (2), Login (18), complex components (60)
   - All 14 test files with active tests now passing at 100%
-- [ ] **Phase 3 (Remaining)**: Fix 89 skipped tests
-  - api.test.ts (11-16): Mock initialization timeout - needs Vitest expert review (architectural issue)
+- [ ] **Phase 3 (Remaining)**: Fix 62 skipped tests
+  - api.test.ts (16): Mock initialization timeout - needs Vitest expert review (architectural issue)
   - Dashboard (2): Access Control & Loading State tests require separate test file setup (vi.doMock limitation)
-  - Login (18): Dynamic import mocking - architectural issue
-  - useAuth hook (7), NavBar (15), UserMenu (14), TranscriptionDetail (18): Complex mocking
+  - Login (3): OAuth parameter validation, error handling, loading state - component API changes
+  - useAuth hook (8), NavBar (15), TranscriptionDetail (18): Complex mocking
   - Environment issues (jsdom): Tests failing when run from certain directories
-  - **Skipped**: 89 tests (api.test.ts, Dashboard, Login, complex components)
+  - **Skipped**: 62 tests (api.test.ts, Dashboard, Login, complex components)
 
 ### Pending ⏸️
 
@@ -306,6 +306,7 @@
 - `claudelogs/i_260106_1148.md` - Iteration 19: api.test.ts timeout investigation - no net change (architectural issue)
 - `claudelogs/i_260106_1208.md` - Iteration 20: Dashboard tests investigation - fixed useAuth mock but tests need rewrite
 - `claudelogs/i_260106_1215.md` - Iteration 21: Dashboard tests rewritten (+8 tests, 251/340 passing) ✅
+- `claudelogs/i_260106_1239.md` - Iteration 22: Unskipped working tests (+27 tests, 278/340 passing) ✅
 
 ---
 
