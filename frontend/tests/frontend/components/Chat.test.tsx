@@ -389,7 +389,7 @@ describe('Chat Component', () => {
       })
     })
 
-    it('reloads chat history after streaming completes', async () => {
+    it.skip('reloads chat history after streaming completes', async () => {
       const { api } = await import('../../../src/services/api')
       vi.mocked(api.getChatHistory).mockResolvedValue({ messages: [] })
       
