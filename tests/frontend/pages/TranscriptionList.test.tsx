@@ -90,7 +90,14 @@ const mockTranscriptions = [
 describe('TranscriptionList', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mockGetTranscriptions.mockResolvedValue(mockTranscriptions)
+    // Return PaginatedResponse structure
+    mockGetTranscriptions.mockResolvedValue({
+      total: mockTranscriptions.length,
+      page: 1,
+      page_size: 10,
+      total_pages: 1,
+      data: mockTranscriptions
+    })
     mockDeleteTranscription.mockResolvedValue(undefined)
     // Mock window.confirm
     global.confirm = vi.fn(() => true) as any

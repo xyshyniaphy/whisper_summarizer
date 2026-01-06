@@ -104,14 +104,15 @@
 
 ### Progress Summary
 
-| Metric | Before | Phase 1-2 | Phase 3 (Iter 6) | Phase 3 (Iter 7) | Phase 3 (Iter 8) | Target |
-|--------|--------|-----------|------------------|-----------------|-----------------|--------|
-| Test Pass Rate | 1.2% (2/164) | 62.4% (186/298) | 75.1% (325/433) | 69.4% (229/330) | **70.3% (232/330)** | 100% |
-| Atoms Tests | - | - | 95.8% (23/24) | 100% (24/24) | **100% (24/24)** | 100% |
-| ConfirmDialog Tests | - | - | - | - | **100% (10/10)** | 100% |
-| Files Passing | 0% (0/59) | 20% (4/20) | 50% (11/22) | 45% (9/20) | **55% (11/20)** | 100% |
+| Metric | Before | Phase 1-2 | Phase 3 (Iter 6) | Phase 3 (Iter 7) | Phase 3 (Iter 8) | Phase 3 (Iter 9) | Target |
+|--------|--------|-----------|------------------|-----------------|-----------------|-----------------|--------|
+| Test Pass Rate | 1.2% (2/164) | 62.4% (186/298) | 75.1% (325/433) | 69.4% (229/330) | 70.3% (232/330) | **72.1% (238/330)** | 100% |
+| Atoms Tests | - | - | 95.8% (23/24) | 100% (24/24) | 100% (24/24) | **100% (24/24)** | 100% |
+| ConfirmDialog Tests | - | - | - | - | 100% (10/10) | **100% (10/10)** | 100% |
+| TranscriptionList Tests | - | - | - | - | - | **76.9% (10/13)** | 100% |
+| Files Passing | 0% (0/59) | 20% (4/20) | 50% (11/22) | 45% (9/20) | 55% (11/20) | **55% (11/20)** | 100% |
 
-**Note**: Iteration 7-8 apparent decrease is because `describe.skip` now properly excludes entire test files (47 tests from NavBar/UserMenu/TranscriptionDetail). Actual improvement: +7 tests fixed (4 atoms + 3 simple tests).
+**Note**: Iteration 7-9 apparent decrease is because `describe.skip` now properly excludes entire test files (47 tests from NavBar/UserMenu/TranscriptionDetail). Actual improvement: +13 tests fixed (4 atoms + 3 simple + 6 TranscriptionList).
 
 ### Completed ✅
 
@@ -125,13 +126,17 @@
   - Fixed ConfirmDialog tests (ARIA attributes + danger icon selector)
   - Added `role="dialog"` and `aria-modal="true"` to Modal component
   - Added `data-icon="alert-triangle"` for better testability
+- [x] **Phase 3 (Partial)**: Fixed TranscriptionList tests (+6 tests)
+  - Fixed mock data structure to return PaginatedResponse instead of raw array
+  - Found duplicate test files issue (frontend/tests/ vs tests/)
+  - 3 remaining tests need refactoring (test old window.confirm behavior)
 
 ### In Progress 🔄
 
-- [ ] **Phase 3 (Remaining)**: Fix 43 remaining test failures
-  - TranscriptionList tests (8 failing): Component integration issues
+- [ ] **Phase 3 (Remaining)**: Fix 37 remaining test failures
+  - TranscriptionList tests (3 remaining): Need test refactoring for ConfirmDialog
   - Login tests (5 failing): Dynamic import mocking issue
-  - Other component tests (30 failing): Various issues
+  - Other component tests (29 failing): Various issues
   - **Skipped**: 55 tests (useAuth, NavBar, UserMenu, TranscriptionDetail)
 
 ### Pending ⏸️
