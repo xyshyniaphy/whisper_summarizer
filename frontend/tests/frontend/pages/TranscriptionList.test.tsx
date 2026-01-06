@@ -99,8 +99,6 @@ describe('TranscriptionList', () => {
       data: mockTranscriptions
     })
     mockDeleteTranscription.mockResolvedValue(undefined)
-    // Mock window.confirm
-    global.confirm = vi.fn(() => true) as any
   })
 
   describe('Rendering', () => {
@@ -160,8 +158,8 @@ describe('TranscriptionList', () => {
 
       await waitFor(() => {
         // Failed transcription should have delete button
-        const rows = screen.getAllByText('失败')
-        expect(rows.length).toBeGreaterThan(0)
+        const deleteButton = screen.getByTitle('删除')
+        expect(deleteButton).toBeTruthy()
       })
     })
 
@@ -173,12 +171,21 @@ describe('TranscriptionList', () => {
         expect(screen.getByText('failed-audio.mp3')).toBeTruthy()
       })
 
-      // Click delete button (find by aria-label or data-testid)
+      // Click delete button
       const deleteButtons = screen.getAllByTitle('删除')
-      if (deleteButtons.length > 0) {
-        await user.click(deleteButtons[0])
-        expect(global.confirm).toHaveBeenCalledWith('确定要删除吗？')
-      }
+      const failedDeleteButton = deleteButtons.find(btn => {
+        const row = btn.closest('tr')
+        return row && row.textContent?.includes('failed-audio.mp3')
+      })
+
+      expect(failedDeleteButton).toBeTruthy()
+      await user.click(failedDeleteButton!)
+
+      // ConfirmDialog should be visible with title and message
+      await waitFor(() => {
+        expect(screen.getByText('删除失败项')).toBeTruthy()
+        expect(screen.getByText(/失败的转录将被删除/)).toBeTruthy()
+      })
     })
 
     it('確認後、deleteTranscriptionが呼ばれる', async () => {
@@ -189,18 +196,25 @@ describe('TranscriptionList', () => {
         expect(screen.getByText('failed-audio.mp3')).toBeTruthy()
       })
 
+      // Click delete button
       const deleteButtons = screen.getAllByTitle('删除')
-      if (deleteButtons.length > 0) {
-        await user.click(deleteButtons[0])
+      const failedDeleteButton = deleteButtons.find(btn => {
+        const row = btn.closest('tr')
+        return row && row.textContent?.includes('failed-audio.mp3')
+      })
 
-        await waitFor(() => {
-          expect(mockDeleteTranscription).toHaveBeenCalled()
-        })
-      }
+      await user.click(failedDeleteButton!)
+
+      // Click confirm button
+      const confirmButton = await screen.findByText('删除')
+      await user.click(confirmButton)
+
+      await waitFor(() => {
+        expect(mockDeleteTranscription).toHaveBeenCalled()
+      })
     })
 
     it('キャンセル時、deleteTranscriptionは呼ばれない', async () => {
-      global.confirm = vi.fn(() => false) as any
       const user = userEvent.setup()
       render(<TranscriptionList />, { wrapper })
 
@@ -208,11 +222,24 @@ describe('TranscriptionList', () => {
         expect(screen.getByText('failed-audio.mp3')).toBeTruthy()
       })
 
+      // Click delete button
       const deleteButtons = screen.getAllByTitle('删除')
-      if (deleteButtons.length > 0) {
-        await user.click(deleteButtons[0])
-        expect(mockDeleteTranscription).not.toHaveBeenCalled()
-      }
+      const failedDeleteButton = deleteButtons.find(btn => {
+        const row = btn.closest('tr')
+        return row && row.textContent?.includes('failed-audio.mp3')
+      })
+
+      await user.click(failedDeleteButton!)
+
+      // Click cancel button
+      const cancelButton = await screen.findByText('取消')
+      await user.click(cancelButton)
+
+      // Dialog should close and API should NOT be called
+      await waitFor(() => {
+        expect(screen.queryByText('删除失败项')).toBeNull()
+      })
+      expect(mockDeleteTranscription).not.toHaveBeenCalled()
     })
   })
 
