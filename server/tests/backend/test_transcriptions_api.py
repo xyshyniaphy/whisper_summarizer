@@ -179,12 +179,14 @@ def test_delete_transcription_success(test_client, db_session):
     db_session.add(trans)
     db_session.commit()
 
+    trans_id = trans.id  # Save ID before deletion
+
     response = test_client.delete(f"/api/transcriptions/{trans.id}")
     assert response.status_code == 204
 
-    # Verify deletion
-    db_session.refresh(trans)
-    assert trans.is_deleted is True
+    # Verify deletion - transcription should be removed from database (hard delete)
+    deleted_trans = db_session.query(Transcription).filter(Transcription.id == trans_id).first()
+    assert deleted_trans is None  # Transcription should be deleted
 
 
 def test_delete_transcription_not_found(test_client, db_session):

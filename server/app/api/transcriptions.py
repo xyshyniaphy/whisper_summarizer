@@ -179,12 +179,18 @@ async def delete_all_transcriptions(
     すべての文字起こしを削除 (ファイルも含む)
     処理中の場合はキャンセルしてプロセスを終了してから削除します
     """
-    from app.services.transcription_processor import (
-        is_transcription_active,
-        mark_transcription_cancelled,
-        kill_transcription_processes,
-        get_transcription_task_info
-    )
+    # Import transcription processor functions if available (runner only)
+    try:
+        from app.services.transcription_processor import (
+            is_transcription_active,
+            mark_transcription_cancelled,
+            kill_transcription_processes,
+            get_transcription_task_info
+        )
+        HAS_PROCESSOR = True
+    except ImportError:
+        # Server doesn't have transcription_processor (runner-only)
+        HAS_PROCESSOR = False
 
     # Get all user's transcriptions
     transcriptions = db.query(Transcription).filter(
@@ -200,8 +206,8 @@ async def delete_all_transcriptions(
     for transcription in transcriptions:
         transcription_id = str(transcription.id)
 
-        # Cancel active transcriptions
-        if is_transcription_active(transcription_id):
+        # Cancel active transcriptions (only if processor is available)
+        if HAS_PROCESSOR and is_transcription_active(transcription_id):
             logger.info(f"[DELETE ALL] Cancelling active transcription: {transcription_id}")
             mark_transcription_cancelled(transcription_id)
             kill_transcription_processes(transcription_id)
@@ -275,14 +281,19 @@ async def delete_transcription(
         raise HTTPException(status_code=404, detail="文字起こしが見つかりません")
 
     # Check if transcription is currently processing and cancel if needed
-    from app.services.transcription_processor import (
-        is_transcription_active,
-        mark_transcription_cancelled,
-        kill_transcription_processes,
-        get_transcription_task_info
-    )
+    # Import processor functions if available (runner only)
+    try:
+        from app.services.transcription_processor import (
+            is_transcription_active,
+            mark_transcription_cancelled,
+            kill_transcription_processes,
+            get_transcription_task_info
+        )
+        HAS_PROCESSOR = True
+    except ImportError:
+        HAS_PROCESSOR = False
 
-    if is_transcription_active(transcription_id):
+    if HAS_PROCESSOR and is_transcription_active(transcription_id):
         logger.info(f"[DELETE] Cancelling active transcription: {transcription_id}")
 
         # Get task info before cancelling
