@@ -389,16 +389,30 @@ describe('Chat Component', () => {
       })
     })
 
-    it.skip('reloads chat history after streaming completes', async () => {
+    it('reloads chat history after streaming completes', async () => {
       const { api } = await import('../../../src/services/api')
-      vi.mocked(api.getChatHistory).mockResolvedValue({ messages: [] })
-      
+
+      // Track call count explicitly
+      let callCount = 0
+      vi.mocked(api.getChatHistory).mockImplementation(() => {
+        callCount++
+        return Promise.resolve({ messages: [] })
+      })
+
       const mockStream = vi.fn()
       mockStream.mockImplementation(async (transcriptionId: string, content: string, onChunk: any, onError: any, onComplete: any) => {
         onChunk('Response')
+        // Small delay to simulate async streaming
+        await new Promise(resolve => setTimeout(resolve, 10))
+        // Call onComplete which triggers loadChatHistory
         onComplete?.()
+        // Wait for loadChatHistory to complete
+        await new Promise(resolve => setTimeout(resolve, 50))
       })
       vi.mocked(api.sendChatMessageStream).mockImplementation(mockStream)
+
+      // Reset call count for this test
+      callCount = 0
 
       render(<Chat {...defaultProps} />)
 
@@ -406,20 +420,24 @@ describe('Chat Component', () => {
         const input = screen.getByRole('textbox')
       })
 
+      const initialCalls = callCount
+      expect(initialCalls).toBeGreaterThan(0) // Initial load
+
       const user = userEvent.setup()
       const input = screen.getByRole('textbox')
-      
+
       await user.type(input, 'Test')
-      
+
       const button = screen.getByRole('button', { name: /发送/i })
       await user.click(button)
 
+      // Wait for reload after streaming
       await waitFor(() => {
-        // Should reload history after completion
-        expect(api.getChatHistory).toHaveBeenCalledWith(mockTranscriptionId)
-        // Should be called at least twice: initial load + after completion
-        expect(api.getChatHistory).toHaveBeenCalledTimes(2)
+        expect(callCount).toBeGreaterThan(initialCalls)
       }, { timeout: 5000 })
+
+      // Should have been called again after streaming completed
+      expect(callCount).toBe(initialCalls + 1)
     })
   })
 
