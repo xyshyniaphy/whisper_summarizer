@@ -8,7 +8,7 @@ import time
 import asyncio
 import gzip
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional, Dict, Set
 from threading import BoundedSemaphore, Lock, Event
@@ -327,7 +327,7 @@ class TranscriptionProcessor:
 
                     # Mark as completed
                     transcription.stage = STAGE_COMPLETED
-                    transcription.completed_at = datetime.utcnow()
+                    transcription.completed_at = datetime.now(timezone.utc)
                     transcription.error_message = None
                     db.commit()
 

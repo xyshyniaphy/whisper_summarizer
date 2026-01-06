@@ -10,7 +10,7 @@ from fastapi import HTTPException, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from typing import Optional
 from uuid import UUID
-from datetime import datetime
+from datetime import datetime, timezone
 import logging
 
 logger = logging.getLogger(__name__)
@@ -51,11 +51,11 @@ async def get_current_user(
         return {
             "id": UUID("123e4567-e89b-42d3-a456-426614174000"),  # UUID object for SQLAlchemy
             "email": "test@example.com",
-            "email_confirmed_at": datetime.utcnow(),
+            "email_confirmed_at": datetime.now(timezone.utc),
             "phone": None,
             "last_sign_in_at": None,
-            "created_at": datetime.utcnow(),
-            "updated_at": datetime.utcnow(),
+            "created_at": datetime.now(timezone.utc),
+            "updated_at": datetime.now(timezone.utc),
             "user_metadata": {"role": "admin"},
             "app_metadata": {},
         }

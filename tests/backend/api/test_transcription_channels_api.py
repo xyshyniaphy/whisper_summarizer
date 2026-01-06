@@ -7,7 +7,7 @@ Transcription Channel Assignment API エンドポイントテスト
 
 import pytest
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 from app.models.transcription import Transcription
@@ -51,7 +51,7 @@ def test_user(db_session: Session) -> dict:
         email=f"user-{str(uid)[:8]}@example.com",
         is_active=True,
         is_admin=False,
-        activated_at=datetime.utcnow()
+        activated_at=datetime.now(timezone.utc)
     )
     db_session.add(user)
     db_session.commit()
@@ -73,7 +73,7 @@ def test_admin(db_session: Session) -> dict:
         email=f"admin-{str(uid)[:8]}@example.com",
         is_active=True,
         is_admin=True,
-        activated_at=datetime.utcnow()
+        activated_at=datetime.now(timezone.utc)
     )
     db_session.add(user)
     db_session.commit()
@@ -95,7 +95,7 @@ def other_user(db_session: Session) -> dict:
         email=f"other-{str(uid)[:8]}@example.com",
         is_active=True,
         is_admin=False,
-        activated_at=datetime.utcnow()
+        activated_at=datetime.now(timezone.utc)
     )
     db_session.add(user)
     db_session.commit()

@@ -8,7 +8,7 @@ import pytest
 from fastapi.testclient import TestClient
 from unittest.mock import AsyncMock, MagicMock
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 
 
@@ -27,7 +27,7 @@ def admin_user(db_session: Session) -> dict:
         email=f"admin-{str(uid)[:8]}@example.com",
         is_active=True,
         is_admin=True,
-        activated_at=datetime.utcnow()
+        activated_at=datetime.now(timezone.utc)
     )
     db_session.add(user)
     db_session.commit()
@@ -51,7 +51,7 @@ def regular_user(db_session: Session) -> dict:
         email=f"user-{str(uid)[:8]}@example.com",
         is_active=True,
         is_admin=False,
-        activated_at=datetime.utcnow()
+        activated_at=datetime.now(timezone.utc)
     )
     db_session.add(user)
     db_session.commit()

@@ -3,7 +3,7 @@ active: true
 iteration: 1
 max_iterations: 0
 completion_promise: null
-started_at: "2026-01-05T13:06:13Z"
+started_at: "2026-01-06T05:14:54Z"
 ---
 
-ultrathink , implement phase one by one and test and fix bugs
+ultrathink read todo.md and implement , test and fix bugs. update todo.md

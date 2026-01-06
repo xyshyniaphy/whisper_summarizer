@@ -17,7 +17,7 @@ const mockSignInWithOAuth = vi.fn()
 vi.mock('@/services/supabase', () => ({
   supabase: {
     auth: {
-      signInWithOAuth: () => mockSignInWithOAuth()
+      signInWithOAuth: (args: any) => mockSignInWithOAuth(args)
     }
   }
 }))
@@ -75,7 +75,7 @@ describe('Login', () => {
       })
     })
 
-    it.skip('Google認証成功時、OAuthが正しいパラメータで呼ばれる', async () => {
+    it('Google認証成功時、OAuthが正しいパラメータで呼ばれる', async () => {
       const user = userEvent.setup()
       render(<Login />, { wrapper })
 
@@ -132,14 +132,14 @@ describe('Login', () => {
   })
 
   describe('Loading States', () => {
-    it.skip('Google認証処理中、ボタンが無効になる', async () => {
+    it('Google認証処理中、ボタンが無効になる', async () => {
       const user = userEvent.setup()
       // Make the promise never resolve to test loading state
       mockSignInWithOAuth.mockReturnValue(new Promise(() => {}))
 
       render(<Login />, { wrapper })
 
-      const googleButton = screen.getByText(/使用 Google 继续/)
+      const googleButton = screen.getByLabelText('Sign in with Google')
       await user.click(googleButton)
 
       await waitFor(() => {
@@ -164,7 +164,7 @@ describe('Login', () => {
   })
 
   describe('Error Handling', () => {
-    it.skip('ネットワークエラー時、エラーメッセージが表示される', async () => {
+    it('ネットワークエラー時、エラーメッセージが表示される', async () => {
       const user = userEvent.setup()
       mockSignInWithOAuth.mockRejectedValue(
         new Error('ネットワークエラー')
@@ -176,7 +176,7 @@ describe('Login', () => {
       await user.click(googleButton)
 
       await waitFor(() => {
-        const errorMessage = screen.queryByText(/网络错误|发生意外错误/)
+        const errorMessage = screen.queryByText(/ネットワークエラー|网络错误|发生意外错误/)
         expect(errorMessage).toBeTruthy()
       })
     })

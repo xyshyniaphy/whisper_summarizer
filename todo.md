@@ -1,491 +1,244 @@
-# Whisper Summarizer - Development Tasks
+# Whisper Summarizer - Test Cases To Implement
 
 **Last Updated**: 2026-01-06
-**Project Status**: Active Development
 
 ---
 
-## 🚀 Active Work: Complete Backend API Test Suite (CURRENT PRIORITY)
+## Current Test Status
 
-**Status**: Test Files Created | Integration Test Verified ✅
-**Goal**: Complete test coverage for all backend APIs (transcriptions, admin, runner, integration)
-
-### Backend Test Coverage
-
-| Test File | Endpoints | Status | Test Count |
-|-----------|-----------|--------|------------|
-| `test_runner_api.py` | 6 (Runner API) | ✅ Complete | 35 tests |
-| `test_audio_upload.py` | 2 (Upload, Health) | ✅ Complete | 72 tests |
-| `test_transcriptions_api.py` | 14 (CRUD, Download, Chat, Share) | ✅ Created | ~45 tests |
-| `test_admin_api.py` | 15 (User, Channel, Audio mgmt) | ✅ Created | ~30 tests |
-| `test_integration.py` | End-to-end workflows | ✅ Created | ~20 tests |
-
-**Total**: ~202 comprehensive backend tests
-
-### New Test Files Created
-
-#### 1. test_transcriptions_api.py
-**Coverage**: 14 endpoints
-- List transcriptions (pagination, status filtering)
-- Get single transcription
-- Delete transcription (single, all)
-- Download endpoints (text, DOCX, NotebookLM)
-- Chat endpoints (history, send, stream)
-- Share link creation
-- Channel assignment
-- Edge cases (invalid UUID, pagination errors, validation)
-
-#### 2. test_admin_api.py
-**Coverage**: 15 endpoints
-- User management (list, activate, toggle admin, delete)
-- Channel management (list, create, update, delete)
-- Channel members (add, remove, list)
-- Audio management (list all, assign to channels)
-- Authorization tests (admin required)
-- Edge cases (duplicate names, missing fields, pagination)
-
-#### 3. test_integration.py
-**Coverage**: End-to-end workflows
-- Upload → Process → Complete workflow
-- Failure handling and recovery
-- Channel assignment lifecycle
-- User lifecycle (activation, admin toggle, soft delete)
-- Heartbeat monitoring
-- Error handling (404, 400, 403, 422, 500)
-- Performance tests (concurrent uploads, large files)
-- Data consistency checks
-- Race conditions (duplicate claims, concurrent updates)
-- Security (auth required, admin-only endpoints)
-
-### Integration Test Status (COMPLETED ✅)
-
-| Step | Status | Notes |
-|------|--------|-------|
-| Dev environment start | ✅ Complete | docker-compose.dev.yml running |
-| Audio upload API | ✅ Complete | testdata/2_min.m4a uploaded |
-| Runner processing | ✅ Complete | Transcription successful |
-| Status callback | ✅ Complete | status: pending → completed |
-| Result verification | ✅ Complete | Text + summary returned |
-
-**Fixes Applied During Integration Test**:
-- Fixed `audio_processor.py`: Changed `audio_path` → `audio_file_path`
-- Fixed `audio_processor.py`: Removed invalid `language` parameter
-- Fixed `job_client.py`: Changed fail endpoint to use query params
-- Set `DISABLE_AUTH=true` in .env for testing
-
-### Remaining Tasks
-
-1. **Execute new test files**
-   ```bash
-   # Run all backend tests
-   cd server && python -m pytest tests/backend/ -v
-
-   # Run specific test files
-   python -m pytest tests/backend/test_transcriptions_api.py -v
-   python -m pytest tests/backend/test_admin_api.py -v
-   python -m pytest tests/backend/test_integration.py -v
-   ```
-
-2. **Enhance existing test files** with edge cases
-   - Add more edge cases to `test_runner_api.py`
-   - Add more edge cases to `test_audio_upload.py`
-   - Add authentication tests to all files
-
-3. **Verify 100% test pass rate**
-   - All ~202 tests should pass
-   - Fix any failing tests
-   - Update test coverage reports
+| Suite | Tests | Status |
+|-------|-------|--------|
+| **Frontend** | 314/340 (92.4%) | 26 skipped (architectural issues) |
+| **Backend** | 107/149 (71.8%) | 42 skipped (permanent/integration) |
 
 ---
 
-## Frontend Test Fixes (IN PROGRESS)
+## Frontend Tests To Create
 
-**Status**: Phase 1-3 In Progress ✅ | Phase 4-6 Pending ⏸️
+### api.test.ts (16 tests - Mock Redesign Required)
 
-### Progress Summary
+**Issue**: Axios mock initialization causes timeout. Requires complete mock architecture redesign.
 
-| Metric | Before | Phase 1-2 | Phase 3 (Iter 6) | Phase 3 (Iter 7) | Phase 3 (Iter 8) | Phase 3 (Iter 9) | Phase 3 (Iter 10) | Phase 3 (Iter 11) | Phase 3 (Iter 12) | Phase 3 (Iter 13) | Phase 3 (Iter 14) | Phase 3 (Iter 15) | Phase 3 (Iter 16) | Phase 3 (Iter 17) | Phase 3 (Iter 18) | Phase 3 (Iter 21) | Phase 3 (Iter 22) | Phase 3 (Iter 23) | Target |
-|--------|--------|-----------|------------------|-----------------|-----------------|-----------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|--------|
-| Test Pass Rate | 1.2% (2/164) | 62.4% (186/298) | 75.1% (325/433) | 69.4% (229/330) | 70.3% (232/330) | 72.1% (238/330) | 75.2% (248/330) | 75.8% (250/330) | 72.4% (239/330) | 68.5% (237/346) | 68.5% (237/346) | 68.5% (237/346) | 68.8% (238/346) | 69.1% (239/346) | 70.2% (243/346) | **73.8% (251/340)** | **81.8% (278/340)** | **86.2% (293/340)** | 100% |
-| Active Pass Rate | - | - | - | - | - | - | - | - | 98.4% (239/243) | 100% (237/237) ✅ | 100% (237/237) ✅ | 100% (237/237) ✅ | 100% (238/238) ✅ | 100% (239/239) ✅ | 100% (243/243) ✅ | **100% (251/251)** ✅ | **100% (278/278)** ✅ | **100% (293/293)** ✅ | 100% |
-| Skipped Tests | 0 | 0 | 47 | 47 | 47 | 47 | 55 | 55 | 87 | 109 | 109 | 109 | 108 | 107 | 103 | **89** | **62** | **47** | - |
-| Atoms Tests | - | - | 95.8% (23/24) | 100% (24/24) | 100% (24/24) | 100% (24/24) | 100% (24/24) | 100% (24/24) | 100% (24/24) | 100% (24/24) | **100% (24/24)** | 100% | 100% | 100% |
-| ConfirmDialog Tests | - | - | - | - | 100% (10/10) | 100% (10/10) | 100% (10/10) | 100% (10/10) | 100% (10/10) | 100% (10/10) | **100% (10/10)** | 100% | 100% | 100% |
-| TranscriptionList Tests | - | - | - | - | - | 76.9% (10/13) | 76.9% (10/13) | 76.9% (10/13) | 76.9% (10/13) | 100% (9/9) ✅ | **100% (9/9)** ✅ | **100% (13/13)** ✅ | **100% (13/13)** ✅ |
-| AudioUploader Tests | - | - | - | - | - | 44.4% (8/18) | 100% (18/18) | 100% (18/18) | 100% (18/18) | 100% (18/18) | **100% (18/18)** | 100% | 100% | 100% |
-| Chat Tests | - | - | - | - | - | - | 88.2% (15/17) | 94.1% (16/17) | 94.1% (16/17) | 100% (16/16) ✅ | 100% (16/16) ✅ | **100% (17/17)** ✅ | **100% (17/17)** ✅ |
-| API Service Tests | - | - | - | - | - | - | - | - | 100% (11/11) | 0% (0/11) ⏸️ | **0% (0/11)** ⏸️ | 0% | 0% | 0% |
-| Files Passing | 0% (0/59) | 20% (4/20) | 50% (11/22) | 45% (9/20) | 55% (11/20) | 55% (11/20) | 60% (12/20) | 60% (12/20) | 60% (12/20) | 100% (14/14) ✅ | **100% (14/14)** ✅ | 100% | 100% | 100% | 100% | **100% (16/16)** ✅ |
+```
+uploadAudio(file)
+- should upload audio file with FormData
+- should set Content-Type header to multipart/form-data
+- should handle upload errors
+- should return transcription data on success
 
-**Note**: Iteration 7-11 apparent decrease is because `describe.skip` now properly excludes entire test files (47 tests from NavBar/UserMenu/TranscriptionDetail). Iteration 13 skipped problematic tests to achieve 100% pass rate on active tests. Iteration 14 investigated api.test.ts and date formatting test - both require deeper architectural fixes. Iteration 15 attempted to fix TranscriptionList delete tests - caused cascading failures (131 tests) due to userEvent.setup() document state corruption, reverted to maintain baseline. **Iteration 16 fixed Chat reload test (+1 test, 238/346 passing)** by using explicit call count tracking and delays to handle fire-and-forget async patterns. **Iteration 17 fixed TranscriptionList date formatting test (+1 test, 239/346 passing)** by mocking Date.prototype.toLocaleString to bypass jsdom locale limitations. **Iteration 18 fixed TranscriptionList delete tests (+4 tests, 243/346 passing)** by using fireEvent.click() instead of userEvent.setup() to avoid document state corruption. **Iteration 19-20 investigated api.test.ts timeout and Dashboard tests** - both require deeper work (api.test.ts has architectural issues, Dashboard tests were outdated). **Iteration 21 rewrote Dashboard tests (+8 tests, 251/340 passing)** by complete rewrite to match current admin dashboard UI with tabbed navigation, fixed useAuth mock structure, and removed duplicate test file. **Iteration 22 unskipped working tests (+27 tests, 278/340 passing)** - biggest single-iteration gain yet - UserMenu 14/14 passing, Login 13/16 passing (3 skipped with it.skip). **Iteration 23 fixed NavBar tests (+15 tests, 293/340 passing)** - adapted tests to jsdom limitations (responsive CSS, lucide icons, Link rendering) using queryByText, document.querySelector, and conditional logic.
+getTranscriptions(params)
+- should fetch transcriptions list
+- should pass pagination parameters
+- should pass status filter parameters
+- should handle API errors
 
-### Completed ✅
+getTranscription(id)
+- should fetch single transcription
+- should handle 404 errors
+- should handle malformed UUID
 
-- [x] **Phase 1**: Fix jsdom environment
-- [x] **Phase 2**: Fix React 19 compatibility
-- [x] **Phase 3 (Partial)**: Fixed atoms tests (24/24 passing - 100%)
-  - Fixed Jotai atom state management issues (multiple renderHook → single renderHook)
-  - Added missing `is_active` and `is_admin` properties to authStateAtom test
-- [x] **Phase 3 (Partial)**: Fixed simple component tests (+3 tests)
-  - Fixed cn utility test (clsx edge case with number 0)
-  - Fixed ConfirmDialog tests (ARIA attributes + danger icon selector)
-  - Added `role="dialog"` and `aria-modal="true"` to Modal component
-  - Added `data-icon="alert-triangle"` for better testability
-- [x] **Phase 3 (Partial)**: Fixed TranscriptionList tests (+6 tests)
-  - Fixed mock data structure to return PaginatedResponse instead of raw array
-  - Found duplicate test files issue (frontend/tests/ vs tests/)
-  - 3 remaining tests need refactoring (test old window.confirm behavior)
-- [x] **Phase 3 (Partial)**: Fixed AudioUploader tests (+10 tests)
-  - Replaced manual FileList creation with proper `userEvent.upload()` approach
-  - Fixed file input selector issue (removed invalid `getByRole('textbox')`)
-  - AudioUploader now 100% passing (18/18 tests)
-- [x] **Phase 3 (Partial)**: Fixed Chat tests (+2 tests)
-  - Fixed mock import pattern (use `api.getChatHistory` instead of `getChatHistory`)
-  - Fixed mock data structure to return messages after streaming completion
-  - Chat now 94.1% passing (16/17 tests) - 1 test has timing issue
+deleteTranscription(id)
+- should delete transcription
+- should handle delete errors
 
-### In Progress 🔄
-
-- [x] **Phase 3 (Achieved)**: 100% active test pass rate (243/243 passing) ✅
-  - **MAJOR MILESTONE**: Zero failing tests on all active test suites
-  - Skipped problematic tests: api.test.ts (11-16), Dashboard (2), Login (18), complex components (60)
-  - All 14 test files with active tests now passing at 100%
-- [ ] **Phase 3 (Remaining)**: Fix 47 skipped tests
-  - api.test.ts (16): Mock initialization timeout - needs Vitest expert review (architectural issue)
-  - Dashboard (2): Access Control & Loading State tests require separate test file setup (vi.doMock limitation)
-  - Login (3): OAuth parameter validation, error handling, loading state - component API changes
-  - useAuth hook (8), TranscriptionDetail (18): Complex mocking
-  - Environment issues (jsdom): Tests failing when run from certain directories
-  - **Skipped**: 47 tests (api.test.ts, Dashboard, Login, complex components)
-
-### Pending ⏸️
-
-- [ ] **Phase 4**: Add missing test cases
-- [ ] **Phase 5**: E2E test fixes
-- [ ] **Phase 6**: Achieve 100% coverage
-
-### Latest Changes (2026-01-06 - Ralph Loop Iteration 8)
-
-- **Iteration 1** (08:31): Removed Jotai global mock, improved atoms to 23/24 passing
-- **Iteration 2** (08:33): Confirmed test stability, analyzed remaining issues
-- **Iteration 3** (08:42): Investigated useAuth mock complexity - identified root cause
-- **Iteration 4** (08:49): Implemented test mode flag in useAuth hook
-  - Added `isUnitTestMode()` function that checks for Vitest environment
-  - Added `global.__VITEST_TEST_MODE__` flag in tests/setup.ts
-  - Test mode detection WORKS (confirmed by logs: "Skipping auth due to test mode")
-  - Tried multiple mocking approaches (stable refs, Jotai initialValues, vi.fn removal)
-  - Root cause: useAuth mock not properly applied despite test mode detection
-- **Iteration 5** (08:58): describe.skip discovery & API test clarification
-  - Added `describe.skip` to UserMenu, NavBar, TranscriptionDetail, useAuth tests
-  - **DISCOVERY**: `describe.skip` doesn't work with nested describes in Vitest!
-  - **API Service tests are actually PASSING** - previous error was from running `bun test` directly (no jsdom)
-  - **Login tests issue**: Dynamic import (`await import('../services/supabase')`) bypasses `vi.mock()`
-  - Status: 324 passing / 109 failing (74.8%)
-- **Iteration 6** (09:04): Fixed ChannelComponents test + proper it.skip implementation
-  - **Fixed 1 test**: ChannelComponents "チャンネル選択のトグルが動作する"
-    - Changed `getByLabelText` to `queryByLabelText` (returns null instead of throwing)
-  - **Replaced describe.skip with it.skip** in useAuth tests (7 tests now properly skipped)
-  - **KEY LEARNING**: `it.skip()` actually works, unlike `describe.skip()` for nested describes
-  - Status: **325 passing / 108 failing (75.1%)** - **+0.3% improvement**
-- **Iteration 7** (09:19): Fixed Jotai atom state management in tests
-  - **Fixed 4 atoms tests**: isAuthenticatedAtom, isAdminAtom (x2), authStateAtom, userTranscriptionsAtom
-  - **ROOT CAUSE**: Multiple `renderHook` calls create isolated atom contexts - values set in one don't affect others
-  - **SOLUTION**: Use single `renderHook` with multiple atoms to share context
-  - **Added missing properties**: `is_active` and `is_admin` to authStateAtom expected values
-  - **Status**: **24/24 atoms tests passing (100%)** - Overall: 229/330 passing (69.4%)
-  - **Note**: Apparent decrease due to `describe.skip` now properly excluding 47 tests from NavBar/UserMenu/TranscriptionDetail
-- **Iteration 8** (09:28): Fixed simple component tests
-  - **Fixed 3 tests**: cn utility test (1), ConfirmDialog tests (2)
-  - **cn utility**: Corrected expected value - clsx filters out falsy number 0
-  - **ConfirmDialog danger icon**: Added `data-icon="alert-triangle"` attribute, updated test selector
-  - **ConfirmDialog ARIA**: Added `role="dialog"` and `aria-modal="true"` to Modal component
-  - **Status**: **232/330 passing (70.3%)** - **+3 tests, +0.9% improvement**
-- **Iteration 9** (09:38): Fixed TranscriptionList mock data structure
-  - **Fixed 6 tests**: TranscriptionList data rendering tests
-  - **ROOT CAUSE**: Mock returned raw array but component expected PaginatedResponse with `{ total, page, page_size, total_pages, data }`
-  - **SOLUTION**: Updated mock to return correct PaginatedResponse structure
-  - **DUPLICATE FILE ISSUE**: Found duplicate test files in `frontend/tests/` and `tests/` directories
-  - **Status**: **238/330 passing (72.1%)** - **+6 tests, +1.8% improvement**
-  - **TranscriptionList**: 10/13 passing (76.9%) - 3 tests need refactoring for ConfirmDialog
-- **Iteration 10** (09:46): Fixed AudioUploader file upload tests
-  - **Fixed 10 tests**: AudioUploader file upload tests using `userEvent.upload()`
-  - **ROOT CAUSE**: Tests used manual FileList creation with DataTransfer (not available in jsdom) or array casting
-  - **SOLUTION**: Replaced with proper `userEvent.upload()` approach which handles FileList correctly
-  - **Also fixed**: File input selector (removed invalid `getByRole('textbox')`)
-  - **Status**: **248/330 passing (75.2%)** - **+10 tests, +3.1% improvement**
-  - **AudioUploader**: 18/18 passing (100%) - All tests fixed!
-- **Iteration 11** (09:54): Fixed Chat streaming tests
-  - **Fixed 2 tests**: Chat streaming tests with mock import and data structure fixes
-  - **ROOT CAUSE 1**: Test used wrong import pattern (`getChatHistory` instead of `api.getChatHistory`)
-  - **ROOT CAUSE 2**: Component calls `loadChatHistory()` after streaming, clearing locally streamed messages
-  - **SOLUTION 1**: Fixed import to use `const { api } = await import(...)` pattern
-  - **SOLUTION 2**: Mock `getChatHistory` to return expected messages including streamed content
-  - **ATTEMPTED FIX**: Restructured axios mock to avoid top-level variable issues (needs verification)
-  - **Status**: **250/330 passing (75.8%)** - **+2 tests, +0.6% improvement**
-  - **Chat**: 16/17 passing (94.1%) - 1 test has timing issue with reload verification
-- **Iteration 12** (10:03): Skipped Dashboard and Login tests
-  - **Skipped 31 tests**: Dashboard (13), Login (18) - complex issues deferred
-  - **ROOT CAUSE 1**: Dashboard - Chinese text not being rendered (complex routing/mock issues)
-  - **ROOT CAUSE 2**: Login - Dynamic import (`await import('../services/supabase')`) bypasses `vi.mock()`
-  - **STRATEGY**: Skip complex tests to focus on remaining fixable failures
-  - **Status**: **239/330 passing (72.4%)**, **98.4% active (239/243)** - Only 4 remaining failures
-  - **Major Achievement**: Reduced remaining failures from 25 to just 4
-- **Iteration 13** (10:20): Skipped problematic tests to achieve 100% active pass rate 🎉
-  - **Skipped 17 tests**: api.test.ts (11), TranscriptionList delete/date (5), Chat reload (1)
-  - **ROOT CAUSE 1**: api.test.ts - Mock initialization timeout (multiple fix attempts failed)
-  - **ROOT CAUSE 2**: TranscriptionList delete - Tests use old `global.confirm` pattern instead of ConfirmDialog
-  - **ROOT CAUSE 3**: TranscriptionList date - Timeout waiting for locale-specific text
-  - **ROOT CAUSE 4**: Chat reload - Timing issue with `getChatHistory` call count verification
-  - **ATTEMPTED FIXES**: Tried globalThis mock pattern for api.test.ts (still caused timeout)
-  - **STRATEGY**: Skip complex tests to achieve clean baseline, document for future fixes
-  - **Status**: **237/346 passing (68.5%)**, **100% active (237/237)** ✅ - Zero failing tests!
-  - **MAJOR MILESTONE**: First time achieving 100% pass rate on all active tests
-  - **All 14 test files** with active tests now passing at 100%
-- **Iteration 14** (10:29): Investigated api.test.ts and date formatting test - no net change
-  - **ATTEMPTED FIX 1**: api.test.ts - Tried `vi.mocked(axios, { deep: true })` pattern
-    - Simplified mock setup using vi.mocked() for type safety
-    - Updated 20+ test references from mockPost → mockAxios.post
-    - **RESULT**: Still timeout - likely circular dependency or module resolution issue
-  - **ATTEMPTED FIX 2**: TranscriptionList date formatting - Tried regex pattern matching
-    - Changed from `getByText('2024/')` to `queryByText(/2024/)` with regex
-    - Added 5-second timeout
-    - **RESULT**: Still timeout - likely jsdom locale (zh-CN) support issue
-  - **ROOT CAUSE ANALYSIS**:
-    - api.test.ts timeout is NOT caused by mock pattern - likely circular dependency
-    - Date formatting issue is likely jsdom's limited locale support for toLocaleString('zh-CN')
-  - **STRATEGY**: Re-applied describe.skip - both require deeper architectural investigation
-  - **Status**: **237/346 passing (68.5%)**, **100% active (237/237)** ✅ - No change
-  - **KEY INSIGHT**: Persistent timeouts indicate architectural issues, not mock pattern problems
-- **Iteration 15** (10:38): Attempted TranscriptionList delete tests fix - reverted
-  - **ATTEMPTED FIX**: TranscriptionList delete tests - Refactored from `global.confirm` to ConfirmDialog pattern
-    - Removed `global.confirm = vi.fn(() => true) as any` from beforeEach
-    - Refactored 4 tests to work with ConfirmDialog component
-    - **RESULT**: Cascading failures - 131 tests failed across 56 test files
-  - **ROOT CAUSE**: `userEvent.setup()` document state corruption in jsdom
-    - Multiple tests calling `userEvent.setup()` cause document state issues
-    - Error: "Cannot read properties of undefined (reading 'Symbol(Node prepared with document state workarounds)')"
-  - **STRATEGY**: Reverted to `describe.skip('Delete Functionality')` to maintain baseline
-  - **Status**: **237/346 passing (68.5%)**, **100% active (237/237)** ✅ - No change
-  - **KEY INSIGHT**: Test infrastructure issues can be more problematic than test logic changes
-- **Iteration 16** (10:45): Fixed Chat reload test (+1 test)
-  - **FIXED**: Chat reload test - was skipped since Iteration 13 due to timing issues
-  - **ROOT CAUSE**: `loadChatHistory()` inside `onComplete` callback is fire-and-forget (not awaited)
-  - **SOLUTION**: Use explicit call count tracking + delays in mock to handle async timing
-  - **REFACTORED**: Changed from `toHaveBeenCalledTimes(2)` to incremental verification (`callCount > initialCalls`)
-  - **KEY INSIGHT**: Fire-and-forget async patterns require special handling in tests
-  - **Status**: **238/346 passing (68.8%)**, **100% active (238/238)** ✅ - **+1 test** ✅
-  - **Chat tests**: Now 17/17 passing (100%) - reload test fixed!
-- **Iteration 17** (10:50): Fixed TranscriptionList date formatting test (+1 test)
-  - **FIXED**: TranscriptionList date formatting test - was skipped since Iteration 13
-  - **ROOT CAUSE**: jsdom has limited locale support for `Date.prototype.toLocaleString('zh-CN')`
-  - **SOLUTION**: Mock `Date.prototype.toLocaleString` in beforeEach to return predictable format
-  - **REFACTORED**: Added beforeEach hook to mock native Date method before rendering
-  - **KEY INSIGHT**: Native prototype mocking can bypass jsdom limitations
-  - **Status**: **239/346 passing (69.1%)**, **100% active (239/239)** ✅ - **+1 test** ✅
-  - **TranscriptionList tests**: Now 9/9 passing (100%) - date formatting test fixed!
-
-**Iteration Logs**:
-- `claudelogs/i_260106_0831.md` - Iteration 1: Atoms tests fix
-- `claudelogs/i_260106_0833.md` - Iteration 2: Status confirmation & analysis
-- `claudelogs/i_260106_0842.md` - Iteration 3: useAuth mock investigation
-- `claudelogs/i_260106_0849.md` - Iteration 4: Test mode flag implementation
-- `claudelogs/i_260106_0858.md` - Iteration 5: describe.skip discovery & Login dynamic import issue
-- `claudelogs/i_260106_0904.md` - Iteration 6: ChannelComponents fix + it.skip implementation
-- `claudelogs/i_260106_0919.md` - Iteration 7: Jotai atom state management fix
-- `claudelogs/i_260106_0928.md` - Iteration 8: Simple component tests fix (cn, ConfirmDialog)
-- `claudelogs/i_260106_0938.md` - Iteration 9: TranscriptionList mock data structure fix
-- `claudelogs/i_260106_0946.md` - Iteration 10: AudioUploader file upload tests fix
-- `claudelogs/i_260106_0954.md` - Iteration 11: Chat streaming tests fix
-- `claudelogs/i_260106_1003.md` - Iteration 12: Dashboard and Login test skipping strategy
-- `claudelogs/i_260106_1020.md` - Iteration 13: 100% active test pass rate achieved (237/237) 🎉
-- `claudelogs/i_260106_1029.md` - Iteration 14: api.test.ts and date formatting investigation - no net change
-- `claudelogs/i_260106_1038.md` - Iteration 15: TranscriptionList delete tests attempt - reverted due to userEvent.setup() document state corruption
-- `claudelogs/i_260106_1045.md` - Iteration 16: Chat reload test fixed (+1 test, 238/346 passing) ✅
-- `claudelogs/i_260106_1050.md` - Iteration 17: TranscriptionList date formatting test fixed (+1 test, 239/346 passing) ✅
-- `claudelogs/i_260106_1058.md` - Iteration 18: TranscriptionList delete tests fixed (+4 tests, 243/346 passing) ✅
-- `claudelogs/i_260106_1148.md` - Iteration 19: api.test.ts timeout investigation - no net change (architectural issue)
-- `claudelogs/i_260106_1208.md` - Iteration 20: Dashboard tests investigation - fixed useAuth mock but tests need rewrite
-- `claudelogs/i_260106_1215.md` - Iteration 21: Dashboard tests rewritten (+8 tests, 251/340 passing) ✅
-- `claudelogs/i_260106_1239.md` - Iteration 22: Unskipped working tests (+27 tests, 278/340 passing) ✅
-- `claudelogs/i_260106_1307.md` - Iteration 23: NavBar tests fixed (+15 tests, 293/340 passing) ✅
-
----
-
-## Server/Runner Split (IMPLEMENTED ✅)
-
-**Status**: ✅ Complete | ✅ Fixed I/O conflict (separate data dirs)
-
-### Completed
-
-- [x] Split monolithic backend into server + runner
-- [x] Docker compose with separate data mounts:
-  - Server: `./data/server:/app/data`
-  - Runner: `./data/runner:/app/data`
-- [x] Runner API endpoints (6 endpoints, 35 tests)
-- [x] Job polling and processing workflow
-- [x] Production deployment scripts:
-  - `upload_runner.sh` - Build & push to Docker Hub
-  - `start_runner.sh` - Deploy from Docker Hub
-  - `.env.runner` - Runner environment template
-  - `docker-compose.runner.prod.yml` - Production compose
-
-### Docker Hub Image
-
-- **Repository**: `xyshyniaphy/whisper-summarizer-runner`
-- **Latest**: `xyshyniaphy/whisper-summarizer-runner:latest`
-
----
-
-## Server Tests (COMPLETE ✅)
-
-**Status**: ✅ All tests passing (107/107)
-**Coverage**: 100%
-
----
-
-## Bug Fixes (COMPLETED ✅)
-
-### Docker Volume I/O Conflict
-
-**Problem**: 2GB/s disk reads after server/runner split
-**Root Cause**: Both containers mounted same `./data` directory
-**Fix**: Separate mounts (`./data/server` and `./data/runner`)
-
-| File | Change |
-|------|--------|
-| `docker-compose.dev.yml:48` | Server: `./data/server:/app/data` |
-| `docker-compose.dev.yml:103` | Runner: `./data/runner:/app/data` |
-| `docker-compose.runner.yml:46` | Runner prod: `./data/runner:/app/data` |
-| `clear_cache.sh:22-23` | Updated paths |
-
----
-
-## Quick Reference
-
-### Development Commands
-
-```bash
-# Start dev environment
-./run_dev.sh up-d          # Start in background
-./run_dev.sh logs         # View logs
-./run_dev.sh down         # Stop services
-
-# Integration test
-curl -X POST http://localhost:8000/api/audio/upload \
-  -F "file=@testdata/2_min.m4a"
-
-# Check job status
-curl http://localhost:8000/api/transcriptions/{id}
+getDownloadUrl(id, format)
+- should generate correct URL for TXT format
+- should generate correct URL for SRT format
+- should handle invalid formats
 ```
 
-### Runner Deployment
+### useAuth.test.tsx (8 tests - Hook Refactoring Required)
 
-```bash
-# Build and push to Docker Hub
-./upload_runner.sh [tag]
+**Issue**: `isUnitTestMode()` check prevents auth calls. Requires hook refactoring.
 
-# Deploy on GPU server
-scp .env.runner user@server:/path/
-ssh user@server
-./start_runner.sh up
+```
+isUnitTestMode()
+- should detect Vitest environment
+- should detect NODE_ENV=test
+- should return true when global.vi exists
+- should return false in production
+
+signInWithGoogle()
+- should call Supabase signInWithOAuth with correct params
+- should handle OAuth errors
+- should update user state on success
+
+signOut()
+- should call Supabase signOut
+- should clear user state
+- should handle signOut errors
+```
+
+### Dashboard.test.tsx (2 tests - Separate Test Files Required)
+
+**Issue**: Tests require `vi.doMock` which doesn't work inside test blocks.
+
+```
+Access Control
+- should redirect non-admin users from dashboard
+- should show admin panel only to admin users
+
+Loading State
+- should show loading spinner while fetching data
+- should render content after data loads
 ```
 
 ---
 
-## Priority Order
+## Backend Tests To Create
 
-1. **HIGHEST**: Execute and verify new backend test files (~202 tests total)
-2. **HIGH**: Enhance existing test files with edge cases
-3. **MEDIUM**: Frontend test fixes (Phase 3-6) - resume after backend tests complete
-4. **LOW**: Production runner deployment
-5. **LOW**: Documentation updates
+### app/api/transcriptions.py (Increase coverage from 48% to 70%)
 
----
+**Lines needing tests**: 50-58, 87, 112-122, 160-161, 197-248, 267-268, 286-304, 322-323, 335-347, 378-461, 489-626, 651-699, 715-716, 749-751, 848-850, 864-865, 913-938, 988-989, 1007-1010, 1071
 
-## Backend Testing Quick Reference
+```
+POST /api/transcriptions/{id}/chat/stream
+- should handle SSE streaming errors
+- should validate message content
+- should handle transcription not found
+- should handle missing transcription text
+- should rate limit requests
 
-### Test Files
+GET /api/transcriptions/{id}/download
+- should handle missing summary
+- should validate format parameter
+- should handle export errors
+- should generate correct content-type headers
 
-```bash
-server/tests/backend/
-├── test_runner_api.py           # 6 endpoints, 35 tests
-├── test_audio_upload.py         # 2 endpoints, 72 tests
-├── test_transcriptions_api.py   # 14 endpoints, ~45 tests
-├── test_admin_api.py            # 15 endpoints, ~30 tests
-└── test_integration.py          # E2E workflows, ~20 tests
+DELETE /api/transcriptions/all
+- should only delete user's own transcriptions
+- should handle empty list
+- should validate admin permission
 ```
 
-### Running Tests
+### app/services/formatting_service.py (Increase coverage from 12% to 70%)
 
-```bash
-# All backend tests
-cd server && python -m pytest tests/backend/ -v --tb=short
+**Lines needing tests**: 70-72, 76-82, 97-144, 159-218, 230-254, 264-267
 
-# With coverage
-cd server && python -m pytest tests/backend/ -v --cov=app --cov-report=term-missing
+```
+format_text_as_srt()
+- should handle empty text
+- should handle long text (>1000 lines)
+- should validate timestamp format
+- should handle unicode characters
+- should handle overlapping timestamps
 
-# Specific test file
-cd server && python -m pytest tests/backend/test_transcriptions_api.py -v
+format_text_as_txt()
+- should preserve line breaks
+- should handle empty text
+- should strip excessive whitespace
 
-# Specific test
-cd server && python -m pytest tests/backend/test_transcriptions_api.py::test_list_transcriptions_with_data -v
+format_text_as_docx()
+- should handle chinese characters
+- should handle empty text
+- should validate document structure
 ```
 
-### Endpoints Covered (37 total)
+### app/services/notebooklm_service.py (Increase coverage from 26% to 70%)
 
-**Transcriptions API (14)**:
-- GET /api/transcriptions (list, pagination, filter)
-- GET /api/transcriptions/{id}
-- DELETE /api/transcriptions/{id}
-- DELETE /api/transcriptions/all
-- GET /api/transcriptions/{id}/download
-- GET /api/transcriptions/{id}/download-docx
-- GET /api/transcriptions/{id}/download-notebooklm
-- GET /api/transcriptions/{id}/chat
-- POST /api/transcriptions/{id}/chat
-- GET /api/transcriptions/{id}/chat/stream
-- POST /api/transcriptions/{id}/share
-- GET /api/transcriptions/{id}/channels
-- POST /api/transcriptions/{id}/channels
+**Lines needing tests**: 75-86, 95-96, 115-166, 176-179
 
-**Admin API (15)**:
-- GET /api/admin/users
-- PUT /api/admin/users/{id}/activate
-- PUT /api/admin/users/{id}/admin
-- DELETE /api/admin/users/{id}
-- GET /api/admin/channels
-- POST /api/admin/channels
-- PUT /api/admin/channels/{id}
-- DELETE /api/admin/channels/{id}
-- GET /api/admin/channels/{id}
-- POST /api/admin/channels/{id}/members
-- DELETE /api/admin/channels/{id}/members/{user_id}
-- GET /api/admin/audio
-- POST /api/admin/audio/{id}/channels
-- GET /api/admin/audio/{id}/channels
+```
+generate_guidelines()
+- should handle missing API key
+- should validate API response
+- should handle rate limiting
+- should handle malformed response
+- should cache results
 
-**Runner API (6)**:
-- GET /api/runner/jobs
-- POST /api/runner/jobs/{id}/start
-- GET /api/runner/audio/{id}
-- POST /api/runner/jobs/{id}/complete
-- POST /api/runner/jobs/{id}/fail
-- POST /api/runner/heartbeat
+create_notebooklm_guide()
+- should handle missing transcription
+- should validate guide format
+- should handle API timeout
+```
 
-**Upload & Health (2)**:
-- POST /api/audio/upload
-- GET /api/health
+### app/services/storage_service.py (Increase coverage from 49% to 70%)
+
+**Lines needing tests**: 34-36, 73-75, 109-111, 137-139, 151-156, 203-205, 221-240, 260-262, 274-279, 326-328, 343-362, 382-384, 410-427, 442-463, 483-484, 489-491, 507-508, 534-551, 566-587, 607-608, 613-615, 631-632
+
+```
+save_transcription_text()
+- should handle large files (>10MB)
+- should validate compression
+- should handle disk full errors
+- should validate UUID format
+
+get_transcription_text()
+- should handle missing files
+- should validate decompression
+- should handle corrupted gzip data
+- should cache results
+
+delete_transcription_text()
+- should validate file existence
+- should handle permission errors
+- should cleanup cache
+
+get_audio_file_path()
+- should validate UUID format
+- should handle missing files
+- should return absolute path
+```
+
+### app/services/transcription_processor.py (Increase coverage from 61% to 70%)
+
+**Lines needing tests**: 90-96, 107-110, 123-124, 151-171, 197, 217, 271-272, 280-284, 292-298, 302-306, 312-316, 319, 325-326, 341-361, 446, 479-483, 506-533, 549-550, 558-559, 584, 622-626, 648-649, 656-682, 698
+
+```
+process_transcription()
+- should handle audio processing errors
+- should validate audio format
+- should handle timeout
+- should update status correctly
+- should cleanup temporary files
+
+_chunk_and_transcribe()
+- should handle audio splitting errors
+- should validate chunk size
+- should handle VAD errors
+- should merge results correctly
+
+_generate_summary()
+- should handle missing GLM API key
+- should validate API response
+- should handle rate limiting
+- should handle timeout errors
+```
+
+### app/tasks/cleanup.py (Increase coverage from 43% to 70%)
+
+**Lines needing tests**: 36-93
+
+```
+cleanup_old_transcriptions()
+- should respect retention days
+- should handle database errors
+- should validate file permissions
+- should log cleanup actions
+- should handle interrupted cleanup
+```
 
 ---
 
-## Notes
+## Test Execution Commands
 
-- **Test File**: `testdata/2_min.m4a` (2-minute audio for integration test)
-- **Dev Environment**: docker-compose.dev.yml (local server + runner)
-- **Production**: docker-compose.runner.prod.yml (Docker Hub image)
-- **Data Separation**: Server (`./data/server`) vs Runner (`./data/runner`)
-- **Shared Directory**: `./data/uploads:/app/data/uploads` (file exchange)
+### Frontend
+```bash
+./run_test.sh frontend    # Run all frontend tests
+bun run test              # Run with watch mode
+```
+
+### Backend
+```bash
+./run_test.sh backend     # Run all backend tests via Docker
+docker compose -f tests/docker-compose.test.yml run --rm backend-test
+```
 
 ---
 
-**Next Action**: Run new backend test files and verify ~202 tests pass
+## Test Coverage Goals
+
+| Suite | Current | Target | Gap |
+|-------|---------|--------|-----|
+| Frontend | 73.6% | 100% | 26.4% |
+| Backend | 53.84% | 70% | 16.16% |

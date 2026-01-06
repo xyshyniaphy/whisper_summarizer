@@ -8,7 +8,7 @@ Only accessible by admin users.
 from fastapi import APIRouter, HTTPException, status, Depends
 from sqlalchemy.orm import Session
 from typing import List
-from datetime import datetime
+from datetime import datetime, timezone
 from uuid import UUID
 import logging
 
@@ -68,7 +68,7 @@ def activate_user(
         )
 
     user.is_active = True
-    user.activated_at = datetime.utcnow()
+    user.activated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(user)
 
@@ -162,7 +162,7 @@ def delete_user(
             )
 
     # Soft delete
-    user.deleted_at = datetime.utcnow()
+    user.deleted_at = datetime.now(timezone.utc)
     user.email = f"deleted_{user.id}@local"  # Uniquify email
     db.commit()
 
@@ -277,7 +277,7 @@ def update_channel(
     if channel_data.description is not None:
         channel.description = channel_data.description
 
-    channel.updated_at = datetime.utcnow()
+    channel.updated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(channel)
 
