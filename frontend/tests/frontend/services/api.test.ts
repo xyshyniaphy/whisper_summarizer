@@ -36,30 +36,39 @@ vi.mock('@/services/supabase', () => ({
 }))
 
 // Mock axios - must be before api import
-// We use a factory function that creates fresh mocks each time
+// Use inline mock functions to avoid top-level variable reference issues with vi.mock hoisting
 vi.mock('axios', () => {
-  const axiosMock = {
-    get: vi.fn(() => Promise.resolve({ data: [] })),
-    post: vi.fn(() => Promise.resolve({ data: {} })),
-    put: vi.fn(() => Promise.resolve({ data: {} })),
-    delete: vi.fn(() => Promise.resolve({ data: {} })),
-    patch: vi.fn(() => Promise.resolve({ data: {} })),
-    interceptors: {
-      request: { use: vi.fn() },
-      response: { use: vi.fn() }
-    }
-  }
+  const get = vi.fn(() => Promise.resolve({ data: [] }))
+  const post = vi.fn(() => Promise.resolve({ data: {} }))
+  const put = vi.fn(() => Promise.resolve({ data: {} }))
+  const del = vi.fn(() => Promise.resolve({ data: {} }))
+  const patch = vi.fn(() => Promise.resolve({ data: {} }))
 
-  // Store references to our mock functions
-  mockGet = axiosMock.get
-  mockPost = axiosMock.post
-  mockPut = axiosMock.put
-  mockDelete = axiosMock.delete
-  mockPatch = axiosMock.patch
+  // Store references to our mock functions (after mock factory evaluation)
+  mockGet = get
+  mockPost = post
+  mockPut = put
+  mockDelete = del
+  mockPatch = patch
 
   return {
     default: {
-      create: vi.fn(() => axiosMock)
+      get,
+      post,
+      put,
+      delete: del,
+      patch,
+      create: vi.fn(() => ({
+        get,
+        post,
+        put,
+        delete: del,
+        patch,
+        interceptors: {
+          request: { use: vi.fn() },
+          response: { use: vi.fn() }
+        }
+      }))
     }
   }
 })

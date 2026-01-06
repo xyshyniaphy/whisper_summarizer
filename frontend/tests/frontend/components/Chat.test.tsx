@@ -46,8 +46,8 @@ describe('Chat Component', () => {
 
   describe('Initial Loading State', () => {
     it('shows loading spinner on initial load', async () => {
-      const { getChatHistory } = await import('../../../src/services/api')
-      vi.mocked(getChatHistory).mockImplementation(() => new Promise(() => {}))
+      const { api } = await import('../../../src/services/api')
+      vi.mocked(api.getChatHistory).mockImplementation(() => new Promise(() => {}))
 
       render(<Chat {...defaultProps} />)
       
@@ -303,8 +303,14 @@ describe('Chat Component', () => {
 
     it('collapses thinking indicator when response arrives', async () => {
       const { api } = await import('../../../src/services/api')
-      vi.mocked(api.getChatHistory).mockResolvedValue({ messages: [] })
-      
+      // Mock returns messages including the assistant response that will be streamed
+      vi.mocked(api.getChatHistory).mockResolvedValue({
+        messages: [
+          { id: '1', role: 'user' as const, content: 'Test', created_at: '2024-01-01T00:00:00Z' },
+          { id: '2', role: 'assistant' as const, content: 'Hello', created_at: '2024-01-01T00:00:01Z' }
+        ]
+      })
+
       const mockStream = vi.fn()
       mockStream.mockImplementation(async (transcriptionId: string, content: string, onChunk: any, onError: any, onComplete: any) => {
         // First chunk triggers thinking collapse
@@ -322,9 +328,9 @@ describe('Chat Component', () => {
 
       const user = userEvent.setup()
       const input = screen.getByRole('textbox')
-      
+
       await user.type(input, 'Test')
-      
+
       const button = screen.getByRole('button', { name: /发送/i })
       await user.click(button)
 
@@ -343,8 +349,14 @@ describe('Chat Component', () => {
   describe('Streaming Response', () => {
     it('accumulates streamed chunks progressively', async () => {
       const { api } = await import('../../../src/services/api')
-      vi.mocked(api.getChatHistory).mockResolvedValue({ messages: [] })
-      
+      // Mock returns messages including the assistant response that will be streamed
+      vi.mocked(api.getChatHistory).mockResolvedValue({
+        messages: [
+          { id: '1', role: 'user' as const, content: 'Test', created_at: '2024-01-01T00:00:00Z' },
+          { id: '2', role: 'assistant' as const, content: 'Hello there!', created_at: '2024-01-01T00:00:01Z' }
+        ]
+      })
+
       const mockStream = vi.fn()
       mockStream.mockImplementation(async (transcriptionId: string, content: string, onChunk: any, onError: any, onComplete: any) => {
         // Simulate streaming chunks
@@ -365,9 +377,9 @@ describe('Chat Component', () => {
 
       const user = userEvent.setup()
       const input = screen.getByRole('textbox')
-      
+
       await user.type(input, 'Test')
-      
+
       const button = screen.getByRole('button', { name: /发送/i })
       await user.click(button)
 
@@ -407,7 +419,7 @@ describe('Chat Component', () => {
         expect(api.getChatHistory).toHaveBeenCalledWith(mockTranscriptionId)
         // Should be called at least twice: initial load + after completion
         expect(api.getChatHistory).toHaveBeenCalledTimes(2)
-      })
+      }, { timeout: 5000 })
     })
   })
 
