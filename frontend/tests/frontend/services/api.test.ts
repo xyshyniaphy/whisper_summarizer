@@ -5,6 +5,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import axios from 'axios'
 
 // Mock Supabase client first (before api import)
 const mockSession = {
@@ -28,70 +29,44 @@ vi.mock('@/services/supabase', () => ({
   }
 }))
 
-// Module-level mock references (var is hoisted, accessible in mock factory)
-declare var mockGet: any
-declare var mockPost: any
-declare var mockPut: any
-declare var mockDelete: any
-declare var mockPatch: any
-
 // Mock axios - must be before api import
-vi.mock('axios', () => {
-  const get = vi.fn(() => Promise.resolve({ data: [] }))
-  const post = vi.fn(() => Promise.resolve({ data: {} }))
-  const put = vi.fn(() => Promise.resolve({ data: {} }))
-  const del = vi.fn(() => Promise.resolve({ data: {} }))
-  const patch = vi.fn(() => Promise.resolve({ data: {} }))
-
-  // Store references at module level
-  ;(globalThis as any).mockGet = get
-  ;(globalThis as any).mockPost = post
-  ;(globalThis as any).mockPut = put
-  ;(globalThis as any).mockDelete = del
-  ;(globalThis as any).mockPatch = patch
-
-  return {
-    default: {
-      get,
-      post,
-      put,
-      delete: del,
-      patch,
-      create: vi.fn(() => ({
-        get,
-        post,
-        put,
-        delete: del,
-        patch,
-        interceptors: {
-          request: { use: vi.fn() },
-          response: { use: vi.fn() }
-        }
-      }))
-    }
+vi.mock('axios', () => ({
+  default: {
+    get: vi.fn(() => Promise.resolve({ data: [] })),
+    post: vi.fn(() => Promise.resolve({ data: {} })),
+    put: vi.fn(() => Promise.resolve({ data: {} })),
+    delete: vi.fn(() => Promise.resolve({ data: {} })),
+    patch: vi.fn(() => Promise.resolve({ data: {} })),
+    create: vi.fn(() => ({
+      get: vi.fn(() => Promise.resolve({ data: [] })),
+      post: vi.fn(() => Promise.resolve({ data: {} })),
+      put: vi.fn(() => Promise.resolve({ data: {} })),
+      delete: vi.fn(() => Promise.resolve({ data: {} })),
+      patch: vi.fn(() => Promise.resolve({ data: {} })),
+      interceptors: {
+        request: { use: vi.fn() },
+        response: { use: vi.fn() }
+      }
+    }))
   }
-})
+}))
 
 // Import api after axios is mocked
 import { api } from '@/services/api'
 
 describe.skip('API Service', () => {
+  // Get mock references using vi.mocked for type safety
+  const mockAxios = vi.mocked(axios, { deep: true })
+
   beforeEach(() => {
     vi.clearAllMocks()
 
-    // Get mock references from globalThis
-    mockGet = (globalThis as any).mockGet
-    mockPost = (globalThis as any).mockPost
-    mockPut = (globalThis as any).mockPut
-    mockDelete = (globalThis as any).mockDelete
-    mockPatch = (globalThis as any).mockPatch
-
     // Reset axios mocks to default return values
-    mockGet.mockResolvedValue({ data: [] })
-    mockPost.mockResolvedValue({ data: {} })
-    mockPut.mockResolvedValue({ data: {} })
-    mockDelete.mockResolvedValue({ data: {} })
-    mockPatch.mockResolvedValue({ data: {} })
+    mockAxios.get.mockResolvedValue({ data: [] })
+    mockAxios.post.mockResolvedValue({ data: {} })
+    mockAxios.put.mockResolvedValue({ data: {} })
+    mockAxios.delete.mockResolvedValue({ data: {} })
+    mockAxios.patch.mockResolvedValue({ data: {} })
 
     // Mock window.location
     delete (window as any).location
@@ -103,11 +78,11 @@ describe.skip('API Service', () => {
       const mockFile = new File(['audio'], 'test.mp3', { type: 'audio/mpeg' })
       const mockTranscription = { id: '123', file_name: 'test.mp3' }
 
-      mockPost.mockResolvedValue({ data: mockTranscription })
+      mockAxios.post.mockResolvedValue({ data: mockTranscription })
 
       const result = await api.uploadAudio(mockFile)
       expect(result).toEqual(mockTranscription)
-      expect(mockPost).toHaveBeenCalledWith('/audio/upload', expect.any(FormData), {
+      expect(mockAxios.post).toHaveBeenCalledWith('/audio/upload', expect.any(FormData), {
         headers: { 'Content-Type': 'multipart/form-data' }
       })
     })
@@ -117,7 +92,7 @@ describe.skip('API Service', () => {
 
       await api.uploadAudio(mockFile)
 
-      expect(mockPost).toHaveBeenCalledWith('/audio/upload', expect.any(FormData), {
+      expect(mockAxios.post).toHaveBeenCalledWith('/audio/upload', expect.any(FormData), {
         headers: { 'Content-Type': 'multipart/form-data' }
       })
     })
@@ -135,18 +110,18 @@ describe.skip('API Service', () => {
         page_size: 10
       }
 
-      mockGet.mockResolvedValue({ data: mockTranscriptions })
+      mockAxios.get.mockResolvedValue({ data: mockTranscriptions })
 
       const result = await api.getTranscriptions()
       expect(result).toEqual(mockTranscriptions)
     })
 
     it('正しいエンドポイントを呼び出す', async () => {
-      mockGet.mockResolvedValue({ data: { items: [], total: 0, page: 1, page_size: 10 } })
+      mockAxios.get.mockResolvedValue({ data: { items: [], total: 0, page: 1, page_size: 10 } })
 
       await api.getTranscriptions()
 
-      expect(mockGet).toHaveBeenCalledWith('/transcriptions', expect.any(Object))
+      expect(mockAxios.get).toHaveBeenCalledWith('/transcriptions', expect.any(Object))
     })
   })
 
@@ -154,28 +129,28 @@ describe.skip('API Service', () => {
     it('単一の転写を取得できる', async () => {
       const mockTranscription = { id: '123', file_name: 'test.mp3' }
 
-      mockGet.mockResolvedValue({ data: mockTranscription })
+      mockAxios.get.mockResolvedValue({ data: mockTranscription })
 
       const result = await api.getTranscription('123')
       expect(result).toEqual(mockTranscription)
     })
 
     it('IDを含む正しいエンドポイントを呼び出す', async () => {
-      mockGet.mockResolvedValue({ data: { id: '123' } })
+      mockAxios.get.mockResolvedValue({ data: { id: '123' } })
 
       await api.getTranscription('123')
 
-      expect(mockGet).toHaveBeenCalledWith('/transcriptions/123')
+      expect(mockAxios.get).toHaveBeenCalledWith('/transcriptions/123')
     })
   })
 
   describe('deleteTranscription', () => {
     it('転写を削除できる', async () => {
-      mockDelete.mockResolvedValue({})
+      mockAxios.delete.mockResolvedValue({})
 
       await api.deleteTranscription('123')
 
-      expect(mockDelete).toHaveBeenCalledWith('/transcriptions/123')
+      expect(mockAxios.delete).toHaveBeenCalledWith('/transcriptions/123')
     })
   })
 
@@ -195,12 +170,12 @@ describe.skip('API Service', () => {
     it('ファイルをBlobとしてダウンロードできる', async () => {
       const mockBlob = new Blob(['test content'])
 
-      mockGet.mockResolvedValue({ data: mockBlob })
+      mockAxios.get.mockResolvedValue({ data: mockBlob })
 
       const result = await api.downloadFile('123', 'txt')
 
       expect(result).toEqual(mockBlob)
-      expect(mockGet).toHaveBeenCalledWith('/transcriptions/123/download?format=txt', {
+      expect(mockAxios.get).toHaveBeenCalledWith('/transcriptions/123/download?format=txt', {
         responseType: 'blob'
       })
     })
@@ -208,14 +183,14 @@ describe.skip('API Service', () => {
 
   describe('Request Interceptor', () => {
     it('リクエスト時に認証トークンが追加される', async () => {
-      mockPost.mockResolvedValue({ data: { id: '123' } })
+      mockAxios.post.mockResolvedValue({ data: { id: '123' } })
 
       // Call an API method to trigger interceptor
       await api.uploadAudio(new File(['audio'], 'test.mp3'))
 
       // The interceptor should have added the Authorization header
       // This is a basic check - actual testing would require more complex setup
-      expect(mockPost).toHaveBeenCalled()
+      expect(mockAxios.post).toHaveBeenCalled()
     })
   })
 
@@ -227,11 +202,11 @@ describe.skip('API Service', () => {
         config: originalRequest
       }
 
-      mockGet.mockRejectedValue(error)
+      mockAxios.get.mockRejectedValue(error)
 
       // Try calling API - error handling would be tested by integration tests
       // Unit test just verifies the mock is set up
-      expect(mockGet).toBeDefined()
+      expect(mockAxios.get).toBeDefined()
     })
   })
 
