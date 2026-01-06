@@ -304,6 +304,7 @@
 - `claudelogs/i_260106_1050.md` - Iteration 17: TranscriptionList date formatting test fixed (+1 test, 239/346 passing) ✅
 - `claudelogs/i_260106_1058.md` - Iteration 18: TranscriptionList delete tests fixed (+4 tests, 243/346 passing) ✅
 - `claudelogs/i_260106_1148.md` - Iteration 19: api.test.ts timeout investigation - no net change (architectural issue)
+- `claudelogs/i_260106_1208.md` - Iteration 20: Dashboard tests investigation - fixed useAuth mock but tests need rewrite
 
 ---
 

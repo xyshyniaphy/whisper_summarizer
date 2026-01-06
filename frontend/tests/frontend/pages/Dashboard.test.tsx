@@ -25,12 +25,12 @@ const mockSignOut = vi.fn()
 const mockUser = {
   id: 'test-user-id',
   email: 'test@example.com',
-  user_metadata: { role: 'user', full_name: 'Test User' }
+  user_metadata: { role: 'admin', full_name: 'Test User' }
 }
 
 vi.mock('@/hooks/useAuth', () => ({
   useAuth: () => [
-    { user: mockUser, session: null, role: 'user', loading: false },
+    { user: mockUser, is_admin: true, loading: false },
     { signOut: mockSignOut }
   ]
 }))
