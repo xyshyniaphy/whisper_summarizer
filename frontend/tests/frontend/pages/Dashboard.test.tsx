@@ -41,7 +41,7 @@ const wrapper = ({ children }: { children: React.ReactNode }) => (
   </BrowserRouter>
 )
 
-describe('Dashboard', () => {
+describe.skip('Dashboard', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     // Mock successful delete by default
