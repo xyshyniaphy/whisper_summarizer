@@ -589,7 +589,6 @@ def test_update_channel_duplicate_name(admin_client, db_session, admin_user):
     assert response.status_code == 400  # Duplicate name
 
 
-@pytest.mark.skip(reason="Pagination not implemented in API")
 def test_list_users_pagination(admin_client, db_session):
     """Test pagination for user list."""
     # Create many users with unique emails to avoid conflicts
@@ -613,7 +612,6 @@ def test_list_users_pagination(admin_client, db_session):
     assert len(our_users) == 10
 
 
-@pytest.mark.skip(reason="Pagination not implemented in API")
 def test_list_channels_pagination(admin_client, db_session, admin_user):
     """Test pagination for channel list."""
     # Create many channels with unique names to avoid conflicts

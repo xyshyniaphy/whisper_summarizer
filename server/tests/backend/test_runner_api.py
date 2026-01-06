@@ -308,7 +308,6 @@ class TestCompleteJob:
             http_status.HTTP_404_NOT_FOUND
         ]
 
-    @pytest.mark.skip(reason="Requires file system setup")
     def test_complete_job_deletes_audio_file(self, auth_client, test_processing_transcription, test_audio_file):
         """Test that completing a job deletes the audio file."""
         # Update transcription to have the test audio file
@@ -366,7 +365,6 @@ class TestCompleteJob:
 class TestFailJob:
     """Test suite for POST /api/runner/jobs/{job_id}/fail endpoint."""
 
-    @pytest.mark.skip(reason="Test fixture setup issue")
     def test_fail_job_success(self, auth_client, test_processing_transcription):
         """Test successfully reporting a job failure."""
         job_id = test_processing_transcription.id
@@ -467,7 +465,6 @@ class TestGetAudioFile:
         assert response.status_code == http_status.HTTP_404_NOT_FOUND
         assert "Audio file path not set" in response.json()["detail"]
 
-    @pytest.mark.skip(reason="Test fixture setup issue")
     def test_get_audio_returns_404_when_file_missing(self, auth_client, test_transcription):
         """Test that getting audio returns 404 when file doesn't exist."""
         # Set a non-existent file path
@@ -556,7 +553,6 @@ class TestRunnerEdgeCases:
         )
         assert response.status_code == http_status.HTTP_422_UNPROCESSABLE_ENTITY
 
-    @pytest.mark.skip(reason="Test fixture setup issue")
     def test_complete_job_with_negative_processing_time(self, auth_client):
         """Test that completing a job with negative processing time is rejected."""
         job_id = uuid4()
@@ -601,7 +597,6 @@ class TestRunnerEdgeCases:
             http_status.HTTP_400_BAD_REQUEST
         ]
 
-    @pytest.mark.skip(reason="Test fixture setup issue")
     def test_get_jobs_with_negative_limit(self, auth_client):
         """Test that getting jobs with negative limit is handled."""
         response = auth_client.get("/api/runner/jobs?limit=-1")
@@ -689,7 +684,6 @@ class TestRunnerRaceConditions:
         assert http_status.HTTP_200_OK in outcomes
         assert http_status.HTTP_400_BAD_REQUEST in outcomes
 
-    @pytest.mark.skip(reason="Test fixture setup issue")
     def test_complete_job_already_completed(self, auth_client, test_completed_transcription):
         """Test that completing an already completed job is handled."""
         job_id = test_completed_transcription.id
@@ -731,7 +725,6 @@ class TestRunnerRaceConditions:
             http_status.HTTP_200_OK  # May update error message
         ]
 
-    @pytest.mark.skip(reason="Test fixture setup issue")
     def test_complete_after_fail(self, auth_client, db_session, test_user):
         """Test that completing a failed job is handled."""
         from app.models.transcription import Transcription

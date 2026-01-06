@@ -5,9 +5,9 @@ Provides user management, channel management, and audio administration endpoints
 Only accessible by admin users.
 """
 
-from fastapi import APIRouter, HTTPException, status, Depends
+from fastapi import APIRouter, HTTPException, status, Depends, Query
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional
 from datetime import datetime
 from uuid import UUID
 import logging
@@ -36,6 +36,8 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 
 @router.get("/users", response_model=List[UserResponse])
 def list_users(
+    page: Optional[int] = Query(None, ge=1, description="Page number (1-indexed)"),
+    page_size: Optional[int] = Query(None, ge=1, le=100, description="Number of items per page"),
     db: Session = Depends(get_db),
     current_admin: User = Depends(require_admin)
 ):
@@ -43,8 +45,17 @@ def list_users(
     List all users (admin only).
 
     Returns all non-deleted users with their activation and admin status.
+    Supports pagination via page and page_size query parameters.
+    Results are ordered by created_at descending (newest first).
     """
-    users = db.query(User).filter(User.deleted_at.is_(None)).all()
+    query = db.query(User).filter(User.deleted_at.is_(None)).order_by(User.created_at.desc())
+
+    # Apply pagination if parameters provided
+    if page is not None and page_size is not None:
+        offset = (page - 1) * page_size
+        query = query.offset(offset).limit(page_size)
+
+    users = query.all()
     # Convert SQLAlchemy models to Pydantic schemas
     return [UserResponse.model_validate(u) for u in users]
 
@@ -182,13 +193,25 @@ def delete_user(
 
 @router.get("/channels", response_model=List[ChannelResponse])
 def list_channels(
+    page: Optional[int] = Query(None, ge=1, description="Page number (1-indexed)"),
+    page_size: Optional[int] = Query(None, ge=1, le=100, description="Number of items per page"),
     db: Session = Depends(get_db),
     current_admin: User = Depends(require_admin)
 ):
     """
     List all channels (admin only).
+
+    Supports pagination via page and page_size query parameters.
+    Results are ordered by created_at descending (newest first).
     """
-    channels = db.query(Channel).all()
+    query = db.query(Channel).order_by(Channel.created_at.desc())
+
+    # Apply pagination if parameters provided
+    if page is not None and page_size is not None:
+        offset = (page - 1) * page_size
+        query = query.offset(offset).limit(page_size)
+
+    channels = query.all()
     result = []
     for channel in channels:
         member_count = db.query(ChannelMembership).filter(
