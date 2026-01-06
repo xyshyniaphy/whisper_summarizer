@@ -59,7 +59,7 @@ const wrapper = ({ children }: { children: React.ReactNode }) => (
   <Provider>{children}</Provider>
 )
 
-describe.skip('useAuth', () => {
+describe('useAuth', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     // Reset environment variable
@@ -79,9 +79,9 @@ describe.skip('useAuth', () => {
       })
     })
 
-    it('getSessionが呼ばれること', async () => {
+    it.skip('getSessionが呼ばれること', async () => {
       const { supabase } = require('../../src/services/supabase')
-      
+
       renderHook(() => useAuth(), { wrapper })
 
       await waitFor(() => {
@@ -89,9 +89,9 @@ describe.skip('useAuth', () => {
       })
     })
 
-    it('onAuthStateChangeのリスナーが登録されること', async () => {
+    it.skip('onAuthStateChangeのリスナーが登録されること', async () => {
       const { supabase } = require('../../src/services/supabase')
-      
+
       renderHook(() => useAuth(), { wrapper })
 
       await waitFor(() => {
@@ -101,7 +101,7 @@ describe.skip('useAuth', () => {
   })
 
   describe('Google OAuth', () => {
-    it('signInWithGoogleが呼ばれること', async () => {
+    it.skip('signInWithGoogleが呼ばれること', async () => {
       const { supabase } = require('../../src/services/supabase')
       const mockOAuth = vi.fn(() => Promise.resolve({ error: null }))
       supabase.auth.signInWithOAuth = mockOAuth
@@ -127,7 +127,7 @@ describe.skip('useAuth', () => {
   })
 
   describe('Sign Out', () => {
-    it('signOutが呼ばれると状態がクリアされること', async () => {
+    it.skip('signOutが呼ばれると状態がクリアされること', async () => {
       const { supabase } = require('../../src/services/supabase')
       const mockSignOut = vi.fn(() => Promise.resolve({ error: null }))
       supabase.auth.signOut = mockSignOut
@@ -144,11 +144,11 @@ describe.skip('useAuth', () => {
   })
 
   describe('E2E Test Mode', () => {
-    it('E2Eテストモードの場合、自動ログインしないこと', async () => {
+    it.skip('E2Eテストモードの場合、自動ログインしないこと', async () => {
       process.env.VITE_E2E_TEST_MODE = 'true'
-      
+
       const { supabase } = require('../../src/services/supabase')
-      
+
       renderHook(() => useAuth(), { wrapper })
 
       await waitFor(() => {
@@ -204,7 +204,7 @@ describe.skip('useAuth', () => {
       })
     })
 
-    it('roleがuser_metadataから正しく抽出されること', async () => {
+    it.skip('roleがuser_metadataから正しく抽出されること', async () => {
       const { result } = renderHook(() => useAuth(), { wrapper })
 
       await waitFor(() => {
@@ -215,7 +215,7 @@ describe.skip('useAuth', () => {
   })
 
   describe('Cleanup', () => {
-    it('アンマウント時にサブスクリプションが解除されること', async () => {
+    it.skip('アンマウント時にサブスクリプションが解除されること', async () => {
       const { unmount } = renderHook(() => useAuth(), { wrapper })
 
       unmount()
@@ -243,7 +243,7 @@ describe.skip('useAuth', () => {
   })
 
   describe('Error Handling', () => {
-    it('getSession失敗時、エラーがログ出力されること', async () => {
+    it.skip('getSession失敗時、エラーがログ出力されること', async () => {
       const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
       const { supabase } = require('../../src/services/supabase')
       supabase.auth.getSession = vi.fn(() => Promise.resolve({

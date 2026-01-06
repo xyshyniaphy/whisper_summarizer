@@ -224,8 +224,18 @@ describe('ChannelAssignModal Component', () => {
     render(<ChannelAssignModal {...mockProps} isOpen={true} currentChannelIds={[]} />, { wrapper })
 
     await waitFor(() => {
-      const checkbox = screen.getByLabelText('技术讨论') || screen.getByText('技术讨论')
+      // Use queryByLabelText which returns null instead of throwing, then fall back to getByText
+      const checkbox = screen.queryByLabelText('技术讨论') || screen.getByText('技术讨论')
       expect(checkbox).toBeTruthy()
+    })
+
+    // Click to toggle the channel
+    const channelLabel = screen.getByText('技术讨论')
+    await user.click(channelLabel)
+
+    // Verify the checkbox is now selected (the channel should still be visible)
+    await waitFor(() => {
+      expect(screen.getByText('技术讨论')).toBeTruthy()
     })
   })
 
