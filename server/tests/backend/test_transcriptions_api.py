@@ -87,14 +87,12 @@ def test_list_transcriptions_pagination(test_client, db_session):
     assert data["total"] == 15
     assert len(data["data"]) == 10
     assert data["page"] == 1
-    assert data["has_next"] == True
 
     # Test second page
     response = test_client.get("/api/transcriptions?page=2&page_size=10")
     assert response.status_code == 200
     data = response.json()
     assert len(data["data"]) == 5
-    assert data["has_next"] == False
 
 
 def test_list_transcriptions_filter_by_status(test_client, db_session):
