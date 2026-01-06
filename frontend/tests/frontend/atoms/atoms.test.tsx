@@ -122,59 +122,73 @@ describe('Auth Atoms', () => {
     })
 
     it('isAuthenticatedAtomはuserAtomがある場合trueを返す', () => {
-      const { result: userResult } = renderHook(() => useAtom(userAtom), { wrapper })
-      const { result: authResult } = renderHook(() => useAtom(isAuthenticatedAtom), { wrapper })
+      const { result } = renderHook(() => {
+        const [user, setUser] = useAtom(userAtom)
+        const [isAuthenticated] = useAtom(isAuthenticatedAtom)
+        return { user, setUser, isAuthenticated }
+      }, { wrapper })
 
       act(() => {
-        userResult.current[1]({ id: '123' } as any)
+        result.current.setUser({ id: '123' } as any)
       })
 
-      expect(authResult.current[0]).toBe(true)
+      expect(result.current.isAuthenticated).toBe(true)
     })
 
     it('isAdminAtomはroleAtomが"admin"の場合trueを返す', () => {
-      const { result: roleResult } = renderHook(() => useAtom(roleAtom), { wrapper })
-      const { result: adminResult } = renderHook(() => useAtom(isAdminAtom), { wrapper })
+      const { result } = renderHook(() => {
+        const [role, setRole] = useAtom(roleAtom)
+        const [isAdmin] = useAtom(isAdminAtom)
+        return { role, setRole, isAdmin }
+      }, { wrapper })
 
       act(() => {
-        roleResult.current[1]('admin')
+        result.current.setRole('admin')
       })
 
-      expect(adminResult.current[0]).toBe(true)
+      expect(result.current.isAdmin).toBe(true)
     })
 
     it('isAdminAtomはroleAtomが"user"の場合falseを返す', () => {
-      const { result: roleResult } = renderHook(() => useAtom(roleAtom), { wrapper })
-      const { result: adminResult } = renderHook(() => useAtom(isAdminAtom), { wrapper })
+      const { result } = renderHook(() => {
+        const [role, setRole] = useAtom(roleAtom)
+        const [isAdmin] = useAtom(isAdminAtom)
+        return { role, setRole, isAdmin }
+      }, { wrapper })
 
       act(() => {
-        roleResult.current[1]('user')
+        result.current.setRole('user')
       })
 
-      expect(adminResult.current[0]).toBe(false)
+      expect(result.current.isAdmin).toBe(false)
     })
   })
 
   describe('authStateAtom', () => {
     it('すべての認証状態を正しく返す', () => {
-      const { result: userResult } = renderHook(() => useAtom(userAtom), { wrapper })
-      const { result: roleResult } = renderHook(() => useAtom(roleAtom), { wrapper })
-      const { result: loadingResult } = renderHook(() => useAtom(loadingAtom), { wrapper })
-      const { result: authResult } = renderHook(() => useAtom(authStateAtom), { wrapper })
+      const { result } = renderHook(() => {
+        const [user, setUser] = useAtom(userAtom)
+        const [role, setRole] = useAtom(roleAtom)
+        const [loading, setLoading] = useAtom(loadingAtom)
+        const [authState] = useAtom(authStateAtom)
+        return { user, setUser, role, setRole, loading, setLoading, authState }
+      }, { wrapper })
 
       act(() => {
-        userResult.current[1]({ id: '123' } as any)
-        roleResult.current[1]('user')
-        loadingResult.current[1](false)
+        result.current.setUser({ id: '123' } as any)
+        result.current.setRole('user')
+        result.current.setLoading(false)
       })
 
-      expect(authResult.current[0]).toEqual({
+      expect(result.current.authState).toEqual({
         user: { id: '123' },
         session: null,
         role: 'user',
         loading: false,
         isAuthenticated: true,
-        isAdmin: false
+        isAdmin: false,
+        is_active: false,
+        is_admin: false
       })
     })
   })
@@ -280,18 +294,21 @@ describe('Transcription Atoms', () => {
 
   describe('userTranscriptionsAtom', () => {
     it('transcriptionsAtomの値を返す', () => {
-      const { result: transcriptionsResult } = renderHook(() => useAtom(transcriptionsAtom), { wrapper })
-      const { result: userResult } = renderHook(() => useAtom(userTranscriptionsAtom), { wrapper })
+      const { result } = renderHook(() => {
+        const [transcriptions, setTranscriptions] = useAtom(transcriptionsAtom)
+        const [userTranscriptions] = useAtom(userTranscriptionsAtom)
+        return { transcriptions, setTranscriptions, userTranscriptions }
+      }, { wrapper })
 
       const mockTranscriptions = [
         { id: '1', file_name: 'test.mp3' }
       ] as any
 
       act(() => {
-        transcriptionsResult.current[1](mockTranscriptions)
+        result.current.setTranscriptions(mockTranscriptions)
       })
 
-      expect(userResult.current[0]).toEqual(mockTranscriptions)
+      expect(result.current.userTranscriptions).toEqual(mockTranscriptions)
     })
   })
 
