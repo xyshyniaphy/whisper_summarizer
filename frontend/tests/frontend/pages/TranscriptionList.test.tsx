@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { BrowserRouter } from 'react-router-dom'
 import { Provider } from 'jotai'
@@ -152,26 +152,25 @@ describe('TranscriptionList', () => {
     })
   })
 
-  describe.skip('Delete Functionality', () => {
+  describe('Delete Functionality', () => {
     it('失敗した転写は削除ボタンが表示される', async () => {
       render(<TranscriptionList />, { wrapper })
 
       await waitFor(() => {
-        // Failed transcription should have delete button
-        const deleteButton = screen.getByTitle('删除')
-        expect(deleteButton).toBeTruthy()
+        // All transcriptions (including failed) should have delete buttons
+        const deleteButtons = screen.getAllByTitle('删除')
+        expect(deleteButtons.length).toBeGreaterThan(0)
       })
     })
 
     it('削除ボタンをクリックすると確認ダイアログが表示される', async () => {
-      const user = userEvent.setup()
       render(<TranscriptionList />, { wrapper })
 
       await waitFor(() => {
         expect(screen.getByText('failed-audio.mp3')).toBeTruthy()
       })
 
-      // Click delete button
+      // Click delete button using fireEvent (avoids userEvent.setup() document state corruption)
       const deleteButtons = screen.getAllByTitle('删除')
       const failedDeleteButton = deleteButtons.find(btn => {
         const row = btn.closest('tr')
@@ -179,7 +178,7 @@ describe('TranscriptionList', () => {
       })
 
       expect(failedDeleteButton).toBeTruthy()
-      await user.click(failedDeleteButton!)
+      fireEvent.click(failedDeleteButton!)
 
       // ConfirmDialog should be visible with title and message
       await waitFor(() => {
@@ -189,25 +188,24 @@ describe('TranscriptionList', () => {
     })
 
     it('確認後、deleteTranscriptionが呼ばれる', async () => {
-      const user = userEvent.setup()
       render(<TranscriptionList />, { wrapper })
 
       await waitFor(() => {
         expect(screen.getByText('failed-audio.mp3')).toBeTruthy()
       })
 
-      // Click delete button
+      // Click delete button using fireEvent
       const deleteButtons = screen.getAllByTitle('删除')
       const failedDeleteButton = deleteButtons.find(btn => {
         const row = btn.closest('tr')
         return row && row.textContent?.includes('failed-audio.mp3')
       })
 
-      await user.click(failedDeleteButton!)
+      fireEvent.click(failedDeleteButton!)
 
-      // Click confirm button
+      // Click confirm button using fireEvent
       const confirmButton = await screen.findByText('删除')
-      await user.click(confirmButton)
+      fireEvent.click(confirmButton)
 
       await waitFor(() => {
         expect(mockDeleteTranscription).toHaveBeenCalled()
@@ -215,25 +213,24 @@ describe('TranscriptionList', () => {
     })
 
     it('キャンセル時、deleteTranscriptionは呼ばれない', async () => {
-      const user = userEvent.setup()
       render(<TranscriptionList />, { wrapper })
 
       await waitFor(() => {
         expect(screen.getByText('failed-audio.mp3')).toBeTruthy()
       })
 
-      // Click delete button
+      // Click delete button using fireEvent
       const deleteButtons = screen.getAllByTitle('删除')
       const failedDeleteButton = deleteButtons.find(btn => {
         const row = btn.closest('tr')
         return row && row.textContent?.includes('failed-audio.mp3')
       })
 
-      await user.click(failedDeleteButton!)
+      fireEvent.click(failedDeleteButton!)
 
-      // Click cancel button
+      // Click cancel button using fireEvent
       const cancelButton = await screen.findByText('取消')
-      await user.click(cancelButton)
+      fireEvent.click(cancelButton)
 
       // Dialog should close and API should NOT be called
       await waitFor(() => {
