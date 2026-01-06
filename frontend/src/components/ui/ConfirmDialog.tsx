@@ -44,7 +44,7 @@ export function ConfirmDialog({
         <div className="flex items-start gap-3">
           {isDanger && (
             <div className="flex-shrink-0 mt-0.5">
-              <AlertTriangle className="w-5 h-5 text-red-500" />
+              <AlertTriangle className="w-5 h-5 text-red-500" data-icon="alert-triangle" />
             </div>
           )}
           <div className="flex-1">

@@ -145,7 +145,7 @@ describe('ConfirmDialog', () => {
       )
 
       await waitFor(() => {
-        const alertIcon = document.querySelector('.lucide-alert-triangle')
+        const alertIcon = document.querySelector('[data-icon="alert-triangle"]')
         expect(alertIcon).toBeTruthy()
       })
     })

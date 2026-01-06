@@ -131,7 +131,7 @@ describe('cn utility function', () => {
     })
 
     it('数字の0と1を正しく処理する', () => {
-      expect(cn(0, 1, 'text-red-500')).toBe('0 1 text-red-500')
+      expect(cn(0, 1, 'text-red-500')).toBe('1 text-red-500')
     })
 
     it('非常に長いクラスリストを処理する', () => {

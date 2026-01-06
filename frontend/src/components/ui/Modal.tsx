@@ -36,10 +36,13 @@ export function Modal({ isOpen, onClose, title, children, className }: ModalProp
       />
 
       {/* Modal */}
-      <div className={cn(
-        "relative bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto",
-        className
-      )}>
+      <div
+        role="dialog"
+        aria-modal="true"
+        className={cn(
+          "relative bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto",
+          className
+        )}>
         {/* Header */}
         {title && (
           <div className="flex items-center justify-between p-6 border-b dark:border-gray-700">
