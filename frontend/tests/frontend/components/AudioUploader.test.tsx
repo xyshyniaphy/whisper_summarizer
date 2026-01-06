@@ -70,7 +70,8 @@ describe('AudioUploader', () => {
       const user = userEvent.setup()
       render(<AudioUploader />, { wrapper })
 
-      const fileInput = screen.getByRole('textbox') || document.querySelector('input[type="file"]')
+      // File input doesn't have role="textbox", use selector directly
+      const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement
       expect(fileInput).toBeTruthy()
     })
 
@@ -175,14 +176,14 @@ describe('AudioUploader', () => {
 
   describe('Loading State', () => {
     it('アップロード中はローディングインジケーターが表示される', async () => {
+      const user = userEvent.setup()
       mockUploadAudio.mockImplementation(() => new Promise(() => {}))
       render(<AudioUploader />, { wrapper })
 
+      const file = new File(['audio'], 'test.mp3', { type: 'audio/mpeg' })
       const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement
       if (fileInput) {
-        const file = new File(['audio'], 'test.mp3', { type: 'audio/mpeg' })
-        fileInput.files = [file] as any
-        fileInput.dispatchEvent(new Event('change', { bubbles: true }))
+        await user.upload(fileInput, file)
 
         await waitFor(() => {
           expect(mockUploadAudio).toHaveBeenCalled()
@@ -191,14 +192,14 @@ describe('AudioUploader', () => {
     })
 
     it('アップロード中はドロップが無効になる', async () => {
+      const user = userEvent.setup()
       mockUploadAudio.mockImplementation(() => new Promise(() => {}))
       render(<AudioUploader />, { wrapper })
 
+      const file = new File(['audio'], 'test.mp3', { type: 'audio/mpeg' })
       const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement
       if (fileInput) {
-        const file = new File(['audio'], 'test.mp3', { type: 'audio/mpeg' })
-        fileInput.files = [file] as any
-        fileInput.dispatchEvent(new Event('change', { bubbles: true }))
+        await user.upload(fileInput, file)
       }
 
       await waitFor(() => {
@@ -209,17 +210,17 @@ describe('AudioUploader', () => {
 
   describe('Error Handling', () => {
     it('アップロード失敗時はエラーメッセージが表示される', async () => {
+      const user = userEvent.setup()
       mockUploadAudio.mockRejectedValue({
         response: { data: { detail: 'アップロードエラー' } }
       })
 
       render(<AudioUploader />, { wrapper })
 
+      const file = new File(['audio'], 'test.mp3', { type: 'audio/mpeg' })
       const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement
       if (fileInput) {
-        const file = new File(['audio'], 'test.mp3', { type: 'audio/mpeg' })
-        fileInput.files = [file] as any
-        fileInput.dispatchEvent(new Event('change', { bubbles: true }))
+        await user.upload(fileInput, file)
       }
 
       await waitFor(() => {
@@ -230,6 +231,7 @@ describe('AudioUploader', () => {
 
   describe('Navigation After Upload', () => {
     it('アップロード成功後、詳細ページに遷移する', async () => {
+      const user = userEvent.setup()
       mockUploadAudio.mockResolvedValue({
         id: 'new-id-123',
         file_name: 'test.mp3',
@@ -238,11 +240,10 @@ describe('AudioUploader', () => {
 
       render(<AudioUploader />, { wrapper })
 
+      const file = new File(['audio'], 'test.mp3', { type: 'audio/mpeg' })
       const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement
       if (fileInput) {
-        const file = new File(['audio'], 'test.mp3', { type: 'audio/mpeg' })
-        fileInput.files = [file] as any
-        fileInput.dispatchEvent(new Event('change', { bubbles: true }))
+        await user.upload(fileInput, file)
       }
 
       await waitFor(() => {
@@ -262,6 +263,7 @@ describe('AudioUploader', () => {
 
     supportedTypes.forEach(({ mime, ext }) => {
       it(`${ext}形式がサポートされる`, async () => {
+        const user = userEvent.setup()
         mockUploadAudio.mockResolvedValue({
           id: 'test-id',
           file_name: `test.${ext}`
@@ -269,11 +271,10 @@ describe('AudioUploader', () => {
 
         render(<AudioUploader />, { wrapper })
 
+        const file = new File(['audio'], `test.${ext}`, { type: mime })
         const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement
         if (fileInput) {
-          const file = new File(['audio'], `test.${ext}`, { type: mime })
-          fileInput.files = [file] as any
-          fileInput.dispatchEvent(new Event('change', { bubbles: true }))
+          await user.upload(fileInput, file)
         }
 
         await waitFor(() => {

@@ -181,8 +181,9 @@ describe('AudioUploader', () => {
       const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement
       if (fileInput) {
         const file = new File(['audio'], 'test.mp3', { type: 'audio/mpeg' })
-        fileInput.files = [file] as any
-        fileInput.dispatchEvent(new Event('change', { bubbles: true }))
+        // Use userEvent.upload() instead of DataTransfer (not available in jsdom)
+        // This will be handled by userEvent.upload() calls in the tests
+      }
 
         await waitFor(() => {
           expect(mockUploadAudio).toHaveBeenCalled()
@@ -197,8 +198,9 @@ describe('AudioUploader', () => {
       const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement
       if (fileInput) {
         const file = new File(['audio'], 'test.mp3', { type: 'audio/mpeg' })
-        fileInput.files = [file] as any
-        fileInput.dispatchEvent(new Event('change', { bubbles: true }))
+        // Use userEvent.upload() instead of DataTransfer (not available in jsdom)
+        // This will be handled by userEvent.upload() calls in the tests
+      }
       }
 
       await waitFor(() => {
@@ -218,8 +220,9 @@ describe('AudioUploader', () => {
       const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement
       if (fileInput) {
         const file = new File(['audio'], 'test.mp3', { type: 'audio/mpeg' })
-        fileInput.files = [file] as any
-        fileInput.dispatchEvent(new Event('change', { bubbles: true }))
+        // Use userEvent.upload() instead of DataTransfer (not available in jsdom)
+        // This will be handled by userEvent.upload() calls in the tests
+      }
       }
 
       await waitFor(() => {
@@ -241,8 +244,9 @@ describe('AudioUploader', () => {
       const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement
       if (fileInput) {
         const file = new File(['audio'], 'test.mp3', { type: 'audio/mpeg' })
-        fileInput.files = [file] as any
-        fileInput.dispatchEvent(new Event('change', { bubbles: true }))
+        // Use userEvent.upload() instead of DataTransfer (not available in jsdom)
+        // This will be handled by userEvent.upload() calls in the tests
+      }
       }
 
       await waitFor(() => {
@@ -272,7 +276,10 @@ describe('AudioUploader', () => {
         const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement
         if (fileInput) {
           const file = new File(['audio'], `test.${ext}`, { type: mime })
-          fileInput.files = [file] as any
+          // Create proper FileList using DataTransfer
+          const dataTransfer = new DataTransfer()
+          dataTransfer.items.add(file)
+          fileInput.files = dataTransfer.files
           fileInput.dispatchEvent(new Event('change', { bubbles: true }))
         }
 
