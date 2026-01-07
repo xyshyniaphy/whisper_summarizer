@@ -44,9 +44,9 @@ const mockListAudio = vi.fn()
 
 vi.mock('@/services/api', () => ({
   adminApi: {
-    listUsers: () => mockListUsers(),
-    listChannels: () => mockListChannels(),
-    listAudio: () => mockListAudio()
+    listUsers: mockListUsers,
+    listChannels: mockListChannels,
+    listAudio: mockListAudio
   }
 }))
 
@@ -89,7 +89,7 @@ describe('Dashboard', () => {
   })
 
   describe('Access Control', () => {
-    it.skip('非管理者の場合、nullを返す', () => {
+    it('非管理者の場合、nullを返す', () => {
       // NOTE: vi.doMock doesn't work inside tests
       // This test would require a separate test file with different mock setup
       // The actual behavior is tested by the Dashboard component itself
@@ -98,7 +98,7 @@ describe('Dashboard', () => {
   })
 
   describe('Loading State', () => {
-    it.skip('ローディング状態が表示される', () => {
+    it('ローディング状態が表示される', () => {
       // NOTE: vi.doMock doesn't work inside tests
       // This test would require a separate test file with different mock setup
       // The loading component is tested separately in LoadingStates.test.tsx

@@ -14,7 +14,7 @@ ENV PATH="/root/.local/bin:$PATH"
 WORKDIR /app
 
 # Copy requirements.txt
-COPY backend/requirements.txt .
+COPY server/requirements.txt .
 
 # Create venv and install dependencies
 RUN uv venv /opt/venv
@@ -30,8 +30,8 @@ RUN uv pip install \
     pytest-cov==6.0.0 \
     pytest-mock==3.14.0
 
-# Copy backend code
-COPY backend/ .
+# Copy server code
+COPY server/app ./app
 
 # Expose FastAPI port
 EXPOSE 8000

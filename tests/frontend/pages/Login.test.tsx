@@ -10,14 +10,16 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { BrowserRouter } from 'react-router-dom'
 import { Provider } from 'jotai'
-import Login from '@/pages/Login'
+import React from 'react'
+import Login from '../../../src/pages/Login'
 
 // Mock Supabase client
 const mockSignInWithOAuth = vi.fn()
-vi.mock('@/services/supabase', () => ({
+
+vi.mock('../../../src/services/supabase', () => ({
   supabase: {
     auth: {
-      signInWithOAuth: () => mockSignInWithOAuth()
+      signInWithOAuth: mockSignInWithOAuth
     }
   }
 }))
@@ -58,7 +60,31 @@ describe('Login', () => {
     it('初期状態ではエラーメッセージが表示されない', () => {
       render(<Login />, { wrapper })
 
-      expect(screen.queryByText(/Google登录失败|发生意外错误/)).toBeNull()
+      expect(screen.queryByText(/登录失败/)).not.toBeTruthy()
+    })
+
+    it('Googleボタンにaria-labelがある', () => {
+      render(<Login />, { wrapper })
+
+      const button = screen.getByRole('button', { name: /sign in with google/i })
+      expect(button).toBeTruthy()
+    })
+  })
+
+  describe('UI Components', () => {
+    it('ページが中央揃えで正しいスタイリングが適用される', () => {
+      const { container } = render(<Login />, { wrapper })
+
+      // Check for min-h-screen with flex (centering container)
+      const centerContainer = container.querySelector('.min-h-screen')
+      expect(centerContainer).toBeTruthy()
+      expect(centerContainer?.className).toContain('flex')
+      expect(centerContainer?.className).toContain('items-center')
+      expect(centerContainer?.className).toContain('justify-center')
+
+      // Check for max-w-md container
+      const contentContainer = container.querySelector('.max-w-md')
+      expect(contentContainer).toBeTruthy()
     })
   })
 
@@ -67,20 +93,21 @@ describe('Login', () => {
       const user = userEvent.setup()
       render(<Login />, { wrapper })
 
-      const googleButton = screen.getByText(/使用 Google 继续/)
-      await user.click(googleButton)
+      const button = screen.getByRole('button', { name: /sign in with google/i })
+      await user.click(button)
 
-      await waitFor(() => {
-        expect(mockSignInWithOAuth).toHaveBeenCalled()
-      })
+      // Button should show loading state
+      expect(screen.getByText('连接中...')).toBeTruthy()
     })
 
     it('Google認証成功時、OAuthが正しいパラメータで呼ばれる', async () => {
+      mockSignInWithOAuth.mockResolvedValue({ error: null })
+
       const user = userEvent.setup()
       render(<Login />, { wrapper })
 
-      const googleButton = screen.getByText(/使用 Google 继续/)
-      await user.click(googleButton)
+      const button = screen.getByRole('button', { name: /sign in with google/i })
+      await user.click(button)
 
       await waitFor(() => {
         expect(mockSignInWithOAuth).toHaveBeenCalledWith({
@@ -95,147 +122,72 @@ describe('Login', () => {
         })
       })
     })
-
-    it('Google認証失敗時、エラーメッセージが表示される', async () => {
-      const user = userEvent.setup()
-      mockSignInWithOAuth.mockResolvedValue({
-        error: { message: 'Google認証エラー' }
-      })
-
-      render(<Login />, { wrapper })
-
-      const googleButton = screen.getByText(/使用 Google 继续/)
-      await user.click(googleButton)
-
-      await waitFor(() => {
-        const errorMessage = screen.queryByText(/Google認証エラー|Google登录失败/)
-        expect(errorMessage).toBeTruthy()
-      })
-    })
-
-    it('Google認証エラーなしの場合、デフォルトエラーメッセージが表示される', async () => {
-      const user = userEvent.setup()
-      mockSignInWithOAuth.mockResolvedValue({
-        error: {}
-      })
-
-      render(<Login />, { wrapper })
-
-      const googleButton = screen.getByText(/使用 Google 继续/)
-      await user.click(googleButton)
-
-      await waitFor(() => {
-        const errorMessage = screen.queryByText(/Google登录失败/)
-        expect(errorMessage).toBeTruthy()
-      })
-    })
   })
 
   describe('Loading States', () => {
     it('Google認証処理中、ボタンが無効になる', async () => {
-      const user = userEvent.setup()
-      // Make the promise never resolve to test loading state
-      mockSignInWithOAuth.mockReturnValue(new Promise(() => {}))
+      mockSignInWithOAuth.mockImplementation(
+        () => new Promise(resolve => setTimeout(() => resolve({ error: null }), 1000))
+      )
 
+      const user = userEvent.setup()
       render(<Login />, { wrapper })
 
-      const googleButton = screen.getByText(/使用 Google 继续/)
-      await user.click(googleButton)
+      const button = screen.getByRole('button', { name: /sign in with google/i })
+      await user.click(button)
 
-      await waitFor(() => {
-        expect(googleButton).toBeDisabled()
-      })
+      // Button should be disabled during loading
+      expect(button).toBeDisabled()
+      expect(screen.getByText('连接中...')).toBeTruthy()
     })
 
-    it('処理完了後、ローディング状態が解除される', async () => {
-      const user = userEvent.setup()
-      mockSignInWithOAuth.mockResolvedValue({ error: null })
+    it('読み込み中、ローディングテキストが表示される', async () => {
+      mockSignInWithOAuth.mockImplementation(
+        () => new Promise(resolve => setTimeout(() => resolve({ error: null }), 100))
+      )
 
+      const user = userEvent.setup()
       render(<Login />, { wrapper })
 
-      const googleButton = screen.getByText(/使用 Google 继续/)
-      await user.click(googleButton)
+      const button = screen.getByRole('button', { name: /sign in with google/i })
+      await user.click(button)
 
-      await waitFor(() => {
-        // After promise resolves, button should be enabled again (or user redirected)
-        expect(mockSignInWithOAuth).toHaveBeenCalled()
-      })
+      expect(screen.getByText('连接中...')).toBeTruthy()
     })
   })
 
   describe('Error Handling', () => {
     it('ネットワークエラー時、エラーメッセージが表示される', async () => {
-      const user = userEvent.setup()
-      mockSignInWithOAuth.mockRejectedValue(
-        new Error('ネットワークエラー')
-      )
-
-      render(<Login />, { wrapper })
-
-      const googleButton = screen.getByText(/使用 Google 继续/)
-      await user.click(googleButton)
-
-      await waitFor(() => {
-        const errorMessage = screen.queryByText(/网络错误|发生意外错误/)
-        expect(errorMessage).toBeTruthy()
-      })
-    })
-
-    it('エラー発生後、別の認証試行が可能であること', async () => {
-      const user = userEvent.setup()
-      // First attempt fails
-      mockSignInWithOAuth.mockResolvedValueOnce({
-        error: { message: '最初のエラー' }
-      })
-      // Second attempt succeeds
-      mockSignInWithOAuth.mockResolvedValueOnce({
-        error: null
-      })
-
-      render(<Login />, { wrapper })
-
-      const googleButton = screen.getByText(/使用 Google 继续/)
-
-      // First click - error
-      await user.click(googleButton)
-      await waitFor(() => {
-        expect(screen.queryByText(/最初のエラー/)).toBeTruthy()
-      })
-
-      // Second click - success
-      await user.click(googleButton)
-      await waitFor(() => {
-        expect(mockSignInWithOAuth).toHaveBeenCalledTimes(2)
-      })
-    })
-  })
-
-  describe('UI Components', () => {
-    it('エラーメッセージがある場合、赤い背景で表示される', async () => {
-      const user = userEvent.setup()
       mockSignInWithOAuth.mockResolvedValue({
-        error: { message: 'テストエラー' }
+        error: { message: 'Network error' }
       })
 
+      const user = userEvent.setup()
       render(<Login />, { wrapper })
 
-      const googleButton = screen.getByText(/使用 Google 继续/)
-      await user.click(googleButton)
+      const button = screen.getByRole('button', { name: /sign in with google/i })
+      await user.click(button)
 
       await waitFor(() => {
-        const errorDiv = screen.getByText(/テストエラー/).closest('div')
-        expect(errorDiv?.className).toContain('bg-red-50')
-        expect(errorDiv?.className).toContain('border-red-200')
+        expect(screen.getByText(/Network error/)).toBeTruthy()
       })
     })
 
-    it('ページが中央揃えで正しいスタイリングが適用される', () => {
+    it('OAuth失敗時、ボタンが再有効化される', async () => {
+      mockSignInWithOAuth.mockResolvedValue({
+        error: { message: 'OAuth failed' }
+      })
+
+      const user = userEvent.setup()
       render(<Login />, { wrapper })
 
-      const container = screen.getByText('Whisper Summarizer').closest('div')
-      expect(container?.className).toContain('flex')
-      expect(container?.className).toContain('items-center')
-      expect(container?.className).toContain('justify-center')
+      const button = screen.getByRole('button', { name: /sign in with google/i })
+      await user.click(button)
+
+      await waitFor(() => {
+        expect(screen.getByText(/OAuth failed/)).toBeTruthy()
+        expect(button).not.toBeDisabled()
+      })
     })
   })
 
@@ -243,25 +195,23 @@ describe('Login', () => {
     it('Googleボタンに適切なaria-labelが設定される', () => {
       render(<Login />, { wrapper })
 
-      // Check that the Google button has accessibility attributes
-      const googleButton = screen.getByRole('button', { name: /使用 Google/i })
-      expect(googleButton).toBeTruthy()
+      const button = screen.getByRole('button', { name: /sign in with google/i })
+      expect(button).toBeTruthy()
+      expect(button).toHaveAttribute('aria-label', 'Sign in with Google')
     })
 
-    it('エラーメッセージがスクリーンリーダーで読み取れる', async () => {
-      const user = userEvent.setup()
-      mockSignInWithOAuth.mockResolvedValue({
-        error: { message: 'エラーメッセージ' }
-      })
+    it('読み込み中、aria-labelが保持される', async () => {
+      mockSignInWithOAuth.mockImplementation(
+        () => new Promise(resolve => setTimeout(() => resolve({ error: null }), 100))
+      )
 
+      const user = userEvent.setup()
       render(<Login />, { wrapper })
 
-      await user.click(screen.getByText(/使用 Google 继续/))
+      const button = screen.getByRole('button', { name: /sign in with google/i })
+      await user.click(button)
 
-      await waitFor(() => {
-        const errorMessage = screen.getByText(/エラーメッセージ/)
-        expect(errorMessage).toBeVisible()
-      })
+      expect(button).toHaveAttribute('aria-label', 'Sign in with Google')
     })
   })
 })

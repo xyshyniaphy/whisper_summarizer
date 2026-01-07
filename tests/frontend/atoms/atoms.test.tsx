@@ -7,6 +7,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { Provider, useAtom, useSetAtom, createStore } from 'jotai'
 import { renderHook, act } from '@testing-library/react'
+import React from 'react'
 import {
   userAtom,
   sessionAtom,
@@ -185,6 +186,8 @@ describe('Auth Atoms', () => {
         user: { id: '123' },
         session: null,
         role: 'user',
+        is_active: false,
+        is_admin: false,
         loading: false,
         isAuthenticated: true,
         isAdmin: false

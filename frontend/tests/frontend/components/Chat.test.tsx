@@ -9,11 +9,15 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Chat } from '../../../src/components/Chat'
 
+// Create mock functions outside the mock so they can be referenced in tests
+const mockGetChatHistory = vi.fn()
+const mockSendChatMessageStream = vi.fn()
+
 // Mock the API module
 vi.mock('../../../src/services/api', () => ({
   api: {
-    getChatHistory: vi.fn(),
-    sendChatMessageStream: vi.fn()
+    getChatHistory: mockGetChatHistory,
+    sendChatMessageStream: mockSendChatMessageStream
   }
 }))
 
@@ -46,19 +50,17 @@ describe('Chat Component', () => {
 
   describe('Initial Loading State', () => {
     it('shows loading spinner on initial load', async () => {
-      const { api } = await import('../../../src/services/api')
-      vi.mocked(api.getChatHistory).mockImplementation(() => new Promise(() => {}))
+      mockGetChatHistory.mockImplementation(() => new Promise(() => {}))
 
       render(<Chat {...defaultProps} />)
-      
+
       // Should show loader
       const loader = document.querySelector('.animate-spin')
       expect(loader).toBeTruthy()
     })
 
     it('shows empty state when no messages exist', async () => {
-      const { api } = await import('../../../src/services/api')
-      vi.mocked(api.getChatHistory).mockResolvedValue({ messages: [] })
+      mockGetChatHistory.mockResolvedValue({ messages: [] })
 
       render(<Chat {...defaultProps} />)
 
@@ -68,7 +70,6 @@ describe('Chat Component', () => {
     })
 
     it('loads and displays existing chat history', async () => {
-      const { api } = await import('../../../src/services/api')
       const mockMessages = [
         {
           id: '1',
@@ -83,7 +84,7 @@ describe('Chat Component', () => {
           created_at: '2024-01-01T00:00:01Z'
         }
       ]
-      vi.mocked(api.getChatHistory).mockResolvedValue({ messages: mockMessages })
+      mockGetChatHistory.mockResolvedValue({ messages: mockMessages })
 
       render(<Chat {...defaultProps} />)
 
@@ -96,7 +97,6 @@ describe('Chat Component', () => {
 
   describe('Message Display', () => {
     it('renders user messages on the right side', async () => {
-      const { api } = await import('../../../src/services/api')
       const mockMessages = [
         {
           id: '1',
@@ -105,7 +105,7 @@ describe('Chat Component', () => {
           created_at: '2024-01-01T00:00:00Z'
         }
       ]
-      vi.mocked(api.getChatHistory).mockResolvedValue({ messages: mockMessages })
+      mockGetChatHistory.mockResolvedValue({ messages: mockMessages })
 
       render(<Chat {...defaultProps} />)
 
@@ -119,7 +119,6 @@ describe('Chat Component', () => {
     })
 
     it('renders assistant messages on the left side', async () => {
-      const { api } = await import('../../../src/services/api')
       const mockMessages = [
         {
           id: '1',
@@ -128,7 +127,7 @@ describe('Chat Component', () => {
           created_at: '2024-01-01T00:00:00Z'
         }
       ]
-      vi.mocked(api.getChatHistory).mockResolvedValue({ messages: mockMessages })
+      mockGetChatHistory.mockResolvedValue({ messages: mockMessages })
 
       render(<Chat {...defaultProps} />)
 
@@ -142,7 +141,6 @@ describe('Chat Component', () => {
     })
 
     it('preserves whitespace in messages', async () => {
-      const { api } = await import('../../../src/services/api')
       const mockMessages = [
         {
           id: '1',
@@ -151,7 +149,7 @@ describe('Chat Component', () => {
           created_at: '2024-01-01T00:00:00Z'
         }
       ]
-      vi.mocked(api.getChatHistory).mockResolvedValue({ messages: mockMessages })
+      mockGetChatHistory.mockResolvedValue({ messages: mockMessages })
 
       render(<Chat {...defaultProps} />)
 
@@ -165,8 +163,7 @@ describe('Chat Component', () => {
 
   describe('Input Form', () => {
     it('renders input field and send button', async () => {
-      const { api } = await import('../../../src/services/api')
-      vi.mocked(api.getChatHistory).mockResolvedValue({ messages: [] })
+      mockGetChatHistory.mockResolvedValue({ messages: [] })
 
       render(<Chat {...defaultProps} />)
 
@@ -179,8 +176,7 @@ describe('Chat Component', () => {
     })
 
     it('has correct input attributes', async () => {
-      const { api } = await import('../../../src/services/api')
-      vi.mocked(api.getChatHistory).mockResolvedValue({ messages: [] })
+      mockGetChatHistory.mockResolvedValue({ messages: [] })
 
       render(<Chat {...defaultProps} />)
 
@@ -193,8 +189,7 @@ describe('Chat Component', () => {
     })
 
     it('disables input when disabled prop is true', async () => {
-      const { api } = await import('../../../src/services/api')
-      vi.mocked(api.getChatHistory).mockResolvedValue({ messages: [] })
+      mockGetChatHistory.mockResolvedValue({ messages: [] })
 
       render(<Chat {...defaultProps} disabled={true} />)
 
@@ -207,8 +202,7 @@ describe('Chat Component', () => {
 
   describe('Message Submission', () => {
     it('submits message when form is submitted', async () => {
-      const { api } = await import('../../../src/services/api')
-      vi.mocked(api.getChatHistory).mockResolvedValue({ messages: [] })
+      mockGetChatHistory.mockResolvedValue({ messages: [] })
       
       // Mock streaming function
       const mockStream = vi.fn()
@@ -218,7 +212,7 @@ describe('Chat Component', () => {
         onChunk(' world')
         onComplete?.()
       })
-      vi.mocked(api.sendChatMessageStream).mockImplementation(mockStream)
+      mockSendChatMessageStream.mockImplementation(mockStream)
 
       render(<Chat {...defaultProps} />)
 
@@ -235,7 +229,7 @@ describe('Chat Component', () => {
       await user.click(button)
 
       await waitFor(() => {
-        expect(api.sendChatMessageStream).toHaveBeenCalledWith(
+        expect(mockSendChatMessageStream).toHaveBeenCalledWith(
           mockTranscriptionId,
           'Test message',
           expect.any(Function),
@@ -246,9 +240,8 @@ describe('Chat Component', () => {
     })
 
     it('does not submit empty messages', async () => {
-      const { api } = await import('../../../src/services/api')
-      vi.mocked(api.getChatHistory).mockResolvedValue({ messages: [] })
-      vi.mocked(api.sendChatMessageStream).mockImplementation(async () => {})
+      mockGetChatHistory.mockResolvedValue({ messages: [] })
+      mockSendChatMessageStream.mockImplementation(async () => {})
 
       render(<Chat {...defaultProps} />)
 
@@ -263,21 +256,20 @@ describe('Chat Component', () => {
       await user.click(button)
 
       // Should not call sendChatMessageStream
-      expect(api.sendChatMessageStream).not.toHaveBeenCalled()
+      expect(mockSendChatMessageStream).not.toHaveBeenCalled()
     })
   })
 
   describe('Thinking Indicator', () => {
     it('shows thinking indicator when waiting for response', async () => {
-      const { api } = await import('../../../src/services/api')
-      vi.mocked(api.getChatHistory).mockResolvedValue({ messages: [] })
+      mockGetChatHistory.mockResolvedValue({ messages: [] })
       
       let resolveStream: (value: void) => void
       const streamPromise = new Promise<void>(resolve => { resolveStream = resolve })
       
       const mockStream = vi.fn()
       mockStream.mockImplementation(() => streamPromise)
-      vi.mocked(api.sendChatMessageStream).mockImplementation(mockStream)
+      mockSendChatMessageStream.mockImplementation(mockStream)
 
       render(<Chat {...defaultProps} />)
 
@@ -302,9 +294,8 @@ describe('Chat Component', () => {
     })
 
     it('collapses thinking indicator when response arrives', async () => {
-      const { api } = await import('../../../src/services/api')
       // Mock returns messages including the assistant response that will be streamed
-      vi.mocked(api.getChatHistory).mockResolvedValue({
+      mockGetChatHistory.mockResolvedValue({
         messages: [
           { id: '1', role: 'user' as const, content: 'Test', created_at: '2024-01-01T00:00:00Z' },
           { id: '2', role: 'assistant' as const, content: 'Hello', created_at: '2024-01-01T00:00:01Z' }
@@ -318,7 +309,7 @@ describe('Chat Component', () => {
         onChunk('Hello')
         onComplete?.()
       })
-      vi.mocked(api.sendChatMessageStream).mockImplementation(mockStream)
+      mockSendChatMessageStream.mockImplementation(mockStream)
 
       render(<Chat {...defaultProps} />)
 
@@ -348,9 +339,8 @@ describe('Chat Component', () => {
 
   describe('Streaming Response', () => {
     it('accumulates streamed chunks progressively', async () => {
-      const { api } = await import('../../../src/services/api')
       // Mock returns messages including the assistant response that will be streamed
-      vi.mocked(api.getChatHistory).mockResolvedValue({
+      mockGetChatHistory.mockResolvedValue({
         messages: [
           { id: '1', role: 'user' as const, content: 'Test', created_at: '2024-01-01T00:00:00Z' },
           { id: '2', role: 'assistant' as const, content: 'Hello there!', created_at: '2024-01-01T00:00:01Z' }
@@ -367,7 +357,7 @@ describe('Chat Component', () => {
         onChunk('!')
         onComplete?.()
       })
-      vi.mocked(api.sendChatMessageStream).mockImplementation(mockStream)
+      mockSendChatMessageStream.mockImplementation(mockStream)
 
       render(<Chat {...defaultProps} />)
 
@@ -390,11 +380,10 @@ describe('Chat Component', () => {
     })
 
     it('reloads chat history after streaming completes', async () => {
-      const { api } = await import('../../../src/services/api')
 
       // Track call count explicitly
       let callCount = 0
-      vi.mocked(api.getChatHistory).mockImplementation(() => {
+      mockGetChatHistory.mockImplementation(() => {
         callCount++
         return Promise.resolve({ messages: [] })
       })
@@ -409,7 +398,7 @@ describe('Chat Component', () => {
         // Wait for loadChatHistory to complete
         await new Promise(resolve => setTimeout(resolve, 50))
       })
-      vi.mocked(api.sendChatMessageStream).mockImplementation(mockStream)
+      mockSendChatMessageStream.mockImplementation(mockStream)
 
       // Reset call count for this test
       callCount = 0
@@ -444,14 +433,13 @@ describe('Chat Component', () => {
 
   describe('Error Handling', () => {
     it('handles streaming errors gracefully', async () => {
-      const { api } = await import('../../../src/services/api')
-      vi.mocked(api.getChatHistory).mockResolvedValue({ messages: [] })
+      mockGetChatHistory.mockResolvedValue({ messages: [] })
       
       const mockStream = vi.fn()
       mockStream.mockImplementation(async (transcriptionId: string, content: string, onChunk: any, onError: any, onComplete: any) => {
         onError('Network error')
       })
-      vi.mocked(api.sendChatMessageStream).mockImplementation(mockStream)
+      mockSendChatMessageStream.mockImplementation(mockStream)
 
       render(<Chat {...defaultProps} />)
 
@@ -474,14 +462,13 @@ describe('Chat Component', () => {
     })
 
     it('removes temp messages on error and restores input', async () => {
-      const { api } = await import('../../../src/services/api')
-      vi.mocked(api.getChatHistory).mockResolvedValue({ messages: [] })
+      mockGetChatHistory.mockResolvedValue({ messages: [] })
       
       const mockStream = vi.fn()
       mockStream.mockImplementation(async () => {
         throw new Error('API error')
       })
-      vi.mocked(api.sendChatMessageStream).mockImplementation(mockStream)
+      mockSendChatMessageStream.mockImplementation(mockStream)
 
       render(<Chat {...defaultProps} />)
 

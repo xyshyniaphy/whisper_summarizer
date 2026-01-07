@@ -30,8 +30,8 @@ const mockDeleteTranscription = vi.fn()
 
 vi.mock('../../../src/services/api', () => ({
   api: {
-    getTranscriptions: () => mockGetTranscriptions(),
-    deleteTranscription: (id: string) => mockDeleteTranscription(id)
+    getTranscriptions: mockGetTranscriptions,
+    deleteTranscription: mockDeleteTranscription
   }
 }))
 

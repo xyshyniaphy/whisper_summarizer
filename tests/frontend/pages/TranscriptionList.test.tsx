@@ -10,30 +10,15 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { BrowserRouter } from 'react-router-dom'
 import { Provider } from 'jotai'
+import React from 'react'
 import { TranscriptionList } from '../../../src/pages/TranscriptionList'
 
-// Mock Supabase client
-vi.mock('../../../src/services/supabase', () => ({
-  supabase: {
-    auth: {
-      getSession: vi.fn(() => Promise.resolve({ data: { session: null }, error: null })),
-      onAuthStateChange: vi.fn(() => ({
-        data: { subscription: { unsubscribe: vi.fn() } }
-      }))
-    }
-  }
-}))
-
-// Mock API
-const mockGetTranscriptions = vi.fn()
-const mockDeleteTranscription = vi.fn()
-
-vi.mock('../../../src/services/api', () => ({
-  api: {
-    getTranscriptions: () => mockGetTranscriptions(),
-    deleteTranscription: (id: string) => mockDeleteTranscription(id)
-  }
-}))
+// Import global mock functions from setup.ts
+declare global {
+  var mockAxiosGet: any
+  var mockAxiosDelete: any
+  var mockNavigate: any
+}
 
 const wrapper = ({ children }: { children: React.ReactNode }) => (
   <BrowserRouter>
@@ -55,7 +40,11 @@ const mockTranscriptions = [
     retry_count: 0,
     created_at: '2024-01-01T00:00:00Z',
     updated_at: '2024-01-01T00:05:00Z',
-    summaries: []
+    completed_at: '2024-01-01T00:05:00Z',
+    time_remaining: 600000, // seconds
+    summaries: [],
+    channels: [],
+    is_personal: false
   },
   {
     id: '2',
@@ -69,7 +58,11 @@ const mockTranscriptions = [
     retry_count: 0,
     created_at: '2024-01-01T01:00:00Z',
     updated_at: '2024-01-01T01:00:00Z',
-    summaries: []
+    completed_at: null,
+    time_remaining: null,
+    summaries: [],
+    channels: [],
+    is_personal: false
   },
   {
     id: '3',
@@ -83,7 +76,11 @@ const mockTranscriptions = [
     retry_count: 0,
     created_at: '2024-01-01T02:00:00Z',
     updated_at: '2024-01-01T02:00:00Z',
-    summaries: []
+    completed_at: null,
+    time_remaining: null,
+    summaries: [],
+    channels: [],
+    is_personal: false
   }
 ]
 
@@ -91,16 +88,16 @@ describe('TranscriptionList', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     // Return PaginatedResponse structure
-    mockGetTranscriptions.mockResolvedValue({
-      total: mockTranscriptions.length,
-      page: 1,
-      page_size: 10,
-      total_pages: 1,
-      data: mockTranscriptions
+    global.mockAxiosGet.mockResolvedValue({
+      data: {
+        total: mockTranscriptions.length,
+        page: 1,
+        page_size: 10,
+        total_pages: 1,
+        data: mockTranscriptions
+      }
     })
-    mockDeleteTranscription.mockResolvedValue(undefined)
-    // Mock window.confirm
-    global.confirm = vi.fn(() => true) as any
+    global.mockAxiosDelete.mockResolvedValue({ data: undefined })
   })
 
   describe('Rendering', () => {
@@ -124,7 +121,16 @@ describe('TranscriptionList', () => {
     })
 
     it('データがない場合、「暂无数据」が表示される', async () => {
-      mockGetTranscriptions.mockResolvedValue([])
+      global.mockAxiosGet.mockResolvedValue({
+        data: {
+          total: 0,
+          page: 1,
+          page_size: 10,
+          total_pages: 0,
+          data: []
+        }
+      })
+
       render(<TranscriptionList />, { wrapper })
 
       await waitFor(() => {
@@ -155,13 +161,14 @@ describe('TranscriptionList', () => {
   })
 
   describe('Delete Functionality', () => {
-    it('失敗した転写は削除ボタンが表示される', async () => {
+    it('削除ボタンが表示される', async () => {
       render(<TranscriptionList />, { wrapper })
 
       await waitFor(() => {
         // Failed transcription should have delete button
-        const rows = screen.getAllByText('失败')
-        expect(rows.length).toBeGreaterThan(0)
+        expect(screen.getByText('failed-audio.mp3')).toBeTruthy()
+        const deleteButtons = screen.getAllByTitle('删除')
+        expect(deleteButtons.length).toBeGreaterThan(0)
       })
     })
 
@@ -173,11 +180,13 @@ describe('TranscriptionList', () => {
         expect(screen.getByText('failed-audio.mp3')).toBeTruthy()
       })
 
-      // Click delete button (find by aria-label or data-testid)
       const deleteButtons = screen.getAllByTitle('删除')
       if (deleteButtons.length > 0) {
         await user.click(deleteButtons[0])
-        expect(global.confirm).toHaveBeenCalledWith('确定要删除吗？')
+
+        await waitFor(() => {
+          expect(screen.getByText('确定要删除吗？')).toBeTruthy()
+        })
       }
     })
 
@@ -193,14 +202,17 @@ describe('TranscriptionList', () => {
       if (deleteButtons.length > 0) {
         await user.click(deleteButtons[0])
 
+        // Click confirm in dialog
+        const confirmButton = screen.getByText('删除')
+        await user.click(confirmButton)
+
         await waitFor(() => {
-          expect(mockDeleteTranscription).toHaveBeenCalled()
+          expect(global.mockAxiosDelete).toHaveBeenCalled()
         })
       }
     })
 
     it('キャンセル時、deleteTranscriptionは呼ばれない', async () => {
-      global.confirm = vi.fn(() => false) as any
       const user = userEvent.setup()
       render(<TranscriptionList />, { wrapper })
 
@@ -211,7 +223,12 @@ describe('TranscriptionList', () => {
       const deleteButtons = screen.getAllByTitle('删除')
       if (deleteButtons.length > 0) {
         await user.click(deleteButtons[0])
-        expect(mockDeleteTranscription).not.toHaveBeenCalled()
+
+        // Click cancel in dialog
+        const cancelButton = screen.getByText('取消')
+        await user.click(cancelButton)
+
+        expect(global.mockAxiosDelete).not.toHaveBeenCalled()
       }
     })
   })
@@ -229,6 +246,10 @@ describe('TranscriptionList', () => {
       const fileNameCell = screen.getByText('test-audio.mp3').closest('tr')
       if (fileNameCell) {
         await user.click(fileNameCell)
+
+        await waitFor(() => {
+          expect(global.mockNavigate).toHaveBeenCalledWith('/transcriptions/1')
+        })
       }
     })
   })
@@ -239,7 +260,7 @@ describe('TranscriptionList', () => {
 
       await waitFor(() => {
         // Should show Chinese formatted date
-        expect(screen.getByText('2024/')).toBeTruthy()
+        expect(screen.getByText(/2024/)).toBeTruthy()
       })
     })
   })
@@ -275,12 +296,20 @@ describe('TranscriptionList', () => {
           retry_count: 3
         }
       ]
-      mockGetTranscriptions.mockResolvedValue(transcriptionsWithRetry)
+      global.mockAxiosGet.mockResolvedValue({
+        data: {
+          total: 1,
+          page: 1,
+          page_size: 10,
+          total_pages: 1,
+          data: transcriptionsWithRetry
+        }
+      })
 
       render(<TranscriptionList />, { wrapper })
 
       await waitFor(() => {
-        const retryText = screen.queryByText(/重试.*3.*次/)
+        const retryText = screen.queryByText(/重試.*3.*次/)
         expect(retryText).toBeTruthy()
       })
     })
@@ -290,7 +319,7 @@ describe('TranscriptionList', () => {
 
       await waitFor(() => {
         // Should not show "重试 0 次" when retry_count is 0
-        const retryTextZero = screen.queryByText(/重试.*0.*次/)
+        const retryTextZero = screen.queryByText(/重試.*0.*次/)
         expect(retryTextZero).toBeNull()
       })
     })

@@ -43,5 +43,7 @@ pytest-asyncio>=0.24.0
 # NOTE: Removed from backend:
 # - faster-whisper (moved to runner)
 # - pydub (moved to runner)
-# - openai (GLM API moved to runner)
 # - torch/CUDA/ffmpeg (not needed for server)
+
+# GLM API client (needed for chat endpoints on server)
+openai>=1.0.0

@@ -14,6 +14,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Provider } from 'jotai'
+import React from 'react'
 import { UserMenu } from '../../../src/components/UserMenu'
 import { userAtom, sessionAtom, roleAtom, isActiveAtom, loadingAtom } from '../../../src/atoms/auth'
 
@@ -58,30 +59,25 @@ vi.mock('../../../src/services/supabase', () => ({
   }
 }))
 
-// Note: useAuth is mocked to provide stable references
-// Test mode detection in the hook prevents useEffect from running
+// Mock signOut function for testing
 const mockSignOut = vi.fn().mockResolvedValue({ error: null })
-const mockAuthState = {
-  user: {
-    id: 'user-1',
-    email: 'test@example.com',
-    user_metadata: { full_name: 'Test User', role: 'user' },
-    aud: 'authenticated',
-    role: 'authenticated',
-    email_confirmed_at: new Date().toISOString(),
-    phone: '',
-    updated_at: new Date().toISOString(),
-    created_at: new Date().toISOString(),
-    app_metadata: {},
-  },
-  session: {},
-  role: 'user' as const,
-  loading: false
-}
-const mockAuthActions = { signOut: mockSignOut }
 
+// Mock useAuth to return values from Jotai atoms
+// The test wrapper sets up the atoms, so we just read from them
 vi.mock('../../../src/hooks/useAuth', () => ({
-  useAuth: () => [mockAuthState, mockAuthActions]
+  useAuth: () => {
+    const { useAtom } = require('jotai')
+    const { userAtom, sessionAtom, roleAtom, isActiveAtom, loadingAtom } = require('../../../src/atoms/auth')
+    const [user] = useAtom(userAtom)
+    const [session] = useAtom(sessionAtom)
+    const [role] = useAtom(roleAtom)
+    const [isActive] = useAtom(isActiveAtom)
+    const [loading] = useAtom(loadingAtom)
+    return [
+      { user, session, loading, role, is_active: isActive, is_admin: role === 'admin' },
+      { signOut: mockSignOut }
+    ]
+  }
 }))
 
 const wrapper = createTestWrapper()

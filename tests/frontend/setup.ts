@@ -12,7 +12,9 @@ import { afterEach, vi } from 'vitest'
 Object.defineProperty(window, 'matchMedia', {
   writable: true,
   value: vi.fn().mockImplementation(query => ({
-    matches: false,
+    // Always match desktop breakpoint queries (md: 768px, lg: 1024px, xl: 1280px, 2xl: 1536px)
+    // This makes Tailwind responsive classes like md:flex work correctly in tests
+    matches: true,
     media: query,
     onchange: null,
     addListener: vi.fn(),

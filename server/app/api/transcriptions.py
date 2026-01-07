@@ -781,7 +781,7 @@ async def send_chat_message(
     # Save user message
     user_message = ChatMessage(
         transcription_id=transcription_uuid,
-        user_id=UUID(current_user.get("id")),
+        user_id=current_user.get("id"),
         role="user",
         content=user_content
     )

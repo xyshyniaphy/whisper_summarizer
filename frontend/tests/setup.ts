@@ -22,32 +22,55 @@ import * as matchers from '@testing-library/jest-dom/matchers'
 // Extend Vitest's expect with jest-dom matchers
 expect.extend(matchers)
 
-// Mock React Router
+// Create stable mock functions for React Router
+const mockNavigate = vi.fn()
+const mockSetSearchParams = vi.fn()
+
+// Mock React Router - keep BrowserRouter real, mock only hooks
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual('react-router-dom')
   return {
     ...actual,
-    useNavigate: () => vi.fn(),
+    useNavigate: () => mockNavigate,
     useLocation: () => ({ pathname: '/', search: '', hash: '', state: null }),
     useParams: () => ({}),
     useSearchParams: () => [
       new URLSearchParams(),
-      vi.fn(),
+      mockSetSearchParams,
     ],
+    // Keep real components for Router context
+    BrowserRouter: actual.BrowserRouter,
+    Routes: actual.Routes,
+    Route: actual.Route,
     Navigate: ({ to }: { to: string }) => null,
     Link: ({ children, to, ...props }: any) => `Link to ${to}`,
-    BrowserRouter: ({ children }: { children: any }) => children,
   }
 })
 
+// Export mocks globally for tests to use
+;(global as any).mockNavigate = mockNavigate
+;(global as any).mockSetSearchParams = mockSetSearchParams
+
 // Mock Supabase client
+const mockSession = {
+  access_token: 'mock-token',
+  refresh_token: 'mock-refresh-token',
+  user: {
+    id: '123e4567-e89b-42d3-a456-426614174000',
+    email: 'test@example.com',
+    is_active: true,
+    is_admin: false,
+  }
+}
+
 vi.mock('@/services/supabase', () => ({
   supabase: {
     auth: {
-      getSession: vi.fn(() => Promise.resolve({ data: { session: null }, error: null })),
-      getUser: vi.fn(() => Promise.resolve({ data: { user: null }, error: null })),
+      getSession: vi.fn(() => Promise.resolve({ data: { session: mockSession }, error: null })),
+      getUser: vi.fn(() => Promise.resolve({ data: { user: mockSession.user }, error: null })),
       signInWithOAuth: vi.fn(() => Promise.resolve({ data: { url: 'http://localhost:3000' }, error: null })),
       signOut: vi.fn(() => Promise.resolve({ error: null })),
+      refreshSession: vi.fn(() => Promise.resolve({ data: { session: mockSession }, error: null })),
       onAuthStateChange: vi.fn(() => ({ data: { subscription: { unsubscribe: vi.fn() } } })),
     },
     from: vi.fn(() => ({
@@ -80,6 +103,50 @@ vi.mock('@/services/supabase', () => ({
     })),
   }
 }))
+
+// Create mock functions at module level so they can be accessed outside vi.mock
+const mockGet = vi.fn(() => Promise.resolve({ data: [] }))
+const mockPost = vi.fn(() => Promise.resolve({ data: {} }))
+const mockPut = vi.fn(() => Promise.resolve({ data: {} }))
+const mockDelete = vi.fn(() => Promise.resolve({ data: {} }))
+const mockPatch = vi.fn(() => Promise.resolve({ data: {} }))
+
+// Mock axios
+vi.mock('axios', () => {
+  const mockAxiosInstance = {
+    get: mockGet,
+    post: mockPost,
+    put: mockPut,
+    delete: mockDelete,
+    patch: mockPatch,
+    interceptors: {
+      request: { use: vi.fn() },
+      response: { use: vi.fn() }
+    },
+    defaults: {
+      baseURL: '/api',
+      headers: {}
+    }
+  }
+
+  return {
+    default: {
+      create: vi.fn(() => mockAxiosInstance),
+      get: mockGet,
+      post: mockPost,
+      put: mockPut,
+      delete: mockDelete,
+      patch: mockPatch,
+    }
+  }
+})
+
+// Make mock functions available globally for tests to use
+;(global as any).mockAxiosGet = mockGet
+;(global as any).mockAxiosPost = mockPost
+;(global as any).mockAxiosDelete = mockDelete
+;(global as any).mockAxiosPut = mockPut
+;(global as any).mockAxiosPatch = mockPatch
 
 // Cleanup after each test
 afterEach(() => {

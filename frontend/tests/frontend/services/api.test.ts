@@ -5,68 +5,27 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import axios from 'axios'
+import { api } from '../../../src/services/api'
 
-// Mock Supabase client first (before api import)
-const mockSession = {
-  access_token: 'mock-token',
-  refresh_token: 'mock-refresh-token'
+// Import global mock functions from setup.ts
+declare global {
+  var mockAxiosGet: any
+  var mockAxiosPost: any
+  var mockAxiosDelete: any
+  var mockAxiosPut: any
+  var mockAxiosPatch: any
 }
 
-vi.mock('@/services/supabase', () => ({
-  supabase: {
-    auth: {
-      getSession: vi.fn(() => Promise.resolve({
-        data: { session: mockSession },
-        error: null
-      })),
-      refreshSession: vi.fn(() => Promise.resolve({
-        data: { session: mockSession },
-        error: null
-      })),
-      signOut: vi.fn(() => Promise.resolve({ error: null }))
-    }
-  }
-}))
-
-// Mock axios - must be before api import
-vi.mock('axios', () => ({
-  default: {
-    get: vi.fn(() => Promise.resolve({ data: [] })),
-    post: vi.fn(() => Promise.resolve({ data: {} })),
-    put: vi.fn(() => Promise.resolve({ data: {} })),
-    delete: vi.fn(() => Promise.resolve({ data: {} })),
-    patch: vi.fn(() => Promise.resolve({ data: {} })),
-    create: vi.fn(() => ({
-      get: vi.fn(() => Promise.resolve({ data: [] })),
-      post: vi.fn(() => Promise.resolve({ data: {} })),
-      put: vi.fn(() => Promise.resolve({ data: {} })),
-      delete: vi.fn(() => Promise.resolve({ data: {} })),
-      patch: vi.fn(() => Promise.resolve({ data: {} })),
-      interceptors: {
-        request: { use: vi.fn() },
-        response: { use: vi.fn() }
-      }
-    }))
-  }
-}))
-
-// Import api after axios is mocked
-import { api } from '@/services/api'
-
-describe.skip('API Service', () => {
-  // Get mock references using vi.mocked for type safety
-  const mockAxios = vi.mocked(axios, { deep: true })
-
+describe('API Service', () => {
   beforeEach(() => {
     vi.clearAllMocks()
 
-    // Reset axios mocks to default return values
-    mockAxios.get.mockResolvedValue({ data: [] })
-    mockAxios.post.mockResolvedValue({ data: {} })
-    mockAxios.put.mockResolvedValue({ data: {} })
-    mockAxios.delete.mockResolvedValue({ data: {} })
-    mockAxios.patch.mockResolvedValue({ data: {} })
+    // Reset mocks to default return values
+    global.mockAxiosGet.mockResolvedValue({ data: [] })
+    global.mockAxiosPost.mockResolvedValue({ data: {} })
+    global.mockAxiosPut.mockResolvedValue({ data: {} })
+    global.mockAxiosDelete.mockResolvedValue({ data: {} })
+    global.mockAxiosPatch.mockResolvedValue({ data: {} })
 
     // Mock window.location
     delete (window as any).location
@@ -78,11 +37,11 @@ describe.skip('API Service', () => {
       const mockFile = new File(['audio'], 'test.mp3', { type: 'audio/mpeg' })
       const mockTranscription = { id: '123', file_name: 'test.mp3' }
 
-      mockAxios.post.mockResolvedValue({ data: mockTranscription })
+      global.mockAxiosPost.mockResolvedValue({ data: mockTranscription })
 
       const result = await api.uploadAudio(mockFile)
       expect(result).toEqual(mockTranscription)
-      expect(mockAxios.post).toHaveBeenCalledWith('/audio/upload', expect.any(FormData), {
+      expect(global.mockAxiosPost).toHaveBeenCalledWith('/audio/upload', expect.any(FormData), {
         headers: { 'Content-Type': 'multipart/form-data' }
       })
     })
@@ -92,7 +51,7 @@ describe.skip('API Service', () => {
 
       await api.uploadAudio(mockFile)
 
-      expect(mockAxios.post).toHaveBeenCalledWith('/audio/upload', expect.any(FormData), {
+      expect(global.mockAxiosPost).toHaveBeenCalledWith('/audio/upload', expect.any(FormData), {
         headers: { 'Content-Type': 'multipart/form-data' }
       })
     })
@@ -100,28 +59,37 @@ describe.skip('API Service', () => {
 
   describe('getTranscriptions', () => {
     it('転写リストを取得できる', async () => {
-      const mockTranscriptions = {
-        items: [
+      const mockResponse = {
+        data: [
           { id: '1', file_name: 'test1.mp3' },
           { id: '2', file_name: 'test2.mp3' }
         ],
         total: 2,
         page: 1,
-        page_size: 10
+        page_size: 10,
+        total_pages: 1
       }
 
-      mockAxios.get.mockResolvedValue({ data: mockTranscriptions })
+      global.mockAxiosGet.mockResolvedValue({ data: mockResponse })
 
       const result = await api.getTranscriptions()
-      expect(result).toEqual(mockTranscriptions)
+      expect(result).toEqual(mockResponse)
     })
 
     it('正しいエンドポイントを呼び出す', async () => {
-      mockAxios.get.mockResolvedValue({ data: { items: [], total: 0, page: 1, page_size: 10 } })
+      global.mockAxiosGet.mockResolvedValue({
+        data: {
+          data: [],
+          total: 0,
+          page: 1,
+          page_size: 10,
+          total_pages: 0
+        }
+      })
 
       await api.getTranscriptions()
 
-      expect(mockAxios.get).toHaveBeenCalledWith('/transcriptions', expect.any(Object))
+      expect(global.mockAxiosGet).toHaveBeenCalledWith('/transcriptions', expect.any(Object))
     })
   })
 
@@ -129,202 +97,194 @@ describe.skip('API Service', () => {
     it('単一の転写を取得できる', async () => {
       const mockTranscription = { id: '123', file_name: 'test.mp3' }
 
-      mockAxios.get.mockResolvedValue({ data: mockTranscription })
+      global.mockAxiosGet.mockResolvedValue({ data: mockTranscription })
 
       const result = await api.getTranscription('123')
       expect(result).toEqual(mockTranscription)
     })
 
     it('IDを含む正しいエンドポイントを呼び出す', async () => {
-      mockAxios.get.mockResolvedValue({ data: { id: '123' } })
+      global.mockAxiosGet.mockResolvedValue({ data: { id: '123' } })
 
       await api.getTranscription('123')
 
-      expect(mockAxios.get).toHaveBeenCalledWith('/transcriptions/123')
+      expect(global.mockAxiosGet).toHaveBeenCalledWith('/transcriptions/123')
     })
   })
 
   describe('deleteTranscription', () => {
     it('転写を削除できる', async () => {
-      mockAxios.delete.mockResolvedValue({})
+      global.mockAxiosDelete.mockResolvedValue({})
 
       await api.deleteTranscription('123')
 
-      expect(mockAxios.delete).toHaveBeenCalledWith('/transcriptions/123')
+      expect(global.mockAxiosDelete).toHaveBeenCalledWith('/transcriptions/123')
+    })
+  })
+
+  describe('deleteAllTranscriptions', () => {
+    it('全転写を削除できる', async () => {
+      const mockResponse = { deleted_count: 5, message: 'Deleted 5 transcriptions' }
+      global.mockAxiosDelete.mockResolvedValue({ data: mockResponse })
+
+      const result = await api.deleteAllTranscriptions()
+
+      expect(result).toEqual(mockResponse)
+      expect(global.mockAxiosDelete).toHaveBeenCalledWith('/transcriptions/all')
     })
   })
 
   describe('getDownloadUrl', () => {
-    it('TXTフォーマットのダウンロードURLを生成する', () => {
+    it('TXTダウンロードURLを生成できる', () => {
       const url = api.getDownloadUrl('123', 'txt')
       expect(url).toBe('/api/transcriptions/123/download?format=txt')
     })
 
-    it('SRTフォーマットのダウンロードURLを生成する', () => {
+    it('SRTダウンロードURLを生成できる', () => {
       const url = api.getDownloadUrl('123', 'srt')
       expect(url).toBe('/api/transcriptions/123/download?format=srt')
     })
   })
 
   describe('downloadFile', () => {
-    it('ファイルをBlobとしてダウンロードできる', async () => {
+    it('ファイルをダウンロードできる', async () => {
       const mockBlob = new Blob(['test content'])
-
-      mockAxios.get.mockResolvedValue({ data: mockBlob })
+      global.mockAxiosGet.mockResolvedValue({ data: mockBlob })
 
       const result = await api.downloadFile('123', 'txt')
 
       expect(result).toEqual(mockBlob)
-      expect(mockAxios.get).toHaveBeenCalledWith('/transcriptions/123/download?format=txt', {
+      expect(global.mockAxiosGet).toHaveBeenCalledWith('/transcriptions/123/download?format=txt', {
         responseType: 'blob'
       })
     })
   })
 
-  describe('Request Interceptor', () => {
-    it('リクエスト時に認証トークンが追加される', async () => {
-      mockAxios.post.mockResolvedValue({ data: { id: '123' } })
+  describe('downloadSummaryDocx', () => {
+    it('要約DOCXファイルをダウンロードできる', async () => {
+      const mockBlob = new Blob(['docx content'])
+      global.mockAxiosGet.mockResolvedValue({ data: mockBlob })
 
-      // Call an API method to trigger interceptor
-      await api.uploadAudio(new File(['audio'], 'test.mp3'))
+      const result = await api.downloadSummaryDocx('123')
 
-      // The interceptor should have added the Authorization header
-      // This is a basic check - actual testing would require more complex setup
-      expect(mockAxios.post).toHaveBeenCalled()
+      expect(result).toEqual(mockBlob)
+      expect(global.mockAxiosGet).toHaveBeenCalledWith('/transcriptions/123/download-docx', {
+        responseType: 'blob'
+      })
     })
   })
 
-  describe('Response Interceptor', () => {
-    it('401エラー時にトークンリフレッシュが試行される', async () => {
-      const originalRequest = { _retry: false, headers: {} }
-      const error = {
-        response: { status: 401 },
-        config: originalRequest
+  describe('downloadNotebookLMGuideline', () => {
+    it('NotebookLMガイドラインをダウンロードできる', async () => {
+      const mockBlob = new Blob(['notebooklm content'])
+      global.mockAxiosGet.mockResolvedValue({ data: mockBlob })
+
+      const result = await api.downloadNotebookLMGuideline('123')
+
+      expect(result).toEqual(mockBlob)
+      expect(global.mockAxiosGet).toHaveBeenCalledWith('/transcriptions/123/download-notebooklm', {
+        responseType: 'blob'
+      })
+    })
+  })
+
+  describe('Chat endpoints', () => {
+    it('チャット履歴を取得できる', async () => {
+      const mockMessages = {
+        messages: [
+          { id: '1', role: 'user', content: 'Hello', created_at: '2024-01-01T00:00:00Z' },
+          { id: '2', role: 'assistant', content: 'Hi there!', created_at: '2024-01-01T00:00:01Z' }
+        ]
+      }
+      global.mockAxiosGet.mockResolvedValue({ data: mockMessages })
+
+      const result = await api.getChatHistory('123')
+
+      expect(result).toEqual(mockMessages)
+      expect(global.mockAxiosGet).toHaveBeenCalledWith('/transcriptions/123/chat')
+    })
+
+    it('チャットメッセージを送信できる', async () => {
+      const mockResponse = {
+        id: 'msg-1',
+        role: 'assistant',
+        content: 'Response',
+        created_at: '2024-01-01T00:00:00Z'
+      }
+      global.mockAxiosPost.mockResolvedValue({ data: mockResponse })
+
+      const result = await api.sendChatMessage('123', 'Hello')
+
+      expect(result).toEqual(mockResponse)
+      expect(global.mockAxiosPost).toHaveBeenCalledWith('/transcriptions/123/chat', { content: 'Hello' })
+    })
+  })
+
+  describe('Share endpoints', () => {
+    it('共有リンクを作成できる', async () => {
+      const mockShare = {
+        id: 'share-1',
+        transcription_id: '123',
+        share_token: 'abc123',
+        share_url: 'https://example.com/shared/abc123',
+        created_at: '2024-01-01T00:00:00Z',
+        access_count: 0
+      }
+      global.mockAxiosPost.mockResolvedValue({ data: mockShare })
+
+      const result = await api.createShareLink('123')
+
+      expect(result).toEqual(mockShare)
+      expect(global.mockAxiosPost).toHaveBeenCalledWith('/transcriptions/123/share')
+    })
+
+    it('共有された転写を取得できる', async () => {
+      const mockTranscription = {
+        id: '123',
+        file_name: 'test.mp3',
+        text: 'Test transcription',
+        summary: 'Test summary',
+        language: 'zh',
+        duration_seconds: 120,
+        created_at: '2024-01-01T00:00:00Z'
       }
 
-      mockAxios.get.mockRejectedValue(error)
+      // Use axios directly for this endpoint (not apiClient)
+      const axios = (await import('axios')).default
+      vi.mocked(axios.get).mockResolvedValue({ data: mockTranscription })
 
-      // Try calling API - error handling would be tested by integration tests
-      // Unit test just verifies the mock is set up
-      expect(mockAxios.get).toBeDefined()
+      const result = await api.getSharedTranscription('abc123')
+
+      expect(result).toEqual(mockTranscription)
     })
   })
 
-  describe('sendChatMessageStream', () => {
-    it('streams chat response using fetch API', async () => {
-      const mockChunks = ['Hello', ' there', '!']
-      let chunkIndex = 0
+  describe('Channel endpoints', () => {
+    it('転写のチャンネルを取得できる', async () => {
+      const mockChannels = [
+        { id: 'ch-1', name: 'Channel 1', description: 'Test channel' }
+      ]
+      global.mockAxiosGet.mockResolvedValue({ data: mockChannels })
 
-      // Mock fetch to return SSE stream
-      global.fetch = vi.fn(() =>
-        Promise.resolve({
-          ok: true,
-          body: {
-            getReader: () => ({
-              read: async () => {
-                if (chunkIndex < mockChunks.length) {
-                  const chunk = mockChunks[chunkIndex++]
-                  const encoder = new TextEncoder()
-                  return {
-                    done: false,
-                    value: encoder.encode('data: ' + JSON.stringify({ content: chunk, done: false }) + '\\n\\n')
-                  }
-                } else {
-                  return { done: true, value: new Uint8Array() }
-                }
-              },
-              releaseLock: vi.fn()
-            })
-          }
-        } as Response)
-      )
+      const result = await api.getTranscriptionChannels('123')
 
-      const onChunk = vi.fn()
-      const onError = vi.fn()
-      const onComplete = vi.fn()
-
-      await api.sendChatMessageStream('transcription-123', 'Test question', onChunk, onError, onComplete)
-
-      expect(onChunk).toHaveBeenCalledWith('Hello')
-      expect(onChunk).toHaveBeenCalledWith(' there')
-      expect(onChunk).toHaveBeenCalledWith('!')
-      expect(onComplete).toHaveBeenCalled()
+      expect(result).toEqual(mockChannels)
+      expect(global.mockAxiosGet).toHaveBeenCalledWith('/transcriptions/123/channels')
     })
 
-    it('handles stream errors gracefully', async () => {
-      global.fetch = vi.fn(() =>
-        Promise.resolve({
-          ok: true,
-          body: {
-            getReader: () => ({
-              read: async () => {
-                const encoder = new TextEncoder()
-                return {
-                  done: false,
-                  value: encoder.encode('data: ' + JSON.stringify({ error: 'API error', done: true }) + '\\n\\n')
-                }
-              },
-              releaseLock: vi.fn()
-            })
-          }
-        } as Response)
-      )
+    it('転写をチャンネルに割り当てることができる', async () => {
+      const mockResponse = {
+        message: 'Assigned to channels',
+        channel_ids: ['ch-1', 'ch-2']
+      }
+      global.mockAxiosPost.mockResolvedValue({ data: mockResponse })
 
-      const onChunk = vi.fn()
-      const onError = vi.fn()
-      const onComplete = vi.fn()
+      const result = await api.assignTranscriptionToChannels('123', ['ch-1', 'ch-2'])
 
-      await api.sendChatMessageStream('transcription-123', 'Test', onChunk, onError, onComplete)
-
-      expect(onError).toHaveBeenCalledWith('API error')
-    })
-
-    it('includes authorization header', async () => {
-      global.fetch = vi.fn(() =>
-        Promise.resolve({
-          ok: true,
-          body: {
-            getReader: () => ({
-              read: async () => ({ done: true, value: new Uint8Array() }),
-              releaseLock: vi.fn()
-            })
-          }
-        } as Response)
-      )
-
-      await api.sendChatMessageStream('test-id', 'Hello', vi.fn(), vi.fn(), vi.fn())
-
-      expect(global.fetch).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.objectContaining({
-          headers: expect.objectContaining({
-            'Authorization': expect.stringContaining('Bearer')
-          })
-        })
-      )
-    })
-
-    it('sends request body with content', async () => {
-      global.fetch = vi.fn(() =>
-        Promise.resolve({
-          ok: true,
-          body: {
-            getReader: () => ({
-              read: async () => ({ done: true, value: new Uint8Array() }),
-              releaseLock: vi.fn()
-            })
-          }
-        } as Response)
-      )
-
-      await api.sendChatMessageStream('test-id', 'My question', vi.fn(), vi.fn(), vi.fn())
-
-      expect(global.fetch).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.objectContaining({
-          body: expect.stringContaining('My question')
-        })
-      )
+      expect(result).toEqual(mockResponse)
+      expect(global.mockAxiosPost).toHaveBeenCalledWith('/transcriptions/123/channels', {
+        channel_ids: ['ch-1', 'ch-2']
+      })
     })
   })
 })

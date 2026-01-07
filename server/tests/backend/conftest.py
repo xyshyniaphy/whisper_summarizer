@@ -171,6 +171,73 @@ def user_auth_client() -> Generator[TestClient, None, None]:
     app.dependency_overrides = {}
 
 
+@pytest.fixture
+def real_auth_user() -> dict:
+    """
+    実テスト用のユーザー情報フィクスチャ (for compatibility with root tests)
+    """
+    test_user_id = uuid4()
+    return {
+        "id": str(test_user_id),
+        "email": f"test-real-{str(test_user_id)[:8]}@example.com",
+        "raw_uuid": test_user_id
+    }
+
+
+@pytest.fixture
+def real_auth_client(real_auth_user: dict) -> Generator[TestClient, None, None]:
+    """
+    実DBと認証バイパスを使用したTestClient (for compatibility with root tests)
+
+    DBにテストユーザーを作成し、認証をそのユーザーでバイパスする。
+    テスト終了後にユーザーと関連データを削除する。
+    """
+    from app.core.supabase import get_current_active_user
+    from app.models.user import User
+    from app.models.transcription import Transcription
+    from app.models.summary import Summary
+
+    async def override_auth():
+        return {
+            "id": real_auth_user["id"],
+            "email": real_auth_user["email"],
+            "email_confirmed_at": "2025-01-01T00:00:00Z"
+        }
+
+    # ユーザー作成
+    SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=app_engine)
+    db = SessionLocal()
+    try:
+        user = User(id=real_auth_user["raw_uuid"], email=real_auth_user["email"])
+        db.add(user)
+        db.commit()
+    except Exception:
+        db.rollback()
+    finally:
+        db.close()
+
+    app.dependency_overrides[get_current_active_user] = override_auth
+
+    with TestClient(app) as client:
+        yield client
+
+    # クリーンアップ
+    app.dependency_overrides = {}
+    db = SessionLocal()
+    try:
+        # 関連データの削除
+        db.query(Summary).filter(Summary.transcription_id.in_(
+            db.query(Transcription.id).filter(Transcription.user_id == real_auth_user["raw_uuid"])
+        )).delete(synchronize_session=False)
+        db.query(Transcription).filter(Transcription.user_id == real_auth_user["raw_uuid"]).delete(synchronize_session=False)
+        db.query(User).filter(User.id == real_auth_user["raw_uuid"]).delete()
+        db.commit()
+    except Exception:
+        db.rollback()
+    finally:
+        db.close()
+
+
 # ============================================================================
 # Test Data Fixtures
 # ============================================================================
@@ -301,5 +368,16 @@ def test_audio_content() -> bytes:
 
     Yields:
         bytes: Fake audio content
+    """
+    return b"fake audio content for testing"
+
+
+@pytest.fixture
+def sample_audio_file() -> bytes:
+    """
+    テスト用音声ファイルデータ（有効な1秒間の無音WAVファイル）- alias for test_audio_content
+
+    Returns:
+        bytes: Audio file binary data
     """
     return b"fake audio content for testing"

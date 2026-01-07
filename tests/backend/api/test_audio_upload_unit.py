@@ -11,7 +11,7 @@ from uuid import uuid4
 from pathlib import Path
 from sqlalchemy.orm import Session
 
-from app.api.audio import get_or_create_user, process_audio_task, UPLOAD_DIR, OUTPUT_DIR
+from app.api.audio import get_or_create_user, UPLOAD_DIR
 from app.models.user import User
 from app.models.transcription import Transcription
 
@@ -144,37 +144,6 @@ class TestGetOrCreateUser:
 
 
 # ============================================================================
-# process_audio_task() Tests
-# ============================================================================
-
-class TestProcessAudioTask:
-    """Test process_audio_task function."""
-
-    @patch('app.api.audio.processor')
-    @patch('app.api.audio.logger')
-    def test_should_call_processor_process_transcription(self, mock_logger, mock_processor):
-        """Should call processor.process_transcription with correct ID."""
-        transcription_id = str(uuid4())
-
-        process_audio_task(transcription_id)
-
-        mock_processor.process_transcription.assert_called_once_with(transcription_id)
-        mock_logger.info.assert_called()
-
-    @patch('app.api.audio.processor')
-    @patch('app.api.audio.logger')
-    def test_should_log_processing_start(self, mock_logger, mock_processor):
-        """Should log when starting background processing."""
-        transcription_id = "test-id-123"
-
-        process_audio_task(transcription_id)
-
-        # Check logger was called with correct message
-        log_calls = [str(call) for call in mock_logger.info.call_args_list]
-        assert any("test-id-123" in str(call) for call in log_calls)
-
-
-# ============================================================================
 # File Extension Validation Tests (Unit tests without TestClient)
 # ============================================================================
 
@@ -211,20 +180,11 @@ class TestModuleConstants:
         assert UPLOAD_DIR is not None
         assert isinstance(UPLOAD_DIR, Path)
 
-    def test_output_dir_should_be_defined(self):
-        """Should have OUTPUT_DIR constant defined."""
-        assert OUTPUT_DIR is not None
-        assert isinstance(OUTPUT_DIR, Path)
-
     def test_upload_dir_should_create_if_not_exists(self):
         """UPLOAD_DIR should exist or be created."""
         # In test environment, paths might not actually exist
         # Just check the constant is set correctly
         assert str(UPLOAD_DIR) == "/app/data/uploads"
-
-    def test_output_dir_should_create_if_not_exists(self):
-        """OUTPUT_DIR should exist or be created."""
-        assert str(OUTPUT_DIR) == "/app/data/output"
 
 
 # ============================================================================
@@ -261,27 +221,6 @@ class TestErrorSimulation:
 
         # Should create user
         mock_db_session.add.assert_called_once()
-
-    @patch('app.api.audio.processor')
-    def test_process_audio_task_with_none_id(self, mock_processor):
-        """Should handle None ID in process_audio_task."""
-        # Should not crash
-        process_audio_task(None)
-        mock_processor.process_transcription.assert_called_once_with(None)
-
-    @patch('app.api.audio.processor')
-    def test_process_audio_task_with_empty_string_id(self, mock_processor):
-        """Should handle empty string ID in process_audio_task."""
-        # Should not crash
-        process_audio_task("")
-        mock_processor.process_transcription.assert_called_once_with("")
-
-    @patch('app.api.audio.processor')
-    def test_process_audio_task_with_uuid_string(self, mock_processor):
-        """Should handle UUID string in process_audio_task."""
-        test_id = str(uuid4())
-        process_audio_task(test_id)
-        mock_processor.process_transcription.assert_called_once_with(test_id)
 
 
 # ============================================================================

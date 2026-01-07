@@ -38,8 +38,8 @@ services:
       WHISPER_THREADS: ${WHISPER_THREADS:-4}
     volumes:
       # バックエンドソースコードをマウント
-      - ../backend/app:/app/app
-      - ../backend/pytest.ini:/app/pytest.ini
+      - ../server/app:/app/app
+      - ../server/requirements.txt:/app/requirements.txt
       # テストコードをマウント
       - ./backend:/app/tests/backend
       # テストデータをマウント
@@ -47,7 +47,7 @@ services:
       # データディレクトリ
       - ../data:/app/data
     working_dir: /app
-    command: pytest -v --cov=app --cov-report=html --cov-report=term
+    command: pytest -v --cov=app --cov-report=html --cov-report=term tests/backend/
     # GPU Support (faster-whisper with cuDNN)
     deploy:
       resources:
@@ -91,7 +91,7 @@ services:
     networks:
       - whisper_test_network
 
-  # E2Eテスト環境
+  # E2Eテスト環境 - Connects to dev environment services
   e2e-test:
     build:
       context: ./e2e
@@ -100,7 +100,8 @@ services:
     env_file:
       - ../.env
     environment:
-      FRONTEND_URL: http://127.0.0.1:3000
+      # Use dev environment services (running in docker-compose.dev.yml)
+      FRONTEND_URL: http://whisper_frontend_dev:3000
     volumes:
       - ./e2e:/app
       - ../data:/app/data
@@ -108,12 +109,16 @@ services:
       - /app/node_modules
     working_dir: /app
     command: bun run test
-    # depends_on:
-    #   - backend-test
-    #   - frontend-test
-    network_mode: "host"
+    # Use external network to connect to dev environment
+    networks:
+      whisper_summarizer_whisper_network_dev:
+        aliases:
+          - e2e-test
 
 networks:
   whisper_test_network:
     driver: bridge
+  # External network from dev environment (for E2E tests)
+  whisper_summarizer_whisper_network_dev:
+    external: true
 

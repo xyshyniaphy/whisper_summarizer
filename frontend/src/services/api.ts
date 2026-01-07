@@ -306,7 +306,7 @@ export const api = {
     message: string;
     channel_ids: string[];
   }> => {
-    const response = await apiClient.post(`/transcriptions/${transcriptionId}/channels`, { channel_ids });
+    const response = await apiClient.post(`/transcriptions/${transcriptionId}/channels`, { channel_ids: channelIds });
     return response.data;
   },
 

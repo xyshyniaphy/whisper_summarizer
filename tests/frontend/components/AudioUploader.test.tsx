@@ -10,28 +10,14 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { BrowserRouter } from 'react-router-dom'
 import { Provider } from 'jotai'
+import React from 'react'
 import { AudioUploader } from '../../../src/components/AudioUploader'
 
-// Mock Supabase client
-vi.mock('../../../src/services/supabase', () => ({
-  supabase: {
-    auth: {
-      getSession: vi.fn(() => Promise.resolve({ data: { session: null }, error: null })),
-      onAuthStateChange: vi.fn(() => ({
-        data: { subscription: { unsubscribe: vi.fn() } }
-      }))
-    }
-  }
-}))
-
-// Mock API
-const mockUploadAudio = vi.fn()
-
-vi.mock('../../../src/services/api', () => ({
-  api: {
-    uploadAudio: (file: File) => mockUploadAudio(file)
-  }
-}))
+// Import global mock functions from setup.ts
+declare global {
+  var mockAxiosPost: any
+  var mockNavigate: any
+}
 
 const wrapper = ({ children }: { children: React.ReactNode }) => (
   <BrowserRouter>
@@ -42,9 +28,13 @@ const wrapper = ({ children }: { children: React.ReactNode }) => (
 describe('AudioUploader', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mockUploadAudio.mockResolvedValue({
-      id: 'new-transcription-id',
-      file_name: 'test.mp3'
+    // Reset mock to default successful response
+    global.mockAxiosPost.mockResolvedValue({
+      data: {
+        id: 'new-transcription-id',
+        file_name: 'test.mp3',
+        stage: 'uploading'
+      }
     })
   })
 
@@ -63,49 +53,74 @@ describe('AudioUploader', () => {
       render(<AudioUploader />, { wrapper })
       expect(screen.getByText(/mp3, wav, m4a 等/)).toBeTruthy()
     })
+
+    it('ファイル入力が存在する', () => {
+      render(<AudioUploader />, { wrapper })
+      const fileInput = document.querySelector('input[type="file"]')
+      expect(fileInput).toBeTruthy()
+    })
   })
 
   describe('File Selection', () => {
-    it('ファイル選択でアップロードが実行される', async () => {
-      const user = userEvent.setup()
-      render(<AudioUploader />, { wrapper })
-
-      const fileInput = screen.getByRole('textbox') || document.querySelector('input[type="file"]')
-      expect(fileInput).toBeTruthy()
-    })
-
     it('有効なオーディオファイルのアップロードが成功する', async () => {
-      mockUploadAudio.mockImplementation((file: File) => {
-        return Promise.resolve({
+      const user = userEvent.setup()
+      global.mockAxiosPost.mockResolvedValue({
+        data: {
           id: 'test-id',
-          file_name: file.name,
+          file_name: 'test.mp3',
           stage: 'uploading'
-        })
+        }
       })
 
       render(<AudioUploader />, { wrapper })
 
-      // Create a mock file
-      const file = new File(['audio content'], 'test.mp3', { type: 'audio/mpeg' })
       const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement
+      expect(fileInput).toBeTruthy()
 
-      if (fileInput) {
-        const dataTransfer = { files: [file] } as any
-        await userEvent.upload(fileInput, file)
+      const file = new File(['audio content'], 'test.mp3', { type: 'audio/mpeg' })
 
-        await waitFor(() => {
-          expect(mockUploadAudio).toHaveBeenCalled()
-        })
-      }
+      await user.upload(fileInput, file)
+
+      await waitFor(() => {
+        expect(global.mockAxiosPost).toHaveBeenCalled()
+      }, { timeout: 5000 })
+    })
+
+    it('アップロード成功後、詳細ページに遷移する', async () => {
+      const user = userEvent.setup()
+      global.mockAxiosPost.mockResolvedValue({
+        data: {
+          id: 'new-id-123',
+          file_name: 'test.mp3',
+          stage: 'uploading'
+        }
+      })
+
+      render(<AudioUploader />, { wrapper })
+
+      const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement
+      expect(fileInput).toBeTruthy()
+
+      const file = new File(['audio'], 'test.mp3', { type: 'audio/mpeg' })
+      await user.upload(fileInput, file)
+
+      await waitFor(() => {
+        expect(global.mockNavigate).toHaveBeenCalledWith('/transcriptions/new-id-123')
+      }, { timeout: 5000 })
     })
   })
 
   describe('Drag and Drop', () => {
     it('ドラッグオーバーでスタイルが変化する', async () => {
+      const user = userEvent.setup()
       render(<AudioUploader />, { wrapper })
 
       const dropZone = screen.getByText('将音频文件拖放到此处').closest('div')
       expect(dropZone).toBeTruthy()
+
+      if (dropZone) {
+        await user.hover(dropZone)
+      }
     })
 
     it('ファイルドロップでアップロードが実行される', async () => {
@@ -115,15 +130,19 @@ describe('AudioUploader', () => {
 
       if (dropZone) {
         const file = new File(['audio'], 'test.mp3', { type: 'audio/mpeg' })
+
         const dropEvent = new Event('drop', { bubbles: true }) as any
-        dropEvent.dataTransfer = { files: [file] }
+        Object.defineProperty(dropEvent, 'dataTransfer', {
+          value: { files: [file] },
+          writable: false
+        })
         dropEvent.preventDefault = vi.fn()
 
         dropZone.dispatchEvent(dropEvent)
 
         await waitFor(() => {
-          expect(mockUploadAudio).toHaveBeenCalled()
-        })
+          expect(global.mockAxiosPost).toHaveBeenCalled()
+        }, { timeout: 3000 })
       }
     })
   })
@@ -135,10 +154,13 @@ describe('AudioUploader', () => {
       const dropZone = screen.getByText('将音频文件拖放到此处').closest('div')
 
       if (dropZone) {
-        // Create an invalid file (e.g., .exe)
         const file = new File(['executable'], 'test.exe', { type: 'application/octet-stream' })
+
         const dropEvent = new Event('drop', { bubbles: true }) as any
-        dropEvent.dataTransfer = { files: [file] }
+        Object.defineProperty(dropEvent, 'dataTransfer', {
+          value: { files: [file] },
+          writable: false
+        })
         dropEvent.preventDefault = vi.fn()
 
         dropZone.dispatchEvent(dropEvent)
@@ -146,7 +168,7 @@ describe('AudioUploader', () => {
         await waitFor(() => {
           const errorText = screen.queryByText(/不支持的文件格式/)
           expect(errorText).toBeTruthy()
-        })
+        }, { timeout: 3000 })
       }
     })
 
@@ -156,11 +178,15 @@ describe('AudioUploader', () => {
       const dropZone = screen.getByText('将音频文件拖放到此处').closest('div')
 
       if (dropZone) {
-        // Create a file larger than 50MB
-        const largeContent = new Array(60 * 1024 * 1024).fill('x').join('')
-        const file = new File([largeContent], 'large.mp3', { type: 'audio/mpeg' })
+        const mediumContent = new Array(1024 * 100).fill('x').join('')
+        const file = new File([mediumContent], 'large.mp3', { type: 'audio/mpeg' })
+        Object.defineProperty(file, 'size', { value: 60 * 1024 * 1024 })
+
         const dropEvent = new Event('drop', { bubbles: true }) as any
-        dropEvent.dataTransfer = { files: [file] }
+        Object.defineProperty(dropEvent, 'dataTransfer', {
+          value: { files: [file] },
+          writable: false
+        })
         dropEvent.preventDefault = vi.fn()
 
         dropZone.dispatchEvent(dropEvent)
@@ -168,90 +194,68 @@ describe('AudioUploader', () => {
         await waitFor(() => {
           const errorText = screen.queryByText(/文件大小超过50MB/)
           expect(errorText).toBeTruthy()
-        })
+        }, { timeout: 3000 })
       }
     })
   })
 
   describe('Loading State', () => {
     it('アップロード中はローディングインジケーターが表示される', async () => {
-      mockUploadAudio.mockImplementation(() => new Promise(() => {}))
+      const user = userEvent.setup()
+      global.mockAxiosPost.mockImplementation(() => new Promise(() => {}))
+
       render(<AudioUploader />, { wrapper })
 
       const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement
-      if (fileInput) {
-        const file = new File(['audio'], 'test.mp3', { type: 'audio/mpeg' })
-        // Use userEvent.upload() instead of DataTransfer (not available in jsdom)
-        // This will be handled by userEvent.upload() calls in the tests
-      }
+      expect(fileInput).toBeTruthy()
 
-        await waitFor(() => {
-          expect(mockUploadAudio).toHaveBeenCalled()
-        })
-      }
+      const file = new File(['audio'], 'test.mp3', { type: 'audio/mpeg' })
+      await user.upload(fileInput, file)
+
+      await waitFor(() => {
+        const loadingElement = document.querySelector('.animate-spin')
+        expect(loadingElement).toBeTruthy()
+      }, { timeout: 5000 })
     })
 
     it('アップロード中はドロップが無効になる', async () => {
-      mockUploadAudio.mockImplementation(() => new Promise(() => {}))
+      const user = userEvent.setup()
+      global.mockAxiosPost.mockImplementation(() => new Promise(() => {}))
+
       render(<AudioUploader />, { wrapper })
 
       const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement
-      if (fileInput) {
-        const file = new File(['audio'], 'test.mp3', { type: 'audio/mpeg' })
-        // Use userEvent.upload() instead of DataTransfer (not available in jsdom)
-        // This will be handled by userEvent.upload() calls in the tests
-      }
-      }
+      expect(fileInput).toBeTruthy()
+
+      const file = new File(['audio'], 'test.mp3', { type: 'audio/mpeg' })
+      await user.upload(fileInput, file)
 
       await waitFor(() => {
-        expect(mockUploadAudio).toHaveBeenCalled()
-      })
+        const dropZone = screen.getByText('将音频文件拖放到此处').closest('div')
+        expect(dropZone?.className).toContain('pointer-events-none')
+      }, { timeout: 5000 })
     })
   })
 
   describe('Error Handling', () => {
     it('アップロード失敗時はエラーメッセージが表示される', async () => {
-      mockUploadAudio.mockRejectedValue({
+      const user = userEvent.setup()
+      global.mockAxiosPost.mockRejectedValue({
         response: { data: { detail: 'アップロードエラー' } }
       })
 
       render(<AudioUploader />, { wrapper })
 
       const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement
-      if (fileInput) {
-        const file = new File(['audio'], 'test.mp3', { type: 'audio/mpeg' })
-        // Use userEvent.upload() instead of DataTransfer (not available in jsdom)
-        // This will be handled by userEvent.upload() calls in the tests
-      }
-      }
+      expect(fileInput).toBeTruthy()
+
+      const file = new File(['audio'], 'test.mp3', { type: 'audio/mpeg' })
+      await user.upload(fileInput, file)
 
       await waitFor(() => {
-        expect(mockUploadAudio).toHaveBeenCalled()
-      })
-    })
-  })
-
-  describe('Navigation After Upload', () => {
-    it('アップロード成功後、詳細ページに遷移する', async () => {
-      mockUploadAudio.mockResolvedValue({
-        id: 'new-id-123',
-        file_name: 'test.mp3',
-        stage: 'uploading'
-      })
-
-      render(<AudioUploader />, { wrapper })
-
-      const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement
-      if (fileInput) {
-        const file = new File(['audio'], 'test.mp3', { type: 'audio/mpeg' })
-        // Use userEvent.upload() instead of DataTransfer (not available in jsdom)
-        // This will be handled by userEvent.upload() calls in the tests
-      }
-      }
-
-      await waitFor(() => {
-        expect(mockUploadAudio).toHaveBeenCalled()
-      })
+        const errorText = screen.queryByText(/上传失败/)
+        expect(errorText).toBeTruthy()
+      }, { timeout: 5000 })
     })
   })
 
@@ -266,26 +270,25 @@ describe('AudioUploader', () => {
 
     supportedTypes.forEach(({ mime, ext }) => {
       it(`${ext}形式がサポートされる`, async () => {
-        mockUploadAudio.mockResolvedValue({
-          id: 'test-id',
-          file_name: `test.${ext}`
+        const user = userEvent.setup()
+        global.mockAxiosPost.mockResolvedValue({
+          data: {
+            id: 'test-id',
+            file_name: `test.${ext}`
+          }
         })
 
         render(<AudioUploader />, { wrapper })
 
         const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement
-        if (fileInput) {
-          const file = new File(['audio'], `test.${ext}`, { type: mime })
-          // Create proper FileList using DataTransfer
-          const dataTransfer = new DataTransfer()
-          dataTransfer.items.add(file)
-          fileInput.files = dataTransfer.files
-          fileInput.dispatchEvent(new Event('change', { bubbles: true }))
-        }
+        expect(fileInput).toBeTruthy()
+
+        const file = new File(['audio'], `test.${ext}`, { type: mime })
+        await user.upload(fileInput, file)
 
         await waitFor(() => {
-          expect(mockUploadAudio).toHaveBeenCalled()
-        })
+          expect(global.mockAxiosPost).toHaveBeenCalled()
+        }, { timeout: 5000 })
       })
     })
   })
