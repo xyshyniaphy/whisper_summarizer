@@ -352,13 +352,13 @@ class TestShareLinkEdgeCases:
             db.add(user)
             db.commit()
 
+            # Create transcription without setting text property (it's read-only)
             transcription = Transcription(
                 id=trans_id,
                 user_id=real_auth_user["raw_uuid"],
                 file_name="test.wav",
                 storage_path=f"{trans_id}.txt.gz",
-                stage="completed",
-                text="Test transcription text"
+                stage="completed"
             )
             db.add(transcription)
             db.commit()
