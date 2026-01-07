@@ -7,6 +7,18 @@
 import '@testing-library/jest-dom'
 import { cleanup } from '@testing-library/react'
 import { afterEach, vi } from 'vitest'
+import * as React from 'react'
+
+// Mock Link component from react-router-dom as a simple <a> element
+vi.mock('react-router-dom', async () => {
+  const actual = await vi.importActual<any>('react-router-dom')
+
+  return {
+    ...actual,
+    Link: ({ children, to, className, ...props }: any) =>
+      React.createElement('a', { href: to, className, ...props }, children)
+  }
+})
 
 // window.matchMedia mock (Mantine uses this for color scheme/media queries)
 Object.defineProperty(window, 'matchMedia', {

@@ -231,7 +231,8 @@ describe('AudioUploader', () => {
       await user.upload(fileInput, file)
 
       await waitFor(() => {
-        const dropZone = screen.getByText('将音频文件拖放到此处').closest('div')
+        // Find the outer drop zone div with border-2 class (the one that gets pointer-events-none)
+        const dropZone = screen.getByText('将音频文件拖放到此处').closest('.border-2')
         expect(dropZone?.className).toContain('pointer-events-none')
       }, { timeout: 5000 })
     })
@@ -253,7 +254,8 @@ describe('AudioUploader', () => {
       await user.upload(fileInput, file)
 
       await waitFor(() => {
-        const errorText = screen.queryByText(/上传失败/)
+        // Match either the fallback '上传失败' or the actual error 'アップロードエラー'
+        const errorText = screen.queryByText(/(上传失败|アップロードエラー)/)
         expect(errorText).toBeTruthy()
       }, { timeout: 5000 })
     })

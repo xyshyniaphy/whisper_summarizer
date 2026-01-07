@@ -122,7 +122,7 @@ class TestHealthCheck:
         result = await health_check()
 
         assert result["status"] == "healthy"
-        assert result["service"] == "whisper-summarizer-backend"
+        assert result["service"] == "whisper-summarizer-server"
 
 
 # ============================================================================

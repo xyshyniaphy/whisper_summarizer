@@ -24,11 +24,21 @@ const localStorageMock = (() => {
   }
 })()
 
-Object.defineProperty(window, 'localStorage', {
+// Use globalThis for cross-environment compatibility (vitest + jsdom)
+Object.defineProperty(globalThis, 'localStorage', {
   value: localStorageMock,
   writable: true,
   configurable: true
 })
+
+// Also add to window for compatibility
+if (typeof window !== 'undefined') {
+  Object.defineProperty(window, 'localStorage', {
+    value: localStorageMock,
+    writable: true,
+    configurable: true
+  })
+}
 
 // Mock document.documentElement.classList
 const mockClassList = {
@@ -169,20 +179,29 @@ describe('ThemeToggle', () => {
 
   describe('System Preference', () => {
     it('システム設定がダークモードの場合、初期テーマがダークになる', () => {
-      // Mock matchMedia for dark mode preference
-      Object.defineProperty(window, 'matchMedia', {
+      // Mock matchMedia for dark mode preference (use globalThis for compatibility)
+      const matchMediaMock = vi.fn().mockImplementation(query => ({
+        matches: query === '(prefers-color-scheme: dark)',
+        media: query,
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: vi.fn()
+      }))
+
+      Object.defineProperty(globalThis, 'matchMedia', {
         writable: true,
-        value: vi.fn().mockImplementation(query => ({
-          matches: query === '(prefers-color-scheme: dark)',
-          media: query,
-          onchange: null,
-          addListener: vi.fn(),
-          removeListener: vi.fn(),
-          addEventListener: vi.fn(),
-          removeEventListener: vi.fn(),
-          dispatchEvent: vi.fn()
-        }))
+        value: matchMediaMock
       })
+
+      if (typeof window !== 'undefined') {
+        Object.defineProperty(window, 'matchMedia', {
+          writable: true,
+          value: matchMediaMock
+        })
+      }
 
       localStorageMock.clear()
       render(<ThemeToggle />, { wrapper })

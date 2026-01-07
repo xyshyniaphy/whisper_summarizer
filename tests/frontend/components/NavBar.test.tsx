@@ -6,12 +6,26 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { Provider, useAtom } from 'jotai'
+import React, { useEffect, useRef } from 'react'
+
+// Mock React Router Link component first (before other react-router-dom imports)
+vi.mock('react-router-dom', async () => {
+  const actual = await vi.importActual<any>('react-router-dom')
+  return {
+    ...actual,
+    Link: ({ children, to, className, ...props }: any) =>
+      React.createElement('a', { href: to, className, ...props }, children)
+  }
+})
+
+// Now import from react-router-dom (after the mock)
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
-import { Provider } from 'jotai'
-import React from 'react'
+
 import { NavBar } from '../../../src/components/NavBar'
+import { userAtom } from '../../../src/atoms/auth'
 
 // Mock Supabase client
 vi.mock('../../../src/services/supabase', () => ({
@@ -25,23 +39,11 @@ vi.mock('../../../src/services/supabase', () => ({
   }
 }))
 
-// Mock useAuth
-const mockSignOut = vi.fn()
-vi.mock('../../../src/hooks/useAuth', () => ({
-  useAuth: () => [
-    {
-      user: {
-        id: 'user-1',
-        email: 'test@example.com',
-        user_metadata: { full_name: 'Test User', role: 'user' }
-      },
-      session: {},
-      role: 'user',
-      loading: false
-    },
-    { signOut: mockSignOut }
-  ]
-}))
+const mockUser = {
+  id: 'user-1',
+  email: 'test@example.com',
+  user_metadata: { full_name: 'Test User', role: 'user' }
+}
 
 const wrapper = ({ children }: { children: React.ReactNode }) => (
   <Provider>{children}</Provider>
@@ -59,6 +61,32 @@ const renderWithRouter = (initialPath: string = '/transcriptions') => {
     </BrowserRouter>,
     { wrapper }
   )
+}
+
+const renderWithRouterAndUser = () => {
+  const TestComponent = () => {
+    const [, setUser] = useAtom(userAtom)
+    const initialized = useRef(false)
+    useEffect(() => {
+      if (!initialized.current) {
+        initialized.current = true
+        setUser(mockUser)
+      }
+    }, [setUser])
+
+    return (
+      <BrowserRouter>
+        <NavBar />
+        <Routes>
+          <Route path="/" element={<div>Home Page</div>} />
+          <Route path="/transcriptions" element={<div>Transcriptions Page</div>} />
+          <Route path="/dashboard" element={<div>Dashboard Page</div>} />
+        </Routes>
+      </BrowserRouter>
+    )
+  }
+
+  return render(<TestComponent />, { wrapper })
 }
 
 describe('NavBar', () => {
@@ -169,14 +197,18 @@ describe('NavBar', () => {
   })
 
   describe('User Menu', () => {
-    it('ユーザーメニューが表示される', () => {
-      renderWithRouter()
-      expect(screen.getByText('Test User')).toBeTruthy()
+    it('ユーザーメニューが表示される', async () => {
+      renderWithRouterAndUser()
+      await waitFor(() => {
+        expect(screen.getByText('Test User')).toBeTruthy()
+      })
     })
 
-    it('ユーザーのイニシャルが表示される', () => {
-      renderWithRouter()
-      expect(screen.getByText('TU')).toBeTruthy()
+    it('ユーザーのイニシャルが表示される', async () => {
+      renderWithRouterAndUser()
+      await waitFor(() => {
+        expect(screen.getByText('TU')).toBeTruthy()
+      })
     })
   })
 

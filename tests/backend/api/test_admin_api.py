@@ -717,3 +717,123 @@ class TestAudioManagement:
         db_session.delete(channel1)
         db_session.delete(channel2)
         db_session.commit()
+
+
+# ==============================================================================
+# Pagination Tests
+# ==============================================================================
+
+@pytest.mark.integration
+class TestAdminPagination:
+    """Admin API pagination tests."""
+
+    def test_list_users_with_pagination(self, admin_auth_client: TestClient, db_session: Session) -> None:
+        """Users list supports pagination parameters."""
+        from app.models.user import User
+
+        # Create multiple users
+        created_ids = []
+        for i in range(5):
+            uid = uuid.uuid4()
+            user = User(
+                id=uid,
+                email=f"pagetest-{i}-{str(uid)[:8]}@example.com",
+                is_active=True,
+                is_admin=False
+            )
+            db_session.add(user)
+            created_ids.append(uid)
+        db_session.commit()
+
+        try:
+            # Test page 1 with page_size 2
+            response = admin_auth_client.get("/api/admin/users?page=1&page_size=2")
+            assert response.status_code == 200
+            data = response.json()
+            assert isinstance(data, list)
+            assert len(data) == 2
+
+            # Test page 2
+            response = admin_auth_client.get("/api/admin/users?page=2&page_size=2")
+            assert response.status_code == 200
+            data = response.json()
+            assert isinstance(data, list)
+            assert len(data) == 2
+
+            # Test page 3 (should have remaining items)
+            response = admin_auth_client.get("/api/admin/users?page=3&page_size=2")
+            assert response.status_code == 200
+            data = response.json()
+            assert isinstance(data, list)
+            # At least 1 item
+            assert len(data) >= 1
+
+        finally:
+            # Cleanup
+            for uid in created_ids:
+                db_session.query(User).filter(User.id == uid).delete()
+            db_session.commit()
+
+    def test_list_users_without_pagination_returns_all(self, admin_auth_client: TestClient) -> None:
+        """Users list without pagination returns all users."""
+        response = admin_auth_client.get("/api/admin/users")
+        assert response.status_code == 200
+        data = response.json()
+        assert isinstance(data, list)
+        # Should return all users in database
+        assert len(data) >= 1
+
+    def test_list_users_invalid_page_returns_422(self, admin_auth_client: TestClient) -> None:
+        """Invalid page number returns validation error."""
+        response = admin_auth_client.get("/api/admin/users?page=0")
+        assert response.status_code == 422
+
+    def test_list_users_invalid_page_size_returns_422(self, admin_auth_client: TestClient) -> None:
+        """Invalid page_size returns validation error."""
+        response = admin_auth_client.get("/api/admin/users?page_size=0")
+        assert response.status_code == 422
+
+        response = admin_auth_client.get("/api/admin/users?page_size=101")
+        assert response.status_code == 422
+
+    def test_list_channels_with_pagination(self, admin_auth_client: TestClient, db_session: Session, admin_user: dict) -> None:
+        """Channels list supports pagination."""
+        from app.models.channel import Channel
+
+        # Create multiple channels
+        created_ids = []
+        for i in range(5):
+            ch = Channel(
+                name=f"PageTest Channel {i}",
+                description=f"Test channel {i}",
+                created_by=admin_user["raw_uuid"]
+            )
+            db_session.add(ch)
+            created_ids.append(ch.id)
+        db_session.commit()
+
+        try:
+            # Test with pagination
+            response = admin_auth_client.get("/api/admin/channels?page=1&page_size=2")
+            assert response.status_code == 200
+            data = response.json()
+            assert isinstance(data, list)
+            assert len(data) == 2
+
+            # Test without pagination
+            response = admin_auth_client.get("/api/admin/channels")
+            assert response.status_code == 200
+            data = response.json()
+            assert isinstance(data, list)
+            assert len(data) >= 5
+
+        finally:
+            # Cleanup
+            for ch_id in created_ids:
+                db_session.query(Channel).filter(Channel.id == ch_id).delete()
+            db_session.commit()
+
+    def test_list_channels_invalid_page_size(self, admin_auth_client: TestClient) -> None:
+        """Invalid page_size for channels returns validation error."""
+        response = admin_auth_client.get("/api/admin/channels?page_size=101")
+        assert response.status_code == 422

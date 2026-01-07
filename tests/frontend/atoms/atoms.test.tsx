@@ -40,9 +40,18 @@ const localStorageMock = (() => {
   }
 })()
 
-Object.defineProperty(window, 'localStorage', {
-  value: localStorageMock
+// Use globalThis for cross-environment compatibility (vitest + jsdom)
+Object.defineProperty(globalThis, 'localStorage', {
+  value: localStorageMock,
+  writable: true
 })
+
+// Also add to window for compatibility
+if (typeof window !== 'undefined') {
+  Object.defineProperty(window, 'localStorage', {
+    value: localStorageMock
+  })
+}
 
 // Mock document.documentElement
 Object.defineProperty(document.documentElement, 'classList', {

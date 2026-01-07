@@ -201,3 +201,196 @@ class TestAccessSharedTranscriptionEndpoint:
             db.query(User).filter(User.id == real_auth_user["raw_uuid"]).delete()
             db.commit()
             db.close()
+
+
+# =============================================================================
+# Share Link Edge Cases
+# =============================================================================
+
+@pytest.mark.integration
+class TestShareLinkEdgeCases:
+    """Share link edge case tests."""
+
+    def test_create_share_link_returns_existing_link(self, real_auth_client: TestClient, real_auth_user: dict) -> None:
+        """Creating share link for transcription with existing link returns existing link."""
+        db = SessionLocal()
+        trans_id = str(uuid.uuid4())
+        try:
+            transcription = Transcription(
+                id=trans_id,
+                user_id=real_auth_user["raw_uuid"],
+                file_name="test.wav",
+                storage_path=f"{trans_id}.txt.gz",
+                stage="completed"
+            )
+            db.add(transcription)
+            db.commit()
+
+            # First creation
+            response1 = real_auth_client.post(f"/api/transcriptions/{trans_id}/share")
+            assert response1.status_code in [200, 201]
+            data1 = response1.json()
+            token1 = data1.get("share_token")
+
+            # Second creation - should return same token
+            response2 = real_auth_client.post(f"/api/transcriptions/{trans_id}/share")
+            assert response2.status_code in [200, 201]
+            data2 = response2.json()
+            token2 = data2.get("share_token")
+
+            assert token1 == token2
+        finally:
+            db.query(ShareLink).filter(ShareLink.transcription_id == trans_id).delete()
+            db.query(Transcription).filter(Transcription.id == trans_id).delete()
+            db.commit()
+            db.close()
+
+    def test_access_shared_increments_access_count(self, test_client: TestClient, real_auth_user: dict) -> None:
+        """Accessing shared transcription increments access count."""
+        db = SessionLocal()
+        trans_id = str(uuid.uuid4())
+        try:
+            user = User(
+                id=real_auth_user["raw_uuid"],
+                email=real_auth_user["email"],
+                is_active=True
+            )
+            db.add(user)
+            db.commit()
+
+            transcription = Transcription(
+                id=trans_id,
+                user_id=real_auth_user["raw_uuid"],
+                file_name="test.wav",
+                storage_path=f"{trans_id}.txt.gz",
+                stage="completed"
+            )
+            db.add(transcription)
+            db.commit()
+
+            share_link = ShareLink(
+                id=str(uuid.uuid4()),
+                transcription_id=trans_id,
+                share_token="count_test_token"
+            )
+            db.add(share_link)
+            db.commit()
+
+            initial_count = share_link.access_count
+
+            # Access the shared link
+            test_client.get("/api/shared/count_test_token")
+
+            # Verify count incremented
+            db.refresh(share_link)
+            assert share_link.access_count == initial_count + 1
+
+        finally:
+            db.query(ShareLink).filter(ShareLink.transcription_id == trans_id).delete()
+            db.query(Transcription).filter(Transcription.id == trans_id).delete()
+            db.query(User).filter(User.id == real_auth_user["raw_uuid"]).delete()
+            db.commit()
+            db.close()
+
+    def test_shared_transcription_deleted_returns_404(self, test_client: TestClient, real_auth_user: dict) -> None:
+        """Accessing shared link for deleted transcription returns 404."""
+        db = SessionLocal()
+        trans_id = str(uuid.uuid4())
+        try:
+            user = User(
+                id=real_auth_user["raw_uuid"],
+                email=real_auth_user["email"],
+                is_active=True
+            )
+            db.add(user)
+            db.commit()
+
+            transcription = Transcription(
+                id=trans_id,
+                user_id=real_auth_user["raw_uuid"],
+                file_name="test.wav",
+                storage_path=f"{trans_id}.txt.gz",
+                stage="completed"
+            )
+            db.add(transcription)
+            db.commit()
+
+            share_link = ShareLink(
+                id=str(uuid.uuid4()),
+                transcription_id=trans_id,
+                share_token="deleted_trans_token"
+            )
+            db.add(share_link)
+            db.commit()
+
+            # Delete the transcription
+            db.query(Transcription).filter(Transcription.id == trans_id).delete()
+            db.commit()
+
+            # Try to access via share link
+            response = test_client.get("/api/shared/deleted_trans_token")
+            assert response.status_code == 404
+
+        finally:
+            db.query(ShareLink).filter(ShareLink.share_token == "deleted_trans_token").delete()
+            db.query(User).filter(User.id == real_auth_user["raw_uuid"]).delete()
+            db.commit()
+            db.close()
+
+    def test_shared_transcription_with_summary(self, test_client: TestClient, real_auth_user: dict) -> None:
+        """Shared transcription includes summary when available."""
+        from app.models.summary import Summary
+
+        db = SessionLocal()
+        trans_id = str(uuid.uuid4())
+        try:
+            user = User(
+                id=real_auth_user["raw_uuid"],
+                email=real_auth_user["email"],
+                is_active=True
+            )
+            db.add(user)
+            db.commit()
+
+            transcription = Transcription(
+                id=trans_id,
+                user_id=real_auth_user["raw_uuid"],
+                file_name="test.wav",
+                storage_path=f"{trans_id}.txt.gz",
+                stage="completed",
+                text="Test transcription text"
+            )
+            db.add(transcription)
+            db.commit()
+
+            # Add a summary
+            summary = Summary(
+                id=str(uuid.uuid4()),
+                transcription_id=trans_id,
+                summary_text="Test AI summary"
+            )
+            db.add(summary)
+            db.commit()
+
+            share_link = ShareLink(
+                id=str(uuid.uuid4()),
+                transcription_id=trans_id,
+                share_token="summary_test_token"
+            )
+            db.add(share_link)
+            db.commit()
+
+            # Access the shared link
+            response = test_client.get("/api/shared/summary_test_token")
+            assert response.status_code == 200
+            data = response.json()
+            assert "summary" in data
+            assert data["summary"] == "Test AI summary"
+
+        finally:
+            db.query(Summary).filter(Summary.transcription_id == trans_id).delete()
+            db.query(ShareLink).filter(ShareLink.share_token == "summary_test_token").delete()
+            db.query(Transcription).filter(Transcription.id == trans_id).delete()
+            db.query(User).filter(User.id == real_auth_user["raw_uuid"]).delete()
+            db.commit()
+            db.close()
