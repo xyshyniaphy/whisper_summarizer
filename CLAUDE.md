@@ -8,21 +8,29 @@ GPU-accelerated audio transcription with AI summarization using faster-whisper +
 
 **Performance**: GPU (RTX 3080) achieves **40-60x speedup** vs CPU (20-min file: ~1-1.5 min vs ~60 min).
 
-### Architecture (Server/Runner Split)
+### Architecture (Nginx + Server/Runner Split)
 
 ```
-Frontend (Vite:3000) → Server (FastAPI, ~150MB) ←→ Runner (GPU, ~8GB)
-                           ↓                              ↓
-                      PostgreSQL                faster-whisper + GLM
+                    Nginx (80/443)
+                        ↓
+        ┌───────────────┴───────────────┐
+        ↓                               ↓
+Frontend (/) → Server (/api/*, ~150MB) ←→ Runner (GPU, ~8GB)
+                    ↓                              ↓
+               PostgreSQL                faster-whisper + GLM
 ```
 
 **Key Benefits:**
+- **Single entry point** - One URL for frontend and API
+- **Simplified CORS** - Same origin, no cross-origin issues
+- **SSL termination** - Nginx handles HTTPS, server/runner stay HTTP
 - **Server runs on cheap VPS** (no GPU needed)
 - **Horizontal scaling** (multiple runners)
 - **Independent deployment** (update server without affecting processing)
 - **Cost optimization** (only runner needs GPU)
 
 **Key Points:**
+- **Nginx**: Reverse proxy (routes `/api/*` to server, `/` to frontend, handles SSL)
 - **Server**: Lightweight API server (auth, database, job queue, admin endpoints)
 - **Runner**: GPU worker (faster-whisper, GLM summarization, job polling)
 - **Communication**: HTTP-based job queue with API key authentication
@@ -30,7 +38,7 @@ Frontend (Vite:3000) → Server (FastAPI, ~150MB) ←→ Runner (GPU, ~8GB)
 - **Local PostgreSQL 18 Alpine** for dev (internal, no port export)
 - **Local filesystem** for transcriptions (`/app/data/transcribes/`, gzip-compressed)
 - **Supabase Auth** only (no Storage)
-- **Vite proxy** forwards `/api/*` to server, disables buffering for SSE
+- **Nginx** disables buffering for SSE (AI chat streaming)
 
 ## Development Commands
 
@@ -48,7 +56,11 @@ Frontend (Vite:3000) → Server (FastAPI, ~150MB) ←→ Runner (GPU, ~8GB)
 ./run_dev.sh down
 ```
 
-Access: http://localhost:3000
+Access: http://localhost:8130 (single entry point via nginx)
+
+**URL Routing:**
+- `http://localhost:8130/` → Frontend (React app)
+- `http://localhost:8130/api/*` → Server (FastAPI backend)
 
 ### Testing
 
@@ -219,6 +231,169 @@ REVIEW_LANGUAGE=zh
 ```
 
 **Runner Docker Image**: `whisper-summarizer-fastwhisper-base:latest` (~8GB)
+
+## Nginx Reverse Proxy
+
+**File Structure:**
+```
+nginx/
+├── nginx.conf          # Main nginx configuration
+└── conf.d/
+    └── default.conf    # Server blocks and routing rules
+```
+
+**Note:** SSL/TLS handled by Cloudflare Tunnel - no certificates needed in nginx.
+
+### Nginx Configuration
+
+**Development** (docker-compose.dev.yml):
+```yaml
+nginx:
+  image: nginx:alpine
+  ports:
+    - "${NGINX_PORT:-8130}:80"
+  volumes:
+    - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    - ./nginx/conf.d:/etc/nginx/conf.d:ro
+```
+
+**Environment Variables:**
+```bash
+# Nginx Configuration ⭐ NEW
+NGINX_HOST=localhost          # Server hostname
+NGINX_PORT=8130               # HTTP port (default: 8130, for Cloudflare Tunnel)
+```
+
+### URL Routing
+
+```
+Request                        → Target
+--------------------------------------------------------------
+/                              → Frontend (Vite dev server)
+/health                        → Nginx health check
+/api/*                         → Server (FastAPI backend)
+  /api/auth/*                  → Supabase OAuth
+  /api/audio/*                 → Audio upload
+  /api/transcriptions/*        → Transcription CRUD
+  /api/admin/*                 → Admin endpoints
+  /api/runner/*                → Runner API (job queue)
+```
+
+### Key Features
+
+1. **SSE Support** (AI Chat Streaming):
+   - `proxy_buffering off`
+   - `proxy_cache off`
+   - `X-Accel-Buffering: no` header
+   - 1-hour timeout for streaming responses
+
+2. **Large File Uploads**:
+   - `client_max_body_size 500M`
+   - `proxy_request_buffering off` (stream uploads)
+   - Extended timeouts
+
+3. **WebSocket Support** (Vite HMR):
+   - `proxy_http_version 1.1`
+   - `Connection: "upgrade"` header
+
+4. **Security Headers**:
+   - `X-Frame-Options: SAMEORIGIN`
+   - `X-Content-Type-Options: nosniff`
+   - `X-XSS-Protection: 1; mode=block`
+
+5. **Rate Limiting**:
+   - API: 10 req/s with burst of 20
+   - Uploads: 2 req/s with burst of 5
+   - Connection limit: 10 per IP
+
+6. **Cloudflare Headers**:
+   - `CF-Connecting-IP` - Real client IP (preserved through tunnel)
+   - `CF-Ray` - Request identifier for debugging
+   - `CF-Visitor` - Visitor scheme (http/https)
+
+### Production Deployment with Cloudflare Tunnel
+
+**Cloudflare Tunnel Setup:**
+
+Cloudflare Tunnel provides secure, SSL-terminated access to your application without opening ports publicly.
+
+1. **Install cloudflared:**
+```bash
+# Linux
+wget https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
+sudo dpkg -i cloudflared-linux-amd64.deb
+
+# Or using apt
+sudo apt-add-repository ppa:cloudflare/cloudflared
+sudo apt-get update && sudo apt-get install cloudflared
+```
+
+2. **Authenticate with Cloudflare:**
+```bash
+cloudflared tunnel login
+```
+
+3. **Create a tunnel:**
+```bash
+cloudflared tunnel create whisper-summarizer
+```
+
+4. **Configure the tunnel** (`~/.cloudflared/config.yml`):
+```yaml
+tunnel: <your-tunnel-id>
+credentials-file: /home/<user>/.cloudflared/<tunnel-id>.json
+
+ingress:
+  # Frontend and API
+  - hostname: your-domain.com
+    service: http://localhost:8130
+  # Health check
+  - hostname: your-domain.com
+    path: /health
+    service: http://localhost:8130
+
+  # Catch-all: 404
+  - service: http_status:404
+```
+
+5. **Run the tunnel:**
+```bash
+# Development (foreground)
+cloudflared tunnel run whisper-summarizer
+
+# Production (background with systemd)
+sudo cloudflared service install
+sudo systemctl enable cloudflared
+sudo systemctl start cloudflared
+```
+
+6. **Configure DNS:**
+```bash
+# Add CNAME record pointing to your tunnel
+cloudflared tunnel route dns whisper-summarizer your-domain.com
+```
+
+**Benefits of Cloudflare Tunnel:**
+- ✅ **SSL/TLS Termination** - Automatic HTTPS at Cloudflare edge
+- ✅ **No Open Ports** - Secure outbound connection only
+- ✅ **DDoS Protection** - Cloudflare's global network
+- ✅ **Global CDN** - Fast content delivery worldwide
+- ✅ **Zero Config** - No SSL certificates to manage
+- ✅ **Real IP Preservation** - CF-Connecting-IP header forwarded
+
+**Alternative: quicktunnel (for testing):**
+```bash
+# Temporary public URL (no domain needed)
+cloudflared tunnel --url http://localhost:8130
+
+# Output: https://xyz.trycloudflare.com
+# Valid for session duration, great for quick demos
+```
+
+**Static File Serving** (production):
+- Development: Proxies to Vite dev server (port 3000)
+- Production: Serve static files directly from volume
+- SPA routing: `try_files` fallback to `index.html`
 
 ## User & Channel Management
 

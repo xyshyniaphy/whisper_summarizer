@@ -72,3 +72,4 @@ whispercpp/models/*
 # Dockerボリューム
 postgres_data/
 postgres_data_dev/
+nginx/ssl/*.pem
