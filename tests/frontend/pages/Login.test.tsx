@@ -13,16 +13,8 @@ import { Provider } from 'jotai'
 import React from 'react'
 import Login from '../../../src/pages/Login'
 
-// Mock Supabase client
-const mockSignInWithOAuth = vi.fn()
-
-vi.mock('../../../src/services/supabase', () => ({
-  supabase: {
-    auth: {
-      signInWithOAuth: mockSignInWithOAuth
-    }
-  }
-}))
+// Import the mocked supabase module to access and control the mock functions
+import { supabase } from '@/services/supabase'
 
 const wrapper = ({ children }: { children: React.ReactNode }) => (
   <BrowserRouter>
@@ -34,7 +26,7 @@ describe('Login', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     // Reset to default implementation (no automatic return value)
-    mockSignInWithOAuth.mockReset()
+    vi.mocked(supabase.auth.signInWithOAuth).mockReset()
   })
 
   describe('Rendering', () => {
@@ -90,7 +82,7 @@ describe('Login', () => {
 
   describe('Google OAuth', () => {
     it('GoogleボタンをクリックするとOAuth処理が開始される', async () => {
-      mockSignInWithOAuth.mockImplementationOnce(
+      vi.mocked(supabase.auth.signInWithOAuth).mockImplementationOnce(
         () => new Promise(resolve => setTimeout(() => resolve({ error: null }), 100))
       )
 
@@ -106,7 +98,7 @@ describe('Login', () => {
 
     it('Google認証成功時、OAuthが正しいパラメータで呼ばれる', async () => {
       // Simple mock that resolves successfully
-      mockSignInWithOAuth.mockResolvedValue({ error: null })
+      vi.mocked(supabase.auth.signInWithOAuth).mockResolvedValue({ error: null })
 
       const user = userEvent.setup()
       render(<Login />, { wrapper })
@@ -116,15 +108,15 @@ describe('Login', () => {
 
       await waitFor(() => {
         // Just verify the mock was called (parameters are already correct in component)
-        expect(mockSignInWithOAuth).toHaveBeenCalled()
-        expect(mockSignInWithOAuth.mock.calls.length).toBeGreaterThan(0)
+        expect(supabase.auth.signInWithOAuth).toHaveBeenCalled()
+        expect(supabase.auth.signInWithOAuth).toBeCalledTimes(1)
       }, { timeout: 3000 })
     })
   })
 
   describe('Loading States', () => {
     it('Google認証処理中、ボタンが無効になる', async () => {
-      mockSignInWithOAuth.mockImplementation(
+      vi.mocked(supabase.auth.signInWithOAuth).mockImplementation(
         () => new Promise(resolve => setTimeout(() => resolve({ error: null }), 1000))
       )
 
@@ -140,7 +132,7 @@ describe('Login', () => {
     })
 
     it('読み込み中、ローディングテキストが表示される', async () => {
-      mockSignInWithOAuth.mockImplementation(
+      vi.mocked(supabase.auth.signInWithOAuth).mockImplementation(
         () => new Promise(resolve => setTimeout(() => resolve({ error: null }), 100))
       )
 
@@ -157,7 +149,7 @@ describe('Login', () => {
   describe('Error Handling', () => {
     it('ネットワークエラー時、エラーメッセージが表示される', async () => {
       // Set mock to return error
-      mockSignInWithOAuth.mockResolvedValueOnce({
+      vi.mocked(supabase.auth.signInWithOAuth).mockResolvedValueOnce({
         error: { message: 'Network error' }
       })
 
@@ -175,7 +167,7 @@ describe('Login', () => {
     })
 
     it('OAuth失敗時、ボタンが再有効化される', async () => {
-      mockSignInWithOAuth.mockResolvedValueOnce({
+      vi.mocked(supabase.auth.signInWithOAuth).mockResolvedValueOnce({
         error: { message: 'OAuth failed' }
       })
 
@@ -202,7 +194,7 @@ describe('Login', () => {
     })
 
     it('読み込み中、aria-labelが保持される', async () => {
-      mockSignInWithOAuth.mockImplementation(
+      vi.mocked(supabase.auth.signInWithOAuth).mockImplementation(
         () => new Promise(resolve => setTimeout(() => resolve({ error: null }), 100))
       )
 

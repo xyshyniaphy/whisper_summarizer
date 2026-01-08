@@ -11,10 +11,10 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import { Provider } from 'jotai'
 import React from 'react'
-import { TranscriptionDetail } from '../../../src/pages/TranscriptionDetail'
+import { TranscriptionDetail } from '@/pages/TranscriptionDetail'
 
 // Mock Supabase client
-vi.mock('../../../src/services/supabase', () => ({
+vi.mock('@/services/supabase', () => ({
   supabase: {
     auth: {
       getSession: vi.fn(() => Promise.resolve({ data: { session: null }, error: null })),
@@ -25,23 +25,35 @@ vi.mock('../../../src/services/supabase', () => ({
   }
 }))
 
-// Mock API
-const mockGetTranscription = vi.fn()
-const mockDownloadFile = vi.fn()
-const mockDownloadSummaryDocx = vi.fn()
-const mockGeneratePptx = vi.fn()
-const mockGetPptxStatus = vi.fn()
-
-vi.mock('../../../src/services/api', () => ({
+// Mock API - mock must be defined inline due to hoisting
+vi.mock('@/services/api', () => ({
   api: {
-    getTranscription: (id: string) => mockGetTranscription(id),
-    downloadFile: (id: string, format: string) => mockDownloadFile(id, format),
-    downloadSummaryDocx: (id: string) => mockDownloadSummaryDocx(id),
-    generatePptx: (id: string) => mockGeneratePptx(id),
-    getPptxStatus: (id: string) => mockGetPptxStatus(id),
+    getTranscription: vi.fn(),
+    downloadFile: vi.fn(),
+    downloadSummaryDocx: vi.fn(),
+    downloadNotebookLMGuideline: vi.fn(),
+    generatePptx: vi.fn(),
+    getPptxStatus: vi.fn(),
+    createShareLink: vi.fn(),
+    assignTranscriptionToChannels: vi.fn(),
+    getTranscriptionChannels: vi.fn(),
     getDownloadUrl: (id: string, format: string) => `/api/transcriptions/${id}/download?format=${format}`
   }
 }))
+
+// Import the mocked api module to access and control the mocks
+import { api } from '@/services/api'
+
+// Get references to the mocked functions
+const mockGetTranscription = vi.mocked(api.getTranscription)
+const mockDownloadFile = vi.mocked(api.downloadFile)
+const mockDownloadSummaryDocx = vi.mocked(api.downloadSummaryDocx)
+const mockDownloadNotebookLMGuideline = vi.mocked(api.downloadNotebookLMGuideline)
+const mockGeneratePptx = vi.mocked(api.generatePptx)
+const mockGetPptxStatus = vi.mocked(api.getPptxStatus)
+const mockCreateShareLink = vi.mocked(api.createShareLink)
+const mockAssignTranscriptionToChannels = vi.mocked(api.assignTranscriptionToChannels)
+const mockGetTranscriptionChannels = vi.mocked(api.getTranscriptionChannels)
 
 // Mock DOM methods
 global.URL.createObjectURL = vi.fn(() => 'blob:mock-url') as any
@@ -69,7 +81,7 @@ const mockTranscription = {
   id: 'test-1',
   user_id: 'user-1',
   file_name: 'test-audio.mp3',
-  original_text: 'This is a test transcription.\n\nIt has multiple paragraphs.\n\nAnd even more content to display.',
+  text: 'This is a test transcription.\n\nIt has multiple paragraphs.\n\nAnd even more content to display.',
   language: 'en',
   duration_seconds: 120.5,
   stage: 'completed',
@@ -90,7 +102,7 @@ const mockTranscription = {
 const mockTranscriptionProcessing = {
   ...mockTranscription,
   stage: 'transcribing',
-  original_text: null
+  text: null
 }
 
 const mockTranscriptionFailed = {
@@ -102,16 +114,15 @@ const mockTranscriptionFailed = {
 describe('TranscriptionDetail', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.useFakeTimers()
     mockGetTranscription.mockResolvedValue(mockTranscription)
     mockDownloadFile.mockResolvedValue(new Blob(['test content']))
     mockDownloadSummaryDocx.mockResolvedValue(new Blob(['docx content']))
+    mockDownloadNotebookLMGuideline.mockResolvedValue(new Blob(['notebooklm content']))
     mockGeneratePptx.mockResolvedValue({ status: 'generating' })
     mockGetPptxStatus.mockResolvedValue({ status: 'ready', exists: true })
-  })
-
-  afterEach(() => {
-    vi.useRealTimers()
+    mockCreateShareLink.mockResolvedValue({ token: 'test-token', url: 'https://example.com/share/test-token' })
+    mockAssignTranscriptionToChannels.mockResolvedValue(undefined)
+    mockGetTranscriptionChannels.mockResolvedValue([])
   })
 
   describe('Rendering', () => {
@@ -322,7 +333,7 @@ describe('TranscriptionDetail', () => {
   describe('Long Text Truncation', () => {
     it('長いテキストの場合、省略表示される', async () => {
       const longText = 'Line\n'.repeat(300)
-      const longTranscription = { ...mockTranscription, original_text: longText }
+      const longTranscription = { ...mockTranscription, text: longText }
       mockGetTranscription.mockResolvedValue(longTranscription)
       renderWithRoute('test-1')
 
