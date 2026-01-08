@@ -13,14 +13,17 @@ import React from 'react'
 
 import { ChannelAssignModal } from '../../../../src/components/channel/ChannelAssignModal'
 
+// Create mock functions at module level
+const mockListChannels = vi.fn(() => Promise.resolve([
+  { id: '1', name: 'Marketing', description: 'Marketing team' },
+  { id: '2', name: 'Sales', description: 'Sales team' },
+  { id: '3', name: 'Engineering', description: 'Engineering team' }
+]))
+
 // Mock adminApi
 vi.mock('../../../../src/services/api', () => ({
   adminApi: {
-    listChannels: vi.fn(() => Promise.resolve([
-      { id: '1', name: 'Marketing', description: 'Marketing team' },
-      { id: '2', name: 'Sales', description: 'Sales team' },
-      { id: '3', name: 'Engineering', description: 'Engineering team' }
-    ]))
+    listChannels: () => mockListChannels()
   }
 }))
 
@@ -268,8 +271,7 @@ describe('ChannelAssignModal', () => {
 
   describe('Loading State', () => {
     it('チャンネル読み込み中はローディングメッセージが表示される', async () => {
-      const { adminApi } = require('../../../../src/services/api')
-      adminApi.listChannels.mockImplementationOnce(
+      mockListChannels.mockImplementationOnce(
         () => new Promise(resolve => setTimeout(() => resolve([]), 100))
       )
 
@@ -289,8 +291,7 @@ describe('ChannelAssignModal', () => {
 
   describe('Edge Cases', () => {
     it('チャンネルリストが空の場合はメッセージが表示される', async () => {
-      const { adminApi } = require('../../../../src/services/api')
-      adminApi.listChannels.mockResolvedValueOnce([])
+      mockListChannels.mockResolvedValueOnce([])
 
       render(<ChannelAssignModal {...defaultProps} />, { wrapper })
 

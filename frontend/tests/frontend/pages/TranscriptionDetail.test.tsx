@@ -11,12 +11,14 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import { Provider } from 'jotai'
 
-// Mock API functions (must be declared before vi.mock due to hoisting)
-const mockGetTranscription = vi.fn()
-const mockDownloadFile = vi.fn()
-const mockGetTranscriptionChannels = vi.fn()
-const mockGetChatHistory = vi.fn()
-const mockSendMessage = vi.fn()
+// Mock API functions using vi.hoisted for proper mock resolution
+const { mockGetTranscription, mockDownloadFile, mockGetTranscriptionChannels, mockGetChatHistory, mockSendMessage } = vi.hoisted(() => ({
+  mockGetTranscription: vi.fn(),
+  mockDownloadFile: vi.fn(),
+  mockGetTranscriptionChannels: vi.fn(),
+  mockGetChatHistory: vi.fn(),
+  mockSendMessage: vi.fn()
+}))
 
 vi.mock('../../../src/services/api', () => ({
   api: {
@@ -41,10 +43,7 @@ vi.mock('../../../src/services/supabase', () => ({
   }
 }))
 
-// Import TranscriptionDetail AFTER mocks
-import { TranscriptionDetail } from '../../../src/pages/TranscriptionDetail'
-
-// Mock useParams to return test id
+// Mock react-router-dom BEFORE importing TranscriptionDetail
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual('react-router-dom')
   return {
@@ -52,6 +51,9 @@ vi.mock('react-router-dom', async () => {
     useParams: () => ({ id: 'test-1' })
   }
 })
+
+// Import TranscriptionDetail AFTER all mocks
+import { TranscriptionDetail } from '../../../src/pages/TranscriptionDetail'
 
 // Mock DOM methods
 global.URL.createObjectURL = vi.fn(() => 'blob:mock-url') as any

@@ -12,7 +12,7 @@ import { Provider, useAtom } from 'jotai'
 import React, { useEffect, useRef } from 'react'
 
 import { ChannelFilter } from '../../../../src/components/channel/ChannelFilter'
-import { channelsAtom, channelFilterAtom } from '../../../src/atoms/channels'
+import { channelsAtom, channelFilterAtom } from '../../../../src/atoms/channels'
 
 const mockChannels = [
   { id: '1', name: 'Marketing', description: 'Marketing team' },

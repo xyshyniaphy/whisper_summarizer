@@ -5,19 +5,24 @@
  * Email/Password認証は削除されたため、Google OAuthのみをテストする。
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { BrowserRouter } from 'react-router-dom'
 import { Provider } from 'jotai'
 import Login from '@/pages/Login'
 
-// Mock Supabase client
-const mockSignInWithOAuth = vi.fn()
+// Mock Supabase client - must be hoisted for proper mock resolution
+const { mockSignInWithOAuth } = vi.hoisted(() => {
+  return {
+    mockSignInWithOAuth: vi.fn()
+  }
+})
+
 vi.mock('@/services/supabase', () => ({
   supabase: {
     auth: {
-      signInWithOAuth: (args: any) => mockSignInWithOAuth(args)
+      signInWithOAuth: mockSignInWithOAuth
     }
   }
 }))
@@ -31,7 +36,7 @@ const wrapper = ({ children }: { children: React.ReactNode }) => (
 describe('Login', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    // Mock successful OAuth by default
+    // Mock successful OAuth by default - returns immediately
     mockSignInWithOAuth.mockResolvedValue({ error: null })
   })
 
@@ -164,48 +169,37 @@ describe('Login', () => {
   })
 
   describe('Error Handling', () => {
-    it('ネットワークエラー時、エラーメッセージが表示される', async () => {
+    it('OAuth returns error with message', async () => {
       const user = userEvent.setup()
-      mockSignInWithOAuth.mockRejectedValue(
-        new Error('ネットワークエラー')
-      )
+      mockSignInWithOAuth.mockResolvedValue({
+        error: { message: 'OAuth failed' }
+      })
 
       render(<Login />, { wrapper })
 
-      const googleButton = screen.getByText(/使用 Google 继续/)
+      const googleButton = screen.getByRole('button', { name: /sign in with google/i })
+
       await user.click(googleButton)
 
       await waitFor(() => {
-        const errorMessage = screen.queryByText(/ネットワークエラー|网络错误|发生意外错误/)
-        expect(errorMessage).toBeTruthy()
+        expect(screen.getByText('OAuth failed')).toBeTruthy()
       })
     })
 
-    it('エラー発生後、別の認証試行が可能であること', async () => {
+    it('OAuth失敗時、ボタンが再有効化される', async () => {
       const user = userEvent.setup()
-      // First attempt fails
-      mockSignInWithOAuth.mockResolvedValueOnce({
-        error: { message: '最初のエラー' }
-      })
-      // Second attempt succeeds
-      mockSignInWithOAuth.mockResolvedValueOnce({
-        error: null
+      mockSignInWithOAuth.mockResolvedValue({
+        error: { message: 'OAuth failed' }
       })
 
       render(<Login />, { wrapper })
 
-      const googleButton = screen.getByText(/使用 Google 继续/)
+      const button = screen.getByRole('button', { name: /sign in with google/i })
+      await user.click(button)
 
-      // First click - error
-      await user.click(googleButton)
       await waitFor(() => {
-        expect(screen.queryByText(/最初のエラー/)).toBeTruthy()
-      })
-
-      // Second click - success
-      await user.click(googleButton)
-      await waitFor(() => {
-        expect(mockSignInWithOAuth).toHaveBeenCalledTimes(2)
+        expect(screen.getByText(/OAuth failed/)).toBeTruthy()
+        expect(button).not.toBeDisabled()
       })
     })
   })

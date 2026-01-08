@@ -12,37 +12,43 @@ import React from 'react'
 
 import { AudioManagementTab } from '../../../../src/components/dashboard/AudioManagementTab'
 
+// Create mock functions at module level
+const mockListAllAudio = vi.fn(() => Promise.resolve([
+  {
+    id: '1',
+    file_name: 'test-audio.mp3',
+    created_at: '2025-01-01T00:00:00Z',
+    user_id: 'user-1',
+    user_email: 'user@example.com',
+    channels: [
+      { id: 'ch-1', name: 'Marketing' }
+    ]
+  },
+  {
+    id: '2',
+    file_name: 'another-audio.wav',
+    created_at: '2025-01-02T00:00:00Z',
+    user_id: 'user-2',
+    user_email: 'another@example.com',
+    channels: []
+  }
+]))
+const mockListChannels = vi.fn(() => Promise.resolve([
+  { id: 'ch-1', name: 'Marketing', description: 'Marketing team' },
+  { id: 'ch-2', name: 'Sales', description: 'Sales team' }
+]))
+const mockGetAudioChannels = vi.fn(() => Promise.resolve([
+  { id: 'ch-1', name: 'Marketing' }
+]))
+const mockAssignAudioToChannels = vi.fn(() => Promise.resolve())
+
 // Mock adminApi
 vi.mock('@/services/api', () => ({
   adminApi: {
-    listAllAudio: vi.fn(() => Promise.resolve([
-      {
-        id: '1',
-        file_name: 'test-audio.mp3',
-        created_at: '2025-01-01T00:00:00Z',
-        user_id: 'user-1',
-        user_email: 'user@example.com',
-        channels: [
-          { id: 'ch-1', name: 'Marketing' }
-        ]
-      },
-      {
-        id: '2',
-        file_name: 'another-audio.wav',
-        created_at: '2025-01-02T00:00:00Z',
-        user_id: 'user-2',
-        user_email: 'another@example.com',
-        channels: []
-      }
-    ])),
-    listChannels: vi.fn(() => Promise.resolve([
-      { id: 'ch-1', name: 'Marketing', description: 'Marketing team' },
-      { id: 'ch-2', name: 'Sales', description: 'Sales team' }
-    ])),
-    getAudioChannels: vi.fn(() => Promise.resolve([
-      { id: 'ch-1', name: 'Marketing' }
-    ])),
-    assignAudioToChannels: vi.fn(() => Promise.resolve())
+    listAllAudio: () => mockListAllAudio(),
+    listChannels: () => mockListChannels(),
+    getAudioChannels: () => mockGetAudioChannels(),
+    assignAudioToChannels: () => mockAssignAudioToChannels()
   }
 }))
 
@@ -56,8 +62,7 @@ describe('AudioManagementTab', () => {
 
   describe('Rendering', () => {
     it('ローディング状態が表示される', () => {
-      const { adminApi } = require('../../../../src/services/api')
-      adminApi.listAllAudio.mockImplementationOnce(
+      mockListAllAudio.mockImplementationOnce(
         () => new Promise(() => {}) // Never resolves
       )
 
@@ -225,7 +230,6 @@ describe('AudioManagementTab', () => {
   describe('Save Assignment', () => {
     it('「保存」ボタンをクリックして割り当てを保存できる', async () => {
       const user = userEvent.setup()
-      const { adminApi } = require('../../../../src/services/api')
 
       render(<AudioManagementTab />)
 
@@ -244,15 +248,14 @@ describe('AudioManagementTab', () => {
       await user.click(saveButton)
 
       await waitFor(() => {
-        expect(adminApi.assignAudioToChannels).toHaveBeenCalled()
+        expect(mockAssignAudioToChannels).toHaveBeenCalled()
       })
     })
   })
 
   describe('Error Handling', () => {
     it('エラー時にエラーメッセージと再試行ボタンが表示される', async () => {
-      const { adminApi } = require('../../../../src/services/api')
-      adminApi.listAllAudio.mockRejectedValueOnce(new Error('API Error'))
+      mockListAllAudio.mockRejectedValueOnce(new Error('API Error'))
 
       render(<AudioManagementTab />)
 
@@ -264,8 +267,7 @@ describe('AudioManagementTab', () => {
 
     it('再試行ボタンでデータを再読み込みできる', async () => {
       const user = userEvent.setup()
-      const { adminApi } = require('../../../../src/services/api')
-      adminApi.listAllAudio
+      mockListAllAudio
         .mockRejectedValueOnce(new Error('API Error'))
         .mockResolvedValueOnce([
           {
@@ -288,15 +290,14 @@ describe('AudioManagementTab', () => {
       await user.click(retryButton)
 
       await waitFor(() => {
-        expect(adminApi.listAllAudio).toHaveBeenCalledTimes(2)
+        expect(mockListAllAudio).toHaveBeenCalledTimes(2)
       })
     })
   })
 
   describe('Empty States', () => {
     it('チャンネルがない場合「暂无可用频道」と表示される', async () => {
-      const { adminApi } = require('../../../../src/services/api')
-      adminApi.listChannels.mockResolvedValueOnce([])
+      mockListChannels.mockResolvedValueOnce([])
 
       const user = userEvent.setup()
 

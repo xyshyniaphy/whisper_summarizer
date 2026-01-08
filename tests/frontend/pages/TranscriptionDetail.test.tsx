@@ -8,10 +8,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
+import { MemoryRouter, Routes, Route } from 'react-router-dom'
 import { Provider } from 'jotai'
 import React from 'react'
-import TranscriptionDetail from '../../../src/pages/TranscriptionDetail'
+import { TranscriptionDetail } from '../../../src/pages/TranscriptionDetail'
 
 // Mock Supabase client
 vi.mock('../../../src/services/supabase', () => ({
@@ -48,21 +48,19 @@ global.URL.createObjectURL = vi.fn(() => 'blob:mock-url') as any
 global.URL.revokeObjectURL = vi.fn() as any
 
 const wrapper = ({ children }: { children: React.ReactNode }) => (
-  <BrowserRouter>
-    <Provider>{children}</Provider>
-  </BrowserRouter>
+  <Provider>{children}</Provider>
 )
 
-// Helper to render with route
+// Helper to render with route - use MemoryRouter for testing
 const renderWithRoute = (id: string) => {
   return render(
-    <Routes>
-      <Route path="/transcriptions/:id" element={<TranscriptionDetail />} />
-    </Routes>,
-    {
-      wrapper,
-      path: `/transcriptions/${id}`
-    }
+    <MemoryRouter initialEntries={[`/transcriptions/${id}`]}>
+      <Provider>
+        <Routes>
+          <Route path="/transcriptions/:id" element={<TranscriptionDetail />} />
+        </Routes>
+      </Provider>
+    </MemoryRouter>
   )
 }
 
