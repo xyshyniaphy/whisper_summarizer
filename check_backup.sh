@@ -1,0 +1,1 @@
+/home/lmr/ws/whisper_summarizer/.claude/skills/check_backup/check_backup.sh

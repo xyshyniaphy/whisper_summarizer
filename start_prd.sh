@@ -26,6 +26,25 @@
 # Usage: ./start_prd.sh
 
 set -e
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+# Functions
+log_info() {
+    echo -e "${BLUE}[INFO]${NC} $1"
+}
+
+log_success() {
+    echo -e "${GREEN}[SUCCESS]${NC} $1"
+}
+
+log_warning() {
+    echo -e "${YELLOW}[WARNING]${NC} $1"
 }
 
 log_error() {
@@ -104,23 +123,14 @@ fi
 
 log_success "Environment validation passed"
 
-# Check if frontend is built
-if [ ! -d frontend/dist ]; then
-    log_warning "Frontend build not found"
-    echo
-    echo "Building frontend for production..."
-    cd frontend
-    npm run build
-    cd ..
-    log_success "Frontend built successfully"
-else
-    log_info "Frontend build found (frontend/dist)"
-fi
+# Frontend is built in Docker container - no local check needed
+log_info "Frontend will be built in Docker container"
 
 # Create necessary directories
 log_info "Creating data directories..."
-mkdir -p data/transcribes
-chmod 755 data/transcribes
+mkdir -p data/transcribes 2>/dev/null || true
+# Skip chmod if permission denied (files may be owned by root)
+chmod 755 data/transcribes 2>/dev/null || log_warning "Could not set permissions on data/transcribes (may be owned by root)"
 log_success "Data directories ready"
 
 # Check if ports are already in use

@@ -71,7 +71,7 @@ services:
       # Server Configuration
       CORS_ORIGINS: ${CORS_ORIGINS}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
-      DISABLE_AUTH: "false"
+      DISABLE_AUTH: ${DISABLE_AUTH:-false}
       TRUSTED_HOSTS: ${TRUSTED_HOSTS}
 
       # Production settings
