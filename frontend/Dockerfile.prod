@@ -42,6 +42,8 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY package.json bun.lockb* ./
 COPY tsconfig.json ./
 COPY tsconfig.node.json ./
+COPY postcss.config.js ./
+COPY tailwind.config.js ./
 COPY vite.config.ts ./
 COPY index.html ./
 COPY src ./src
