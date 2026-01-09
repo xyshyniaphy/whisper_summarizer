@@ -10,8 +10,6 @@
 #
 # Environment: Copy .env.prod to .env and configure production values
 
-version: '3.8'
-
 services:
   # ========================================
   # PostgreSQL Database (Internal Only)

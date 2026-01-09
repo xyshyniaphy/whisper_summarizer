@@ -144,9 +144,9 @@ if lsof -Pi :3080 -sTCP:LISTEN -t >/dev/null 2>&1; then
     exit 1
 fi
 
-# Pull latest images (optional, comment out if using local builds)
-log_info "Pulling latest Docker images..."
-$DOCKER_COMPOSE -f docker-compose.prod.yml pull
+# Note: Images are built locally using Dockerfile.prod
+# No need to pull - docker compose will use locally built images
+log_info "Using locally built Docker images..."
 
 # Start services
 log_info "Starting production services..."
