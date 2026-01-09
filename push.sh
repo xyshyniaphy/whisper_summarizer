@@ -9,10 +9,20 @@ set -e
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
+RED='\033[0;31m'
 NC='\033[0m' # No Color
 
 # Get username from argument or use default
 DOCKER_USERNAME="${1:-xyshyniaphy}"
+
+# Get environment variables from .env
+if [ -f .env ]; then
+    export $(cat .env | grep -v '^#' | grep -v '^$' | xargs)
+else
+    echo -e "${RED}[ERROR]${NC} .env file not found"
+    echo "Please create .env file from .env.prod first"
+    exit 1
+fi
 
 echo "========================================="
 echo "Build and Push Docker images to Docker Hub"
@@ -20,26 +30,55 @@ echo "Username: $DOCKER_USERNAME"
 echo "========================================="
 echo
 
-# Build production images first
-echo -e "${BLUE}[INFO]${NC} Building production images..."
-echo
-echo "Building: frontend and server"
-echo "Note: runner and fastwhisper-base should be built separately"
-echo
-docker compose -f docker-compose.prod.yml build --no-cache frontend server
+# Validate required environment variables
+if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_ANON_KEY" ]; then
+    echo -e "${RED}[ERROR]${NC} SUPABASE_URL and SUPABASE_ANON_KEY must be set in .env"
+    exit 1
+fi
 
-echo
-echo -e "${GREEN}[SUCCESS]${NC} Build complete!"
+# ========================================
+# Build Frontend (Production)
+# ========================================
+echo -e "${BLUE}[INFO]${NC} Building frontend (production static build with nginx)..."
 echo
 
-# Images to push (Server/Runner architecture)
+docker build -f frontend/Dockerfile.prod \
+  --build-arg VITE_SUPABASE_URL="${SUPABASE_URL}" \
+  --build-arg VITE_SUPABASE_ANON_KEY="${SUPABASE_ANON_KEY}" \
+  --build-arg VITE_BACKEND_URL=/api \
+  -t ${DOCKER_USERNAME}/whisper_summarizer-frontend:latest \
+  -t whisper_summarizer-frontend:latest \
+  ./frontend
+
+echo -e "${GREEN}[SUCCESS]${NC} Frontend built successfully!"
+echo
+
+# ========================================
+# Build Server
+# ========================================
+echo -e "${BLUE}[INFO]${NC} Building server (FastAPI backend)..."
+echo
+
+docker build -f server/Dockerfile \
+  -t ${DOCKER_USERNAME}/whisper_summarizer-server:latest \
+  -t whisper_summarizer-server:latest \
+  ./server
+
+echo -e "${GREEN}[SUCCESS]${NC} Server built successfully!"
+echo
+
+# ========================================
+# Push Images
+# ========================================
+echo "========================================="
+echo "Pushing images to Docker Hub"
+echo "========================================="
+echo
+
 IMAGES=(
     "whisper_summarizer-frontend"
     "whisper_summarizer-server"
-    "whisper_summarizer-runner"
-    "whisper-summarizer-fastwhisper-base"
 )
-
 
 function tag_and_push() {
     local image_name=$1
@@ -55,9 +94,6 @@ function tag_and_push() {
     # Target image name
     local target="${username}/${image_name}"
 
-    echo "🏷️  Tagging ${image_name}:latest -> ${target}:latest"
-    docker tag "${image_name}:latest" "${target}:latest"
-
     echo "📤 Pushing ${target}:latest"
     docker push "${target}:latest"
 
@@ -65,26 +101,25 @@ function tag_and_push() {
     echo
 }
 
-# Push main images
-echo "========================================="
-echo "Pushing Server/Runner architecture images"
-echo "========================================="
-echo
-
 for image in "${IMAGES[@]}"; do
     tag_and_push "$image" "$DOCKER_USERNAME"
 done
 
 echo "========================================="
-echo -e "${GREEN}✅ All images pushed successfully!${NC}"
+echo -e "${GREEN}✅ Build and push complete!${NC}"
 echo "========================================="
 echo
 echo "Images available at:"
 echo "  https://hub.docker.com/u/${DOCKER_USERNAME}"
 echo
-echo "To pull these images on another machine:"
-echo "  docker pull ${DOCKER_USERNAME}/whisper_summarizer-frontend:latest"
-echo "  docker pull ${DOCKER_USERNAME}/whisper_summarizer-server:latest"
-echo "  docker pull ${DOCKER_USERNAME}/whisper_summarizer-runner:latest"
-echo "  docker pull ${DOCKER_USERNAME}/whisper-summarizer-fastwhisper-base:latest"
+echo "Built images:"
+echo "  ✅ ${DOCKER_USERNAME}/whisper_summarizer-frontend:latest (static nginx, ~20MB)"
+echo "  ✅ ${DOCKER_USERNAME}/whisper_summarizer-server:latest (FastAPI, ~150MB)"
+echo
+echo "Note: Runner images should be built separately on GPU machine"
+echo
+echo "To pull and run on production server:"
+echo "  git pull"
+echo "  ./pull.sh ${DOCKER_USERNAME}"
+echo "  ./start_prd.sh"
 echo
