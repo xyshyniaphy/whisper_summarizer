@@ -76,7 +76,7 @@ export function AudioManagementTab() {
     fetchChannels()
   }, [])
 
-  const handleAssignChannels = async (audioId: string, audioName: string, currentChannels: string[]) => {
+  const handleAssignChannels = async (audioId: string, audioName: string, _currentChannels: string[]) => {
     setActionLoading(audioId)
     try {
       const data = await adminApi.getAudioChannels(audioId)

@@ -136,7 +136,7 @@ export function useAuth(): [
       try {
         console.log('[getSession] Calling supabase.auth.getSession()')
         // Add a timeout fallback in case supabase.auth.getSession() hangs
-        const sessionPromise = supabase.auth.getSession()
+        const sessionPromise = supabase!.auth.getSession()
         const timeoutPromise = new Promise((_, reject) =>
           setTimeout(() => reject(new Error('Session retrieval timeout')), 3000)
         )
@@ -218,7 +218,7 @@ export function useAuth(): [
     getSession()
 
     // 認証状態の変更を監視
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    const { data: { subscription } } = supabase!.auth.onAuthStateChange(async (_event, session) => {
       console.log('[onAuthStateChange] Event:', _event, 'hasSession:', !!session, 'userEmail:', session?.user?.email)
       if (session?.user) {
         try {
@@ -258,7 +258,7 @@ export function useAuth(): [
       return { error: null }
     }
 
-    const { error } = await supabase.auth.signInWithOAuth({
+    const { error } = await supabase!.auth.signInWithOAuth({
       provider: 'google',
       options: {
         queryParams: {

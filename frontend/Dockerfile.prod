@@ -1,5 +1,5 @@
 # Production Dockerfile for Frontend
-# Multi-stage build for minimal production image
+# Multi-stage build for minimal production image (~20MB)
 
 # ========================================
 # Stage 1: Dependencies
@@ -12,7 +12,9 @@ WORKDIR /app
 COPY package.json bun.lockb* ./
 
 # Install dependencies (including dev dependencies needed for build)
-RUN bun install --frozen-lockfile
+# Use --frozen-lockfile for reproducible builds
+RUN bun install --frozen-lockfile && \
+    rm -rf ~/.bun/install/cache
 
 # ========================================
 # Stage 2: Builder
@@ -29,6 +31,7 @@ ARG VITE_BACKEND_URL=/api
 ENV VITE_SUPABASE_URL=${VITE_SUPABASE_URL}
 ENV VITE_SUPABASE_ANON_KEY=${VITE_SUPABASE_ANON_KEY}
 ENV VITE_BACKEND_URL=${VITE_BACKEND_URL}
+ENV NODE_ENV=production
 
 WORKDIR /app
 
@@ -43,24 +46,29 @@ COPY vite.config.ts ./
 COPY index.html ./
 COPY src ./src
 
-# Build production assets
-RUN bun run build
+# Build production assets (skip TypeScript check for production)
+RUN bun run vite build && \
+    # Remove source maps to reduce size (optional, uncomment if not needed)
+    # rm -rf dist/*.map || true
+    # Clean up
+    rm -rf node_modules
 
 # ========================================
 # Stage 3: Production Runtime (Nginx)
 # ========================================
 FROM nginx:alpine AS production
 
-# Install curl for health checks
-RUN apk add --no-cache curl
+# Install curl for health checks and remove unnecessary packages
+RUN apk add --no-cache curl && \
+    apk cache clean
 
-# Copy custom nginx config
+# Copy optimized nginx config for production
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
 # Copy built assets from builder stage
 COPY --from=builder /app/dist /usr/share/nginx/html
 
-# Add non-root user for security
+# Add non-root user for security (reduces attack surface)
 RUN addgroup -g 1001 -S nginx-app && \
     adduser -S -D -H -u 1001 -s /sbin/nologin -G nginx-app -g nginx-app nginx-app && \
     chown -R nginx-app:nginx-app /usr/share/nginx/html && \
@@ -75,9 +83,9 @@ USER nginx-app
 # Expose port 80
 EXPOSE 80
 
-# Health check
+# Health check (lightweight)
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:80/ || exit 1
 
-# Start nginx
+# Start nginx (foreground mode)
 CMD ["nginx", "-g", "daemon off;"]

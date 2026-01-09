@@ -205,7 +205,7 @@ export function UserManagementTab() {
                     {!user.is_active && (
                       <Button
                         size="sm"
-                        variant="success"
+                        variant="primary"
                         onClick={() => handleActivateUser(user.id)}
                         disabled={actionLoading === user.id}
                         className="flex items-center gap-1"

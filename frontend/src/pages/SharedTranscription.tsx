@@ -7,7 +7,7 @@
 
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { AlertCircle, Loader2, Download, ChevronDown, File, FileText, MessageCircle, Lock, Send } from 'lucide-react'
+import { AlertCircle, Loader2, Download, ChevronDown, File, MessageCircle, Lock, Send } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { api } from '../services/api'

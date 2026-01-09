@@ -14,8 +14,8 @@ import { Loader2, Plus, Edit2, Trash2, UserMinus, Users } from 'lucide-react'
 interface Channel {
   id: string
   name: string
-  description: string | null
-  created_by: string | null
+  description?: string
+  created_by?: string
   created_at: string
   updated_at: string
   member_count?: number

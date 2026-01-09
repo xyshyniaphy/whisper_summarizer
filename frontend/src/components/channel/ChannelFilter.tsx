@@ -1,7 +1,6 @@
 import { useAtom } from 'jotai'
 import { ChevronDown } from 'lucide-react'
 import { channelFilterAtom, channelsAtom } from '../../atoms/channels'
-import { Channel } from './ChannelBadge'
 
 /**
  * Channel filter dropdown for transcription list.
