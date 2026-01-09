@@ -46,6 +46,7 @@ class AudioDownloadResponse(BaseModel):
     file_path: str
     file_size: int
     content_type: Optional[str] = None
+    download_url: Optional[str] = None  # HTTP download URL for remote runners
 
 
 class HeartbeatRequest(BaseModel):

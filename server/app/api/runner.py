@@ -6,8 +6,9 @@ download audio, and submit results.
 """
 from fastapi import APIRouter, HTTPException, Depends, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional
 from datetime import datetime, timezone
 import os
 import logging
@@ -19,6 +20,7 @@ from app.schemas.runner import (
     JobCompleteRequest, JobStartRequest,
     AudioDownloadResponse, HeartbeatRequest, HeartbeatResponse
 )
+from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -272,8 +274,9 @@ async def get_audio(
     """
     Get audio file information for processing.
 
-    Returns the audio file path and metadata for the runner to download.
-    Note: The audio file is accessible via shared volume mount.
+    Returns the audio file path, metadata, and download URL for the runner.
+    - For local/shared volume: Use file_path directly
+    - For remote runners: Use download_url to fetch via HTTP
 
     Args:
         job_id: UUID of the transcription job
@@ -281,7 +284,7 @@ async def get_audio(
         api_key: Verified runner API key
 
     Returns:
-        Audio file information
+        Audio file information including download URL
     """
     from app.db.base_class import Base
     import uuid
@@ -298,8 +301,6 @@ async def get_audio(
     # Check file_path first, then storage_path for backwards compatibility
     file_path = job.file_path
     if not file_path and job.storage_path:
-        # For backwards compatibility, storage_path might contain audio
-        # This should be updated to use a dedicated audio_path field
         file_path = job.storage_path
 
     if not file_path:
@@ -312,12 +313,76 @@ async def get_audio(
         )
 
     file_size = os.path.getsize(file_path)
+
+    # Always return download URL (use PUBLIC_BASE_URL or SERVER_URL from request context)
+    # For simplicity, always use /api/runner/audio/{job_id}/download - runner will use the server URL
+    download_url = f"/api/runner/audio/{job_id}/download"
+
     logger.info(f"Audio file info for job {job_id}: path={file_path}, size={file_size}")
 
     return AudioDownloadResponse(
         file_path=file_path,
         file_size=file_size,
-        content_type="audio/mpeg"  # Default, could be enhanced
+        content_type="audio/mpeg",
+        download_url=download_url
+    )
+
+
+@router.get("/audio/{job_id}/download")
+async def download_audio(
+    job_id: str,
+    db: Session = Depends(get_db),
+    api_key: str = Depends(verify_runner)
+):
+    """
+    Download the actual audio file for a job.
+
+    This endpoint is used by remote runners to fetch audio files via HTTP.
+    The file is streamed directly to the runner.
+
+    Args:
+        job_id: UUID of the transcription job
+        db: Database session
+        api_key: Verified runner API key
+
+    Returns:
+        Audio file as FileResponse
+    """
+    import uuid
+
+    try:
+        job_uuid = uuid.UUID(job_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid job ID format")
+
+    job = db.query(Transcription).filter(Transcription.id == job_uuid).first()
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    # Check file_path first, then storage_path for backwards compatibility
+    file_path = job.file_path
+    if not file_path and job.storage_path:
+        file_path = job.storage_path
+
+    if not file_path:
+        raise HTTPException(status_code=404, detail="Audio file path not set")
+
+    if not os.path.exists(file_path):
+        raise HTTPException(
+            status_code=404,
+            detail=f"Audio file not found at path: {file_path}"
+        )
+
+    logger.info(f"Downloading audio for job {job_id}: {file_path}")
+
+    # Stream the file to the runner
+    return FileResponse(
+        path=file_path,
+        media_type="audio/mpeg",
+        filename=job.file_name,
+        headers={
+            "Content-Disposition": f"attachment; filename={job.file_name}"
+        }
     )
 
 

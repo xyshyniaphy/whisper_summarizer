@@ -69,20 +69,28 @@ class RunnerPoller:
             self.client.fail_job(job_id, "Failed to get audio file information")
             return
 
-        audio_path = audio_info.get("file_path")
-        if not audio_path or not os.path.exists(audio_path):
-            self.client.fail_job(job_id, f"Audio file not found at {audio_path}")
+        download_url = audio_info.get("download_url")
+        if not download_url:
+            self.client.fail_job(job_id, "No download URL provided")
             return
 
-        # Step 3: Process the audio
+        # Step 3: Download audio via HTTP
+        local_audio_path = f"/tmp/whisper_runner/{job_id}.m4a"
+        logger.info(f"[{job_id}] Downloading audio from {download_url}")
+
+        if not self.client.download_audio(job_id, download_url, local_audio_path):
+            self.client.fail_job(job_id, f"Failed to download audio from {download_url}")
+            return
+
+        # Step 4: Process the audio
         try:
-            logger.info(f"[{job_id}] Processing audio: {audio_path}")
+            logger.info(f"[{job_id}] Processing audio: {local_audio_path}")
             result = self.processor.process(
-                audio_path=audio_path,
+                audio_path=local_audio_path,
                 language=job.language or settings.whisper_language
             )
 
-            # Step 4: Submit result
+            # Step 5: Submit result
             if self.client.complete_job(job_id, result):
                 logger.info(f"[{job_id}] Completed successfully in {result.processing_time_seconds}s")
             else:
@@ -94,6 +102,14 @@ class RunnerPoller:
             self.client.fail_job(job_id, error_msg)
 
         finally:
+            # Clean up downloaded audio file
+            if os.path.exists(local_audio_path):
+                try:
+                    os.remove(local_audio_path)
+                    logger.debug(f"[{job_id}] Cleaned up audio: {local_audio_path}")
+                except Exception as e:
+                    logger.warning(f"[{job_id}] Failed to cleanup audio: {e}")
+
             self.active_jobs.discard(job_id)
 
     async def poll_loop(self):

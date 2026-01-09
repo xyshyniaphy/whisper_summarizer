@@ -24,6 +24,7 @@ class Settings(BaseSettings):
 
     # Server Configuration
     CORS_ORIGINS: str = "http://localhost:3000"
+    PUBLIC_BASE_URL: Optional[str] = None  # Public base URL for download links (e.g., https://example.com)
     LOG_LEVEL: str = "INFO"
     DISABLE_AUTH: bool = False  # Disable authentication for testing
 

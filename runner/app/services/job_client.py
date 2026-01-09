@@ -1,6 +1,7 @@
 """Client for communicating with server"""
 import httpx
 import logging
+import os
 from typing import List, Optional
 import time
 
@@ -93,11 +94,61 @@ class JobClient:
             response = self.client.get(f"/audio/{job_id}")
             response.raise_for_status()
             data = response.json()
-            logger.info(f"Audio info for job {job_id}: {data['file_path']}")
+            logger.info(f"Audio info for job {job_id}: {data.get('file_path')}, download_url={data.get('download_url')}")
             return data
         except httpx.HTTPError as e:
             logger.error(f"Error getting audio for job {job_id}: {e}")
             return None
+
+    def download_audio(self, job_id: str, download_url: str, local_path: str) -> bool:
+        """
+        Download audio file from server to local path.
+
+        Args:
+            job_id: UUID of the job
+            download_url: URL to download the audio from (can be relative or absolute)
+            local_path: Local path to save the audio file
+
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            # Construct full URL if relative
+            if download_url.startswith("/"):
+                full_url = f"{self.base_url}{download_url}"
+            else:
+                full_url = download_url
+
+            # Use a separate client without the /api/runner base path for full URLs
+            download_client = httpx.Client(timeout=300.0)  # 5 min timeout for large files
+            response = download_client.get(
+                full_url,
+                headers={"Authorization": f"Bearer {self.api_key}"},
+                follow_redirects=True
+            )
+            response.raise_for_status()
+
+            # Ensure directory exists
+            os.makedirs(os.path.dirname(local_path), exist_ok=True)
+
+            # Write file
+            with open(local_path, 'wb') as f:
+                f.write(response.content)
+
+            file_size = os.path.getsize(local_path)
+            logger.info(f"Downloaded audio for job {job_id}: {local_path} ({file_size} bytes)")
+            return True
+        except httpx.HTTPError as e:
+            logger.error(f"Error downloading audio for job {job_id}: {e}")
+            return False
+        except Exception as e:
+            logger.error(f"Error saving audio for job {job_id}: {e}")
+            return False
+        finally:
+            try:
+                download_client.close()
+            except:
+                pass
 
     def complete_job(self, job_id: str, result: JobResult) -> bool:
         """
