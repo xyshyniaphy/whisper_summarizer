@@ -146,21 +146,18 @@ services:
       - whisper_network_dev
 
   # React Frontend (Development - Vite Dev Server)
-  # Port 3000 exposed for direct access (OAuth redirects)
-  # Also accessible via nginx at http://localhost:8130
+  # Accessed via nginx at http://localhost:8130 (port 3000 internal only)
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile.dev
     container_name: whisper_frontend_dev
-    ports:
-      - "3000:3000"  # Exposed for OAuth redirects
     environment:
       VITE_SUPABASE_URL: ${SUPABASE_URL}
       VITE_SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
       # Use relative path - nginx handles routing
       VITE_BACKEND_URL: ${VITE_BACKEND_URL:-/api}
-      VITE_PUBLIC_URL: ${VITE_PUBLIC_URL:-http://localhost:3000}
+      VITE_PUBLIC_URL: ${VITE_PUBLIC_URL:-http://localhost:8130}
     volumes:
       # Source code mount for hot reload
       - ./frontend:/app
