@@ -75,13 +75,13 @@ def upload_audio(
     # Sync user to local database
     user_id = current_user.get("id")
     user_email = current_user.get("email", "")
-    get_or_create_user(db, user_id, user_email)
+    local_user = get_or_create_user(db, user_id, user_email)
 
     # Create DB record with pending status
     new_transcription = Transcription(
         file_name=file.filename,
         status=TranscriptionStatus.PENDING,
-        user_id=user_id
+        user_id=local_user.id  # Use local user ID, not Supabase ID
     )
     db.add(new_transcription)
     db.commit()
