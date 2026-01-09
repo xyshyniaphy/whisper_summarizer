@@ -18,8 +18,8 @@ class Channel(Base):
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     # Relationships
-    memberships = relationship("ChannelMembership", back_populates="channel", cascade="all, delete-orphan")
-    transcription_assignments = relationship("TranscriptionChannel", back_populates="channel", cascade="all, delete-orphan")
+    memberships = relationship("ChannelMembership", back_populates="channel", cascade="all, delete-orphan", passive_deletes=True)
+    transcription_assignments = relationship("TranscriptionChannel", back_populates="channel", cascade="all, delete-orphan", passive_deletes=True)
 
 
 class ChannelMembership(Base):
@@ -32,8 +32,8 @@ class ChannelMembership(Base):
     assigned_by = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
 
     # Relationships
-    channel = relationship("Channel", back_populates="memberships")
-    user = relationship("User", back_populates="channel_memberships", foreign_keys=[user_id])
+    channel = relationship("Channel", back_populates="memberships", passive_deletes=True)
+    user = relationship("User", back_populates="channel_memberships", foreign_keys=[user_id], passive_deletes=True)
 
 
 class TranscriptionChannel(Base):
@@ -46,5 +46,5 @@ class TranscriptionChannel(Base):
     assigned_by = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
 
     # Relationships
-    transcription = relationship("Transcription", back_populates="channel_assignments")
-    channel = relationship("Channel", back_populates="transcription_assignments")
+    transcription = relationship("Transcription", back_populates="channel_assignments", passive_deletes=True)
+    channel = relationship("Channel", back_populates="transcription_assignments", passive_deletes=True)

@@ -53,7 +53,7 @@ class Transcription(Base):
     gemini_logs = relationship("GeminiRequestLog", back_populates="transcription", passive_deletes=True)
     chat_messages = relationship("ChatMessage", back_populates="transcription", passive_deletes=True, order_by="ChatMessage.created_at")
     share_links = relationship("ShareLink", back_populates="transcription", passive_deletes=True)
-    channel_assignments = relationship("TranscriptionChannel", back_populates="transcription", cascade="all, delete-orphan")
+    channel_assignments = relationship("TranscriptionChannel", back_populates="transcription", cascade="all, delete-orphan", passive_deletes=True)
 
     @property
     def original_text(self) -> str:

@@ -24,5 +24,6 @@ class User(Base):
         "ChannelMembership",
         back_populates="user",
         foreign_keys="[ChannelMembership.user_id]",
-        cascade="all, delete-orphan"
+        cascade="all, delete-orphan",
+        passive_deletes=True
     )
