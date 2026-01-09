@@ -1,8 +1,9 @@
 # Nginx Reverse Proxy Configuration for Production
 #
-# This configuration routes traffic from port 3080 to internal services:
-# - /api/* → Backend API server (port 8000)
-# - /* → Frontend static files
+# This configuration:
+# - Serves static frontend files directly
+# - Proxies /api/* to backend server (port 8000)
+# - Single nginx container handling everything
 #
 # SSL/TLS is handled by cloudflared tunnel (upstream)
 
@@ -38,26 +39,14 @@ http {
     gzip_vary on;
     gzip_proxied any;
     gzip_comp_level 6;
-    gzip_types text/plain text/css text/xml text/javascript 
-               application/json application/javascript application/xml+rss 
-               application/rss+xml font/truetype font/opentype 
+    gzip_types text/plain text/css text/xml text/javascript
+               application/json application/javascript application/xml+rss
+               application/rss+xml font/truetype font/opentype
                application/vnd.ms-fontobject image/svg+xml;
 
     # Rate limiting
     limit_req_zone $binary_remote_addr zone=api_limit:10m rate=10r/s;
     limit_req_zone $binary_remote_addr zone=general_limit:10m rate=30r/s;
-
-    # Upstream backend server
-    upstream backend {
-        server server:8000;
-        keepalive 32;
-    }
-
-    # Upstream frontend server
-    upstream frontend {
-        server frontend:80;
-        keepalive 16;
-    }
 
     server {
         listen 80;
@@ -76,12 +65,13 @@ http {
             add_header Content-Type text/plain;
         }
 
-        # API proxy to backend
+        # API proxy to backend server
         location /api/ {
             # Rate limiting
             limit_req zone=api_limit burst=20 nodelay;
 
-            proxy_pass http://backend;
+            # Proxy to backend container
+            proxy_pass http://server:8000;
             proxy_http_version 1.1;
 
             # Headers
@@ -108,28 +98,25 @@ http {
             proxy_request_buffering off;
         }
 
-        # Frontend proxy to frontend container
+        # Frontend static files
         location / {
             limit_req zone=general_limit burst=50 nodelay;
 
-            proxy_pass http://frontend;
-            proxy_http_version 1.1;
-
-            # Headers
-            proxy_set_header Host $host;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto $scheme;
-            proxy_set_header Connection "";
-
-            # Timeouts
-            proxy_connect_timeout 30s;
-            proxy_send_timeout 30s;
-            proxy_read_timeout 30s;
+            root /usr/share/nginx/html;
+            index index.html;
+            try_files $uri $uri/ /index.html;
 
             # Enable caching for static assets
-            proxy_cache_bypass $http_upgrade;
-            proxy_set_header Accept-Encoding "";
+            expires 7d;
+            add_header Cache-Control "public, immutable";
+        }
+
+        # Static asset caching (long-term cache for hashed assets)
+        location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot|webp)$ {
+            root /usr/share/nginx/html;
+            expires 1y;
+            add_header Cache-Control "public, immutable";
+            access_log off;
         }
 
         # Deny access to hidden files
