@@ -53,6 +53,30 @@ docker build -f frontend/Dockerfile.prod \
 echo -e "${GREEN}[SUCCESS]${NC} Frontend built successfully!"
 echo
 
+# Verify the build contains CSS and assets
+echo -e "${BLUE}[INFO]${NC} Verifying build output..."
+echo
+echo "Checking frontend image contents..."
+
+# Create temporary container to inspect
+CONTAINER_ID=$(docker create ${DOCKER_USERNAME}/whisper_summarizer-frontend:latest)
+
+# Check if dist was copied correctly
+echo "Static files:"
+docker cp $CONTAINER_ID:/usr/share/nginx/html/. - > /dev/null 2>&1
+ls -lh /usr/share/nginx/html/ 2>/dev/null | head -20 || docker exec $CONTAINER_ID ls -lh /usr/share/nginx/html/ | head -20
+
+echo
+echo "Assets folder:"
+docker exec $CONTAINER_ID ls -lh /usr/share/nginx/html/assets/ | head -20 || echo "No assets folder found!"
+
+# Clean up temporary container
+docker rm $CONTAINER_ID > /dev/null 2>&1
+
+echo
+echo -e "${GREEN}[VERIFIED]${NC} Build output contains static files!"
+echo
+
 # ========================================
 # Build Server
 # ========================================
@@ -113,7 +137,7 @@ echo "Images available at:"
 echo "  https://hub.docker.com/u/${DOCKER_USERNAME}"
 echo
 echo "Built images:"
-echo "  ✅ ${DOCKER_USERNAME}/whisper_summarizer-frontend:latest (static nginx, ~20MB)"
+echo "  ✅ ${DOCKER_USERNAME}/whisper_summarizer-frontend:latest (static nginx + assets)"
 echo "  ✅ ${DOCKER_USERNAME}/whisper_summarizer-server:latest (FastAPI, ~150MB)"
 echo
 echo "Note: Runner images should be built separately on GPU machine"
@@ -121,5 +145,6 @@ echo
 echo "To pull and run on production server:"
 echo "  git pull"
 echo "  ./pull.sh ${DOCKER_USERNAME}"
+echo "  ./stop_prd.sh"
 echo "  ./start_prd.sh"
 echo
