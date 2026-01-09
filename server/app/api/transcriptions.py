@@ -398,6 +398,9 @@ async def download_transcription(
   if not transcription:
     raise HTTPException(status_code=404, detail="未找到转录")
 
+  # Extract base filename for all formats (used in download filename)
+  original_filename = Path(transcription.file_name).stem
+
   # Formatted text - LLM formatted with punctuation and paragraphs
   if format == "formatted":
     from app.services.storage_service import get_storage_service
@@ -430,7 +433,6 @@ async def download_transcription(
     raise HTTPException(status_code=400, detail="转录内容为空")
 
   content = transcription.text
-  original_filename = Path(transcription.file_name).stem
 
   # SRT 格式 - 使用实际时间戳（如果可用）
   if format == "srt":

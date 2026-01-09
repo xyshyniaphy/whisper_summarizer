@@ -470,3 +470,106 @@ class TestCleanupEdgeCases:
 
             # Should delete very old transcriptions
             assert result["deleted_count"] >= 1
+
+    @pytest.mark.asyncio
+
+    async def test_should_handle_task_level_exception(self, db_session: Session):
+        """Should handle task-level exceptions and rollback."""
+        from app.models.user import User
+        import random
+
+        # Create a user
+        user = User(
+            id=uuid.uuid4(),
+            email=f"exception-test-{uuid.uuid4().hex[:8]}@example.com",
+            is_active=True,
+            is_admin=False
+        )
+        db_session.add(user)
+        db_session.flush()
+
+        old_date = datetime.now(timezone.utc) - timedelta(days=35)
+
+        # Create multiple old transcriptions
+        for i in range(3):
+            transcription = Transcription(
+                id=uuid.uuid4(),
+                user_id=user.id,
+                file_name=f"exception_audio_{i}.mp3",
+                storage_path=f"test/exception_{i}.txt.gz",
+                stage="completed",
+                created_at=old_date
+            )
+            db_session.add(transcription)
+        db_session.commit()
+
+        # Mock storage service to raise exception for one transcription
+        call_count = [0]
+
+        def mock_delete_func(transcription_id):
+            call_count[0] += 1
+            if call_count[0] == 2:
+                raise Exception("Storage service failure")
+
+        with patch('app.tasks.cleanup.get_storage_service') as mock_storage:
+            mock_storage_instance = Mock()
+            mock_storage_instance.delete_transcription_text.side_effect = mock_delete_func
+            mock_storage.return_value = mock_storage_instance
+
+            result = await cleanup_expired_transcriptions()
+
+            # Should handle exception gracefully
+            # Either some deletions succeeded or all were rolled back
+            assert "deleted_count" in result
+            assert "failed_count" in result
+
+    @pytest.mark.asyncio
+
+    async def test_should_handle_top_level_exception(self, db_session: Session):
+        """Should handle top-level exception and rollback (lines 85-88)."""
+        from app.models.user import User
+
+        # Create a user
+        user = User(
+            id=uuid.uuid4(),
+            email=f"top-level-exception-{uuid.uuid4().hex[:8]}@example.com",
+            is_active=True,
+            is_admin=False
+        )
+        db_session.add(user)
+        db_session.flush()
+
+        old_date = datetime.now(timezone.utc) - timedelta(days=35)
+
+        transcription = Transcription(
+            id=uuid.uuid4(),
+            user_id=user.id,
+            file_name="top_level_exception.mp3",
+            storage_path="test/top_level_exception.txt.gz",
+            stage="completed",
+            created_at=old_date
+        )
+        db_session.add(transcription)
+        db_session.commit()
+
+        # Mock SessionLocal to raise exception on query (top-level failure)
+        with patch('app.tasks.cleanup.get_storage_service') as mock_storage:
+            # Mock storage service
+            mock_storage_instance = Mock()
+            mock_storage.return_value = mock_storage_instance
+
+            # Mock SessionLocal to return a session whose query raises exception
+            with patch('app.tasks.cleanup.SessionLocal') as mock_session_local:
+                mock_session = MagicMock()
+                mock_session.query.side_effect = Exception("Database connection lost")
+                mock_session.rollback = MagicMock()
+                mock_session.close = MagicMock()
+                mock_session.commit = MagicMock()
+                mock_session_local.return_value = mock_session
+
+                result = await cleanup_expired_transcriptions()
+
+                # Should handle exception and add error to stats
+                assert "errors" in result
+                assert len(result["errors"]) > 0
+                assert any("Database connection lost" in error for error in result["errors"])

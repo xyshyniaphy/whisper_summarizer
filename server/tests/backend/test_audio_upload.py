@@ -542,3 +542,34 @@ class TestAudioUploadFormats:
         )
 
         assert response.status_code == http_status.HTTP_400_BAD_REQUEST
+
+    def test_upload_with_existing_user_by_email(self, user_auth_client, test_audio_content, db_session):
+        """Test that upload finds existing user by email (lines 41-42)."""
+        from app.models.user import User
+        from app.api.audio import get_or_create_user
+        import uuid
+
+        # Create a local user with specific email
+        test_email = "email-sync-test@example.com"
+        existing_local_user_id = uuid.uuid4()
+        existing_user = User(id=existing_local_user_id, email=test_email, is_active=True)
+        db_session.add(existing_user)
+        db_session.commit()
+
+        # Test get_or_create_user directly with different auth ID but same email
+        # This simulates Supabase having a different ID for the same email
+        different_auth_id = str(uuid.uuid4())
+
+        # The function should find the existing user by email (lines 38-42)
+        found_user = get_or_create_user(db_session, different_auth_id, test_email)
+
+        # Verify it returns the existing user (found by email, not by ID)
+        assert found_user is not None
+        assert found_user.id == existing_local_user_id
+        assert found_user.email == test_email
+        # Note: The returned user has existing_local_user_id, not different_auth_id
+        # This proves lines 41-42 were executed (found by email lookup)
+
+        # Clean up
+        db_session.query(User).filter(User.id == existing_local_user_id).delete()
+        db_session.commit()

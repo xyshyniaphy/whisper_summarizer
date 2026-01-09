@@ -108,6 +108,24 @@ class TestGetCurrentUser:
     @pytest.mark.asyncio
     @patch('app.core.supabase.settings')
     @patch('app.core.supabase.supabase')
+    async def test_should_raise_401_when_supabase_returns_none(self, mock_supabase, mock_settings, mock_credentials):
+        """Should raise 401 when Supabase get_user returns None (line 77)."""
+        mock_settings.DISABLE_AUTH = False
+        # Simulate Supabase returning None for invalid/expired token
+        # When None is returned, accessing user.user raises AttributeError
+        # which is caught by the generic exception handler (lines 95-100)
+        mock_supabase.auth.get_user.return_value = None
+
+        with pytest.raises(HTTPException) as exc_info:
+            await get_current_user(mock_credentials)
+
+        assert exc_info.value.status_code == 401
+        # The generic exception handler catches the AttributeError from accessing None.user
+        assert "認証に失敗しました" in exc_info.value.detail
+
+    @pytest.mark.asyncio
+    @patch('app.core.supabase.settings')
+    @patch('app.core.supabase.supabase')
     async def test_should_handle_auth_exception(self, mock_supabase, mock_settings, mock_credentials):
         """Should handle authentication exceptions."""
         mock_settings.DISABLE_AUTH = False

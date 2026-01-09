@@ -194,6 +194,86 @@ class TestDownloadSummaryDocx:
     @patch('tempfile.mktemp')
     @patch('docx.Document')
     @patch('shutil.rmtree')
+    async def test_should_handle_markdown_code_blocks(
+        self, mock_rmtree, mock_document_class, mock_mktemp, mock_mkdtemp
+    ):
+        """Should skip code blocks in markdown (lines 582, 592)."""
+        mock_mkdtemp.return_value = "/tmp/test"
+        mock_mktemp.return_value = "/tmp/test/file.docx"
+
+        mock_db = MagicMock()
+        mock_transcription = MagicMock()
+        mock_transcription.id = uuid4()
+        mock_transcription.file_name = "test.wav"
+
+        # Summary with code block and empty parts from regex split
+        mock_summary = MagicMock()
+        mock_summary.summary_text = "```python\ncode here\n```\n\n**bold** text with _italic_"
+
+        mock_transcription.summaries = [mock_summary]
+        mock_db.query.return_value.filter.return_value.first.return_value = mock_transcription
+        mock_user = {"id": str(uuid4())}
+
+        mock_doc = MagicMock()
+        mock_p = MagicMock()
+        mock_run = MagicMock()
+        mock_p.add_run.return_value = mock_run
+        mock_doc.add_paragraph.return_value = mock_p
+        mock_document_class.return_value = mock_doc
+
+        with patch('app.api.transcriptions.FileResponse') as mock_file_response:
+            mock_file_response.return_value = MagicMock()
+            result = await download_summary_docx(str(uuid4()), MagicMock(), mock_db, mock_user)
+
+        # Should still create document (code blocks are skipped)
+        mock_document_class.assert_called_once()
+
+    @pytest.mark.asyncio
+    @patch('tempfile.mkdtemp')
+    @patch('tempfile.mktemp')
+    @patch('docx.Document')
+    @patch('shutil.rmtree')
+    async def test_should_cleanup_on_exception(
+        self, mock_rmtree, mock_document_class, mock_mktemp, mock_mkdtemp
+    ):
+        """Should handle cleanup exception (lines 616-621)."""
+        mock_mkdtemp.return_value = "/tmp/test"
+        mock_mktemp.return_value = "/tmp/test/file.docx"
+        # Make rmtree raise exception to test exception handler
+        mock_rmtree.side_effect = Exception("Cleanup failed")
+
+        mock_db = MagicMock()
+        mock_transcription = MagicMock()
+        mock_transcription.id = uuid4()
+        mock_transcription.file_name = "test.wav"
+
+        mock_summary = MagicMock()
+        mock_summary.summary_text = "Test content"
+
+        mock_transcription.summaries = [mock_summary]
+        mock_db.query.return_value.filter.return_value.first.return_value = mock_transcription
+        mock_user = {"id": str(uuid4())}
+
+        mock_doc = MagicMock()
+        mock_document_class.return_value = mock_doc
+
+        mock_background_tasks = MagicMock()
+
+        with patch('app.api.transcriptions.FileResponse') as mock_file_response:
+            mock_file_response.return_value = MagicMock()
+            # Should not raise despite cleanup exception
+            result = await download_summary_docx(str(uuid4()), mock_background_tasks, mock_db, mock_user)
+
+        # Verify document was created and cleanup task was added
+        mock_document_class.assert_called_once()
+        # The cleanup function should have been added as a task
+        mock_background_tasks.add_task.assert_called_once()
+
+    @pytest.mark.asyncio
+    @patch('tempfile.mkdtemp')
+    @patch('tempfile.mktemp')
+    @patch('docx.Document')
+    @patch('shutil.rmtree')
     async def test_should_schedule_cleanup_task(
         self, mock_rmtree, mock_document_class, mock_mktemp, mock_mkdtemp
     ):

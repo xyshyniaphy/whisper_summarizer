@@ -66,14 +66,14 @@ Access: http://localhost:8130 (single entry point via nginx)
 
 ```bash
 ./run_test.sh frontend    # Frontend tests (bun)
-./run_test.sh backend     # Backend tests
+./run_test.sh server      # Server tests
 ./run_test.sh e2e         # E2E tests (requires dev env running)
 ./run_test.sh all         # All tests
 ./run_test.sh build       # Build test images
 ```
 
 **Coverage**:
-- Backend: **~240 comprehensive tests** ✅
+- Server: **~240 comprehensive tests** ✅
   - test_runner_api.py: ~55 tests (Runner API, edge cases, race conditions, data consistency)
   - test_audio_upload.py: ~90 tests (Upload, formats, validation, error handling)
   - test_transcriptions_api.py: ~45 tests (CRUD, downloads, chat, share, channels)
@@ -86,15 +86,48 @@ Access: http://localhost:8130 (single entry point via nginx)
 ### Building
 
 ```bash
-# Step 1: Build base image (first time only, ~10-15 min)
-./build_fastwhisper_base.sh
+# Development builds (hot reload enabled)
+docker-compose -f docker-compose.dev.yml build
 
-# Step 2: Build backend (uses base image)
-docker-compose -f docker-compose.dev.yml build backend
+# Production builds (optimized images)
+docker-compose -f docker-compose.prod.yml build
 
-# Step 3: Start services
-docker-compose -f docker-compose.dev.yml up -d --force-recreate
+# Build individual services
+docker-compose -f docker-compose.dev.yml build frontend  # Development
+docker-compose -f docker-compose.prod.yml build frontend  # Production
 ```
+
+**Frontend Dockerfiles:**
+- `Dockerfile.dev` - Development with hot reload (Vite dev server)
+- `Dockerfile.prod` - Production with static files (nginx multi-stage build)
+
+## Project Structure
+
+```
+whisper_summarizer/
+├── server/                    # FastAPI server (lightweight, no GPU) ⭐ ACTIVE
+├── runner/                    # GPU worker (faster-whisper + GLM)
+├── frontend/                  # React + TypeScript + Vite
+├── nginx/                     # Reverse proxy configuration
+├── data/                      # Shared data directories
+│   ├── server/                # Server-specific data
+│   ├── runner/                # Runner-specific data
+│   └── uploads/               # Temporary audio uploads
+├── scripts/                   # Utility scripts
+├── tests/                     # E2E tests
+├── backup_legacy/             # Legacy monolithic setup ⭐ BACKUP
+│   ├── docker-compose.yml     # Old compose file (monolithic)
+│   └── run_prd.sh             # Old production script
+└── backend.backup.20250108/   # Legacy monolithic backend ⭐ BACKUP
+```
+
+**Active Docker Compose Files:**
+- `docker-compose.dev.yml` - Development environment (server + runner + frontend + nginx)
+- `docker-compose.prod.yml` - Production environment (optimized)
+- `docker-compose.runner.prod.yml` - Runner-only production deployment
+- `docker-compose.runner.yml` - Runner development configuration
+
+**Note:** Legacy files have been moved to `backup_legacy/` and `backend.backup.20250108/`. All active development uses the new `server/` + `runner/` split architecture with nginx reverse proxy.
 
 ## Code Architecture
 
@@ -136,8 +169,8 @@ app/
 │   └── poller.py     # Main polling loop (async)
 ├── services/
 │   ├── job_client.py     # Server communication (HTTP) ⭐ NEW
-│   ├── whisper_service.py    # faster-whisper (from backend)
-│   ├── glm_service.py        # GLM summarization (from backend)
+│   ├── whisper_service.py    # faster-whisper transcription
+│   ├── glm_service.py        # GLM summarization
 │   └── audio_processor.py    # Orchestration ⭐ NEW
 ├── models/
 │   └── job_schemas.py    # Job DTOs ⭐ NEW
@@ -391,9 +424,42 @@ cloudflared tunnel --url http://localhost:8130
 ```
 
 **Static File Serving** (production):
-- Development: Proxies to Vite dev server (port 3000)
-- Production: Serve static files directly from volume
+- Development: Proxies to Vite dev server (hot reload, port 3000)
+- Production: Serves static files from Docker image (nginx alpine)
 - SPA routing: `try_files` fallback to `index.html`
+- Asset caching: 1-year cache for hashed assets (js, css, images)
+
+### Frontend Deployment
+
+**Development Mode:**
+```bash
+# Uses Dockerfile.dev with hot reload
+docker-compose -f docker-compose.dev.yml up frontend
+```
+
+**Production Mode:**
+```bash
+# Uses Dockerfile.prod with optimized static files
+docker-compose -f docker-compose.prod.yml up frontend
+
+# Build-time environment variables (baked into image)
+docker-compose build --build-arg VITE_SUPABASE_URL=https://xxx.supabase.co \
+                     --build-arg VITE_SUPABASE_ANON_KEY=eyJ... \
+                     frontend
+```
+
+**Key Differences:**
+
+| Feature | Development | Production |
+|---------|-----------|------------|
+| Dockerfile | `Dockerfile.dev` | `Dockerfile.prod` |
+| Server | Vite dev server (HMR) | Nginx (static files) |
+| Source code | Volume mounted | Baked into image |
+| Hot reload | ✅ Yes | ❌ No |
+| Dev dependencies | ✅ Included | ❌ Excluded |
+| Image size | ~500MB | ~20MB (nginx alpine) |
+| Build time | Fast | Slower (Vite build) |
+| Runtime | Heavy (Node.js) | Light (nginx only) |
 
 ## User & Channel Management
 
@@ -500,7 +566,7 @@ transcription = relationship("Transcription", back_populates="...", passive_dele
 
 **Rebuild required** after model changes:
 ```bash
-docker-compose -f docker-compose.dev.yml up -d --build --force-recreate backend
+docker-compose -f docker-compose.dev.yml up -d --build --force-recreate server
 ```
 
 ## Local File Storage

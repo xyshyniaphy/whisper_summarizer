@@ -116,6 +116,39 @@ class TestSetChineseFont:
         # If we got here without exception, test passes
         assert True
 
+    def test_should_handle_font_setting_exception(self):
+        """Should handle exception when setting font name (lines 41-42)."""
+        mock_slide = MagicMock()
+        mock_paragraph = MagicMock()
+        mock_run = MagicMock()
+        mock_paragraph.runs = [mock_run]
+        mock_slide.paragraphs = [mock_paragraph]
+
+        # Create a custom font mock that raises exceptions on name setter
+        # This triggers the exception handler (lines 41-42)
+        class MockFont:
+            def __init__(self):
+                self._attempts = 0
+                self.size = None  # Needed for line 44 in pptx_service.py
+
+            @property
+            def name(self):
+                return "Arial"
+
+            @name.setter
+            def name(self, value):
+                self._attempts += 1
+                # All fonts fail - triggers the exception handler loop
+                raise Exception(f"Font {value} not available")
+
+        mock_run.font = MockFont()
+
+        # Should not raise despite all fonts failing
+        set_chinese_font(mock_slide)
+
+        # Verify it tried multiple fonts (one for each CHINESE_FONTS entry)
+        assert mock_run.font._attempts == len(CHINESE_FONTS)
+
     def test_should_handle_empty_paragraphs(self):
         """Should handle text frame with no paragraphs."""
         mock_slide = MagicMock()

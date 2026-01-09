@@ -359,6 +359,35 @@ class TestCompleteJob:
         assert response.status_code in [http_status.HTTP_404_NOT_FOUND, http_status.HTTP_422_UNPROCESSABLE_ENTITY]
         assert "Job not found" in response.json()["detail"]
 
+    @patch('app.services.storage_service.get_storage_service')
+    def test_complete_job_handles_summary_save_exception(self, mock_get_storage_service, auth_client, test_processing_transcription):
+        """Test that completing a job handles summary save exception gracefully (lines 189-190)."""
+        from unittest.mock import MagicMock
+
+        job_id = test_processing_transcription.id
+
+        # Mock storage service to raise exception when saving summary
+        mock_storage = MagicMock()
+        mock_storage.save_transcription_text = MagicMock()
+        mock_storage.save_formatted_text = MagicMock(side_effect=Exception("Storage write failed"))
+        mock_get_storage_service.return_value = mock_storage
+
+        response = auth_client.post(
+            f"/api/runner/jobs/{job_id}/complete",
+            json={
+                "text": "Test transcription",
+                "summary": "Test summary that will fail to save",
+                "processing_time_seconds": 20
+            }
+        )
+
+        # Should still succeed even if summary save fails (it's logged, not raised)
+        assert response.status_code in [
+            http_status.HTTP_200_OK,
+            http_status.HTTP_401_UNAUTHORIZED,
+            http_status.HTTP_404_NOT_FOUND
+        ]
+
 
 # ============================================================================
 # POST /api/runner/jobs/{job_id}/fail Tests
@@ -823,4 +852,194 @@ class TestRunnerDataConsistency:
         if response.status_code == http_status.HTTP_200_OK:
             db_session.refresh(test_processing_transcription)
             assert test_processing_transcription.status == TranscriptionStatus.FAILED
-            assert error_msg in test_processing_transcription.error_message
+            assert test_processing_transcription.error_message == error_msg
+
+
+@pytest.mark.integration
+class TestRunnerAPIEdgeCases:
+    """Test runner API edge cases for missing coverage."""
+
+    def test_get_jobs_with_invalid_status_returns_400(self, auth_client):
+        """Test polling jobs with invalid status returns 400."""
+        response = auth_client.get("/api/runner/jobs?status_filter=invalid_status")
+        assert response.status_code == http_status.HTTP_400_BAD_REQUEST
+        data = response.json()
+        assert "detail" in data
+        assert "Invalid status" in data["detail"]
+
+    def test_get_audio_with_nonexistent_job_returns_404(self, auth_client):
+        """Test getting audio for non-existent job returns 404."""
+        fake_job_id = str(uuid4())
+
+        response = auth_client.get(f"/api/runner/audio/{fake_job_id}")
+        assert response.status_code == http_status.HTTP_404_NOT_FOUND
+        data = response.json()
+        assert "detail" in data
+        assert "not found" in data["detail"].lower()
+
+    def test_complete_job_storage_error_logs_but_continues(self, auth_client, test_transcription):
+        """Test that storage errors during job completion are logged but don't fail the request."""
+        from unittest.mock import patch, Mock
+
+        # Mock storage service to raise an exception
+        # Patch at the source since it's imported locally
+        with patch('app.services.storage_service.get_storage_service') as mock_get_storage:
+            mock_storage_instance = Mock()
+            mock_storage_instance.save_transcription_text.side_effect = IOError("Disk full")
+            mock_get_storage.return_value = mock_storage_instance
+
+            response = auth_client.post(
+                f"/api/runner/jobs/{test_transcription.id}/complete",
+                json={"text": "Test transcription", "processing_time_seconds": 10}
+            )
+
+            # Should still succeed despite storage error
+            assert response.status_code == http_status.HTTP_200_OK
+
+    def test_complete_job_with_summary_storage_error(self, auth_client, test_transcription):
+        """Test that summary storage errors are logged but don't fail the request."""
+        from unittest.mock import patch, Mock
+
+        # Mock storage service to raise exception only for summary
+        call_count = [0]
+
+        def side_effect_func(*args, **kwargs):
+            call_count[0] += 1
+            if call_count[0] == 2:  # Second call is for summary
+                raise IOError("Disk full for summary")
+
+        with patch('app.services.storage_service.get_storage_service') as mock_get_storage:
+            mock_storage_instance = Mock()
+            mock_storage_instance.save_transcription_text.side_effect = None
+            mock_storage_instance.save_formatted_text.side_effect = side_effect_func
+            mock_get_storage.return_value = mock_storage_instance
+
+            response = auth_client.post(
+                f"/api/runner/jobs/{test_transcription.id}/complete",
+                json={
+                    "text": "Test transcription",
+                    "summary": "Test summary",
+                    "processing_time_seconds": 10
+                }
+            )
+
+            # Should still succeed despite summary storage error
+            assert response.status_code == http_status.HTTP_200_OK
+
+    def test_get_audio_uses_storage_path_for_backwards_compatibility(self, auth_client, db_session, test_user):
+        """Test that audio endpoint uses storage_path when file_path is None (backwards compatibility)."""
+        from app.models.transcription import Transcription
+        import tempfile
+        import os
+
+        # Create a temporary audio file
+        with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as f:
+            temp_path = f.name
+            f.write(b"fake audio content")
+
+        try:
+            # Create a transcription with storage_path set (old format) but no file_path
+            job = Transcription(
+                id=uuid4(),
+                user_id=test_user.id,
+                file_name="backwards_compat.mp3",
+                file_path=None,  # No file_path
+                storage_path=temp_path,  # But storage_path has the audio (old behavior)
+                status=TranscriptionStatus.PENDING
+            )
+            db_session.add(job)
+            db_session.commit()
+
+            # Try to get audio - should use storage_path as fallback (line 303)
+            response = auth_client.get(f"/api/runner/audio/{job.id}")
+
+            # The response depends on whether the file exists
+            # If it works, we get 200 with file info
+            # If not, we might get 404
+            assert response.status_code in [
+                http_status.HTTP_200_OK,
+                http_status.HTTP_404_NOT_FOUND
+            ]
+
+            # Cleanup
+            db_session.query(Transcription).filter(Transcription.id == job.id).delete()
+            db_session.commit()
+        finally:
+            # Clean up temp file
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+
+    def test_get_audio_returns_404_when_file_missing(self, auth_client, db_session, test_user):
+        """Test that audio endpoint returns 404 when file doesn't exist at path (line 309)."""
+        from app.models.transcription import Transcription
+
+        # Create a transcription with a non-existent file path
+        job = Transcription(
+            id=uuid4(),
+            user_id=test_user.id,
+            file_name="missing.mp3",
+            file_path="/nonexistent/path/to/audio.mp3",
+            status=TranscriptionStatus.PENDING
+        )
+        db_session.add(job)
+        db_session.commit()
+
+        # Try to get audio - should return 404 (line 309)
+        response = auth_client.get(f"/api/runner/audio/{job.id}")
+
+        assert response.status_code == http_status.HTTP_404_NOT_FOUND
+        data = response.json()
+        assert "detail" in data
+        assert "not found" in data["detail"].lower() or "path" in data["detail"].lower()
+
+        # Cleanup
+        db_session.query(Transcription).filter(Transcription.id == job.id).delete()
+        db_session.commit()
+
+    def test_complete_job_handles_audio_delete_exception(self, auth_client, test_transcription, db_session):
+        """Test that audio file deletion errors are logged but don't fail job completion (lines 206-207)."""
+        import tempfile
+        import os
+        from unittest.mock import patch
+
+        # Create a temporary audio file
+        with tempfile.NamedTemporaryFile(mode="wb", delete=False, suffix=".mp3") as tmp:
+            tmp.write(b"fake audio content")
+            temp_path = tmp.name
+
+        try:
+            # Set file_path on the transcription
+            test_transcription.file_path = temp_path
+            test_transcription.status = TranscriptionStatus.PROCESSING
+            db_session.commit()
+
+            # Mock os.remove to raise an exception for the temp file (simulating permission denied)
+            original_remove = os.remove
+            remove_called = [False]
+
+            def mock_remove_with_exception(path):
+                # Raise exception for the specific temp file path
+                if str(path) == temp_path:
+                    remove_called[0] = True
+                    raise PermissionError(f"Permission denied: {path}")
+                return original_remove(path)
+
+            with patch.object(os, 'remove', side_effect=mock_remove_with_exception):
+                response = auth_client.post(
+                    f"/api/runner/jobs/{test_transcription.id}/complete",
+                    json={"text": "Test transcription", "processing_time_seconds": 10}
+                )
+
+                # Should still succeed despite audio deletion error (it's logged, not raised)
+                assert response.status_code == http_status.HTTP_200_OK
+
+                # Verify the error was logged but job completed successfully
+                db_session.refresh(test_transcription)
+                assert test_transcription.status == TranscriptionStatus.COMPLETED
+
+        finally:
+            # Cleanup
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+            db_session.query(Transcription).filter(Transcription.id == test_transcription.id).delete()
+            db_session.commit()

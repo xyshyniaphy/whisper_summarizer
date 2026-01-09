@@ -7,6 +7,7 @@ Transcriptions CRUD API エンドポイントテスト
 import pytest
 import uuid
 from fastapi.testclient import TestClient
+from unittest.mock import patch
 from app.models.transcription import Transcription
 from app.db.session import SessionLocal
 
@@ -178,3 +179,86 @@ class TestDeleteAllTranscriptionsEndpoint:
         # もう一度削除（空の状態）
         response = real_auth_client.delete("/api/transcriptions/all")
         assert response.status_code == 200
+
+    def test_delete_all_handles_storage_deletion_error(self, real_auth_client: TestClient, real_auth_user: dict) -> None:
+        """Test that storage deletion errors are logged but don't fail delete all (lines 223-232)."""
+        from app.models.transcription import Transcription
+        from app.db.session import SessionLocal
+        import uuid
+
+        # Create a test transcription
+        db = SessionLocal()
+        trans_id = str(uuid.uuid4())
+        user_id = real_auth_user["raw_uuid"]
+        try:
+            transcription = Transcription(
+                id=trans_id,
+                user_id=user_id,
+                file_name="test_storage_error.wav",
+                storage_path="test.txt.gz",  # Has storage path
+                stage="completed"
+            )
+            db.add(transcription)
+            db.commit()
+
+            # Mock storage service to raise exception
+            from unittest.mock import patch
+            with patch("app.services.storage_service.StorageService.delete_transcription_text", side_effect=Exception("Storage error")):
+                response = real_auth_client.delete("/api/transcriptions/all")
+
+                # Should still succeed despite storage deletion error
+                assert response.status_code == 200
+                data = response.json()
+                assert data["deleted_count"] >= 1
+        finally:
+            db.query(Transcription).filter(Transcription.id == trans_id).delete()
+            db.commit()
+            db.close()
+
+    def test_delete_all_handles_file_deletion_error(self, real_auth_client: TestClient, real_auth_user: dict) -> None:
+        """Test that file deletion errors are logged but don't fail delete all (lines 235, 240, 244-246)."""
+        from app.models.transcription import Transcription
+        from app.db.session import SessionLocal
+        import uuid
+        import tempfile
+        import os
+
+        # Create a temp file
+        with tempfile.NamedTemporaryFile(mode="wb", delete=False, suffix=".wav") as tmp:
+            tmp.write(b"test audio")
+            temp_path = tmp.name
+
+        db = SessionLocal()
+        trans_id = str(uuid.uuid4())
+        user_id = real_auth_user["raw_uuid"]
+        try:
+            transcription = Transcription(
+                id=trans_id,
+                user_id=user_id,
+                file_name="test_file_error.wav",
+                storage_path=None,
+                file_path=temp_path,  # Has file path
+                stage="completed"
+            )
+            db.add(transcription)
+            db.commit()
+
+            # Mock os.remove to raise exception for the specific file
+            original_remove = os.remove
+            def mock_remove_error(path):
+                if str(path) == temp_path:
+                    raise PermissionError(f"Permission denied: {path}")
+                return original_remove(path)
+
+            with patch("os.remove", side_effect=mock_remove_error):
+                response = real_auth_client.delete("/api/transcriptions/all")
+
+                # Should still succeed despite file deletion error
+                assert response.status_code == 200
+        finally:
+            # Cleanup
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+            db.query(Transcription).filter(Transcription.id == trans_id).delete()
+            db.commit()
+            db.close()

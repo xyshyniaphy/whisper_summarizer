@@ -8,7 +8,7 @@ from fastapi import APIRouter, HTTPException, Depends, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from typing import List
-from datetime import datetime
+from datetime import datetime, timezone
 import os
 import logging
 
@@ -125,7 +125,7 @@ async def start_job(
 
     job.status = TranscriptionStatus.PROCESSING
     job.runner_id = request.runner_id
-    job.started_at = datetime.utcnow()
+    job.started_at = datetime.now(timezone.utc)
 
     db.commit()
     logger.info(f"Job {job_id} started by runner {request.runner_id}")
@@ -157,7 +157,7 @@ async def complete_job(
     Returns:
         Success status
     """
-    from datetime import datetime
+    from datetime import datetime, timezone
     from app.db.base_class import Base
     import uuid
     from app.services.storage_service import get_storage_service
@@ -192,7 +192,7 @@ async def complete_job(
     # Update job status
     job.status = TranscriptionStatus.COMPLETED
     job.stage = "completed"
-    job.completed_at = datetime.utcnow()
+    job.completed_at = datetime.now(timezone.utc)
     job.processing_time_seconds = result.processing_time_seconds
 
     # Delete audio file to save disk space
@@ -235,7 +235,7 @@ async def fail_job(
     Returns:
         Failure status
     """
-    from datetime import datetime
+    from datetime import datetime, timezone
     from app.db.base_class import Base
     import uuid
 
@@ -251,7 +251,7 @@ async def fail_job(
     job.status = TranscriptionStatus.FAILED
     job.stage = "failed"
     job.error_message = error_message
-    job.completed_at = datetime.utcnow()
+    job.completed_at = datetime.now(timezone.utc)
 
     db.commit()
     logger.error(f"Job {job_id} failed: {error_message}")

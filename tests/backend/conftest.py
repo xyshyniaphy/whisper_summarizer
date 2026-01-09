@@ -250,6 +250,81 @@ def real_auth_client(real_auth_user: dict) -> Generator[TestClient, None, None]:
         db.close()
 
 
+@pytest.fixture
+def real_admin_user() -> dict:
+    """
+    Admin user fixture for testing admin-specific code paths.
+
+    Creates an admin user with is_admin=True set from the start,
+    ensuring the auth token reflects admin status.
+    """
+    test_user_id = uuid4()
+    return {
+        "id": str(test_user_id),
+        "email": f"test-admin-{str(test_user_id)[:8]}@example.com",
+        "raw_uuid": test_user_id
+    }
+
+
+@pytest.fixture
+def real_admin_client(real_admin_user: dict) -> Generator[TestClient, None, None]:
+    """
+    Admin test client with is_admin=True set from creation.
+
+    This ensures that requests actually execute admin-only code paths
+    like transcriptions.py line 87: `query = db.query(Transcription)`
+    """
+    from app.core.supabase import get_current_active_user
+    from app.models.user import User
+    from app.models.transcription import Transcription
+    from app.models.summary import Summary
+
+    async def override_auth():
+        return {
+            "id": real_admin_user["id"],
+            "email": real_admin_user["email"],
+            "email_confirmed_at": "2025-01-01T00:00:00Z",
+            "user_metadata": {"is_admin": True, "is_active": True}
+        }
+
+    # Create admin user with is_admin=True from the start
+    SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=app_engine)
+    db = SessionLocal()
+    try:
+        user = User(
+            id=real_admin_user["raw_uuid"],
+            email=real_admin_user["email"],
+            is_admin=True,
+            is_active=True
+        )
+        db.add(user)
+        db.commit()
+    except Exception:
+        db.rollback()
+    finally:
+        db.close()
+
+    app.dependency_overrides[get_current_active_user] = override_auth
+
+    with TestClient(app) as client:
+        yield client
+
+    # Cleanup
+    app.dependency_overrides = {}
+    db = SessionLocal()
+    try:
+        db.query(Summary).filter(Summary.transcription_id.in_(
+            db.query(Transcription.id).filter(Transcription.user_id == real_admin_user["raw_uuid"])
+        )).delete(synchronize_session=False)
+        db.query(Transcription).filter(Transcription.user_id == real_admin_user["raw_uuid"]).delete(synchronize_session=False)
+        db.query(User).filter(User.id == real_admin_user["raw_uuid"]).delete()
+        db.commit()
+    except Exception:
+        db.rollback()
+    finally:
+        db.close()
+
+
 # ============================================================================
 # Test Data Fixtures
 # ============================================================================

@@ -470,3 +470,57 @@ class TestCleanupEdgeCases:
 
             # Should delete very old transcriptions
             assert result["deleted_count"] >= 1
+
+    @pytest.mark.asyncio
+
+    async def test_should_handle_task_level_exception(self, db_session: Session):
+        """Should handle task-level exceptions and rollback."""
+        from app.models.user import User
+        from unittest.mock import PropertyMock
+
+        # Create a user
+        user = User(
+            id=uuid.uuid4(),
+            email=f"exception-test-{uuid.uuid4().hex[:8]}@example.com",
+            is_active=True,
+            is_admin=False
+        )
+        db_session.add(user)
+        db_session.flush()
+
+        old_date = datetime.now(timezone.utc) - timedelta(days=35)
+
+        transcription = Transcription(
+            id=uuid.uuid4(),
+            user_id=user.id,
+            file_name="exception_audio.mp3",
+            storage_path="test/exception.txt.gz",
+            stage="completed",
+            created_at=old_date
+        )
+        db_session.add(transcription)
+        db_session.commit()
+
+        # Mock db.query to raise an exception at task level
+        with patch('app.tasks.cleanup.SessionLocal') as mock_session_local:
+            from unittest.mock import MagicMock
+
+            mock_db = MagicMock()
+            mock_session_local.return_value = mock_db
+
+            # Create a proper mock query chain that returns a real list
+            result_list = [transcription]
+
+            # Mock the query chain: query().filter().order_by().limit().all()
+            mock_db.query.return_value.filter.return_value.order_by.return_value.limit.return_value.all.return_value = result_list
+
+            # Mock commit to raise an exception
+            mock_db.commit.side_effect = Exception("Database connection lost")
+
+            result = await cleanup_expired_transcriptions()
+
+            # Should handle exception and add to errors
+            assert len(result["errors"]) > 0
+            assert any("Database connection lost" in error for error in result["errors"])
+            # Verify rollback was called
+            mock_db.rollback.assert_called_once()

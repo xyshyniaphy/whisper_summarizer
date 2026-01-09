@@ -201,3 +201,65 @@ class TestAccessSharedTranscriptionEndpoint:
             db.query(User).filter(User.id == real_auth_user["raw_uuid"]).delete()
             db.commit()
             db.close()
+
+
+class TestSharedTranscriptionNotFound:
+    """Test shared transcription edge cases."""
+
+    def test_get_shared_transcription_when_transcription_deleted(self, test_client: TestClient) -> None:
+        """Test accessing shared link when transcription has been deleted (line 51)."""
+        import datetime
+        from app.db.session import SessionLocal
+        from app.models.share_link import ShareLink
+        from app.models.transcription import Transcription
+
+        db = SessionLocal()
+
+        try:
+            # Create a user
+            user = User(
+                id=str(uuid.uuid4()),
+                email="test-share-notfound@example.com",
+                is_active=True
+            )
+            db.add(user)
+            db.flush()
+
+            # Create a transcription first
+            transcription = Transcription(
+                id=str(uuid.uuid4()),
+                user_id=user.id,
+                file_name="test.mp3",
+                status="pending"
+            )
+            db.add(transcription)
+            db.flush()
+
+            # Create a share link
+            share_link = ShareLink(
+                id=str(uuid.uuid4()),
+                transcription_id=transcription.id,
+                share_token="test_token",
+                expires_at=datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=1)
+            )
+            db.add(share_link)
+            db.commit()
+            db.refresh(share_link)
+
+            # Now delete the transcription (simulating cascade delete)
+            db.delete(transcription)
+            db.commit()
+
+            # Try to access the shared transcription - should get 404 (line 51)
+            response = test_client.get("/api/shared/test_token")
+
+            # Should return 404 because transcription was deleted (line 51)
+            assert response.status_code == 404
+            assert "不存在" in response.json()["detail"]
+
+        finally:
+            db.query(ShareLink).filter(ShareLink.share_token == "test_token").delete()
+            db.query(Transcription).filter(Transcription.file_name == "test.mp3").delete()
+            db.query(User).filter(User.email == "test-share-notfound@example.com").delete()
+            db.commit()
+            db.close()

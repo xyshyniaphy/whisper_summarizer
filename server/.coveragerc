@@ -1,0 +1,36 @@
+# Coverage configuration
+# Exclude deprecated code and unreachable lines from coverage tracking
+
+[run]
+source = app
+omit =
+    # Deprecated - moved to runner
+    app/services/process_audio.py
+
+    # Test files
+    tests/*
+
+[report]
+# Line exclusions for unreachable code
+exclude_lines =
+    # Pragma comments (developer-marked exclusions)
+    pragma: no cover
+
+    # Debugging code
+    def __repr__
+    raise AssertionError
+    raise NotImplementedError
+
+    # Abstract methods
+    @abstractmethod
+
+    # Type checking
+    if TYPE_CHECKING:
+    if typing.TYPE_CHECKING:
+
+precision = 2
+show_missing = True
+skip_covered = False
+
+[html]
+directory = htmlcov

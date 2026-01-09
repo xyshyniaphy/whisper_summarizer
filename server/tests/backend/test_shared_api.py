@@ -251,3 +251,55 @@ def test_get_shared_transcription_without_text_file(test_client, db_session):
     assert response.status_code == 200
     data = response.json()
     assert data["text"] == ""
+
+
+def test_get_shared_transcription_returns_404_when_transcription_deleted(test_client, db_session):
+    """Test that accessing shared link returns 404 when transcription is deleted (line 51)."""
+    from app.models.user import User
+    from app.models.share_link import ShareLink
+    import uuid
+    from sqlalchemy import text
+
+    # Create a user
+    user = User(
+        id=uuid.uuid4(),
+        email=f"shared-deleted-{uuid.uuid4().hex[:8]}@example.com",
+        is_active=True,
+        is_admin=False
+    )
+    db_session.add(user)
+    db_session.commit()
+
+    # Create transcription
+    trans = Transcription(
+        id=uuid.uuid4(),
+        user_id=user.id,
+        file_name="test.m4a",
+        file_path="/tmp/test.m4a",
+        status=TranscriptionStatus.PENDING
+    )
+    db_session.add(trans)
+    db_session.commit()
+
+    # Create share link
+    share_link = ShareLink(
+        id=uuid.uuid4(),
+        transcription_id=trans.id,
+        share_token="deleted_trans_token_123",
+        expires_at=None
+    )
+    db_session.add(share_link)
+    db_session.commit()
+
+    # Store the share token before deleting
+    share_token = share_link.share_token
+
+    # Delete ONLY the transcription row using raw SQL to bypass cascade
+    # This allows us to test the case where share_link exists but transcription doesn't
+    db_session.execute(text("DELETE FROM transcriptions WHERE id = :trans_id"), {"trans_id": str(trans.id)})
+    db_session.commit()
+
+    # Try to access shared transcription - share link exists but transcription doesn't
+    # This should hit line 51 in shared.py where transcription is None
+    response = test_client.get(f"/api/shared/{share_token}")
+    assert response.status_code == 404

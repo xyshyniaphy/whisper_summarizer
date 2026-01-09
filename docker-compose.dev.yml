@@ -150,8 +150,7 @@ services:
   frontend:
     build:
       context: ./frontend
-      dockerfile: Dockerfile
-      target: development
+      dockerfile: Dockerfile.dev
     container_name: whisper_frontend_dev
     environment:
       VITE_SUPABASE_URL: ${SUPABASE_URL}
@@ -164,11 +163,10 @@ services:
       - ./frontend:/app
       # Logs directory
       - ./logs:/app/logs
-      # node_modules excluded
+      # node_modules excluded (preserves container's node_modules)
       - /app/node_modules
       # Vite cache excluded
       - /app/.vite
-    command: /bin/sh -c "bun run dev -- --host 0.0.0.0 2>&1 | tee /app/logs/frontend.log"
     depends_on:
       - server
     networks:

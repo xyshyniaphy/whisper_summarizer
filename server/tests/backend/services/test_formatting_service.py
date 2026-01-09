@@ -480,3 +480,74 @@ class TestFormattingEdgeCases:
         result = service.format_transcription_text("\n\n\n\n")
 
         assert result is not None
+
+    @patch('app.core.glm.get_glm_client')
+    def test_split_chunks_searches_from_end_when_no_middle_whitespace(self, mock_get_glm, mock_glm_client):
+        """Test that chunk splitting searches from end when no whitespace in middle (lines 131-134)."""
+        mock_get_glm.return_value = mock_glm_client
+        service = TextFormattingService()
+
+        # Create text larger than max_chunk_bytes (10000 bytes) with whitespace only at the end
+        # This forces the backwards search (lines 131-134)
+        large_text_no_middle_whitespace = "a" * 10500 + " " + "b" * 1000
+
+        chunks = service.split_text_into_chunks(large_text_no_middle_whitespace)
+
+        # Should split into multiple chunks
+        assert len(chunks) >= 2
+        # First chunk should be mostly 'a's
+        assert "a" in chunks[0]
+        # Second chunk should have 'b's
+        assert any("b" in chunk for chunk in chunks[1:])
+
+    @patch('app.core.glm.get_glm_client')
+    def test_split_chunks_force_split_when_no_whitespace_at_all(self, mock_get_glm, mock_glm_client):
+        """Test that chunk splitting forces split at max_bytes when no whitespace found (line 138)."""
+        mock_get_glm.return_value = mock_glm_client
+        service = TextFormattingService()
+
+        # Create text with absolutely no whitespace, larger than max_chunk_bytes (10000)
+        # This forces the force-split at max_chunk_bytes (line 138)
+        text_no_whitespace = "a" * 15000
+
+        chunks = service.split_text_into_chunks(text_no_whitespace)
+
+        # Should split into multiple chunks
+        assert len(chunks) >= 2
+        # All chunks combined should have the same total content
+        combined = "".join(chunks)
+        assert len(combined) == len(text_no_whitespace)
+
+    @patch('app.core.glm.get_glm_client')
+    def test_formats_single_chunk_without_chunking(self, mock_get_glm, mock_glm_client):
+        """Test that formatting a text that fits in one chunk uses the single-chunk path (lines 238-239)."""
+        mock_get_glm.return_value = mock_glm_client
+        service = TextFormattingService()
+        # Create text that's between 50 and max_chunk_bytes (10000)
+        # This will be formatted as a single chunk (lines 238-239)
+        medium_text = "测试文本。" * 100  # About 500 characters, well within limits
+
+        result = service.format_transcription_text(medium_text)
+
+        # Should successfully format
+        assert result is not None
+        # Verify formatting occurred
+        assert len(result) > 0
+
+    @patch('app.core.glm.get_glm_client')
+    def test_split_chunks_handles_very_long_word(self, mock_get_glm, mock_glm_client):
+        """Test that chunk splitting handles a single very long word (no whitespace)."""
+        mock_get_glm.return_value = mock_glm_client
+        service = TextFormattingService()
+
+        # Create a single "word" longer than max_chunk_bytes
+        # This exercises the force-split path
+        very_long_word = "superlongword" * 1000  # Much longer than 3000 bytes
+
+        chunks = service.split_text_into_chunks(very_long_word)
+
+        # Should split it into multiple chunks
+        assert len(chunks) >= 2
+        # All chunks combined should have the same total content
+        combined = "".join(chunks)
+        assert len(combined) == len(very_long_word)

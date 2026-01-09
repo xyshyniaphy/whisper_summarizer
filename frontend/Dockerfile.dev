@@ -1,0 +1,27 @@
+# Development Dockerfile for Frontend
+# Optimized for hot reload and fast development workflow
+
+FROM oven/bun:1-alpine
+
+WORKDIR /app
+
+# Install build dependencies (for native modules if needed)
+RUN apk add --no-cache \
+    python3 \
+    make \
+    g++ \
+    && rm -rf /var/cache/apk/*
+
+# Copy package files
+COPY package.json bun.lockb* ./
+
+# Install all dependencies (including dev dependencies)
+RUN bun install
+
+# Expose Vite dev server port
+EXPOSE 3000
+
+# Start Vite dev server with HMR
+# --host 0.0.0.0: Accept connections from anywhere (Docker networking)
+# --strictPort: Fail if port is already in use (helps detect conflicts)
+CMD ["bun", "run", "dev", "--", "--host", "0.0.0.0", "--strictPort"]
