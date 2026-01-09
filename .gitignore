@@ -3,6 +3,7 @@
 .env.local
 .env.*.local
 .env.prod
+prd_server_info
 
 # Pythonキャッシュ
 __pycache__/

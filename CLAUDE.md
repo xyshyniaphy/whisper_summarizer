@@ -772,3 +772,98 @@ GPU Server (RunPod, Lambda Labs, etc.):
 ```
 1 Server → N Runners (each with unique RUNNER_ID)
 ```
+
+## Production Deployment
+
+### Production Server Info
+
+**Location**: `ssh root@192.3.249.169`
+**Project Path**: `/root/whisper_summarizer`
+**URL**: https://w.198066.xyz
+
+**IMPORTANT**: Production server is **low spec** - DO NOT build images on production server.
+
+### Deployment Workflow
+
+**Build images locally, push to registry, pull on production:**
+
+```bash
+# 1. Build and push images LOCALLY (not on production server)
+docker build -t xyshyniaphy/whisper_summarizer-server:latest -f server/Dockerfile server
+docker build -t xyshyniaphy/whisper_summarizer-frontend:latest -f frontend/Dockerfile.prod frontend
+docker push xyshyniaphy/whisper_summarizer-server:latest
+docker push xyshyniaphy/whisper_summarizer-frontend:latest
+
+# 2. Connect to production server and pull images
+ssh root@192.3.249.169
+cd /root/whisper_summarizer
+
+# 3. Pull latest code
+git pull
+
+# 4. Pull and restart services
+docker compose -f docker-compose.prod.yml pull
+docker compose -f docker-compose.prod.yml up -d
+
+# 5. View logs
+docker compose -f docker-compose.prod.yml logs -f server
+```
+
+### What to Deploy
+
+| Service | Deploy to Production? | Notes |
+|---------|----------------------|-------|
+| Frontend | ✅ Yes | Static files, lightweight |
+| Server | ✅ Yes | API server, lightweight |
+| Runner | ❌ NO | Runner runs on separate GPU machine |
+
+**Runner is NOT deployed to production server** - it runs on a separate GPU machine that connects to the production server via `SERVER_URL`.
+
+### Quick Deploy Script
+
+```bash
+# One-line deploy (run from local machine)
+docker build -t xyshyniaphy/whisper_summarizer-server:latest -f server/Dockerfile server && \
+docker push xyshyniaphy/whisper_summarizer-server:latest && \
+ssh root@192.3.249.169 "cd /root/whisper_summarizer && git pull && docker compose -f docker-compose.prod.yml pull && docker compose -f docker-compose.prod.yml up -d"
+```
+
+### Debugging on Production Server
+
+```bash
+# Connect to production server
+ssh root@192.3.249.169
+
+# Check container status
+docker ps -a
+
+# View logs
+docker logs whisper_server_prd --tail=100
+docker logs whisper_web_prd --tail=100
+
+# Restart services
+cd /root/whisper_summarizer
+docker compose -f docker-compose.prod.yml restart server
+
+# Check database
+docker exec -it whisper_postgres_prd psql -U postgres -d whisper_summarizer
+
+# Execute commands in server container
+docker exec -it whisper_server_prd python -c "from app.db.session import engine; from app import models; from app.db.base_class import Base; Base.metadata.create_all(bind=engine)"
+```
+
+### Common Issues
+
+**DELETE 500 Error**:
+- Check for RecursionError in logs: `docker logs whisper_server_prd | grep -i recursion`
+- Usually caused by function calling itself instead of getting user ID
+
+**Container unhealthy**:
+- Check health status: `docker ps`
+- View logs: `docker logs whisper_server_prd`
+- Common issue: Database not ready when server starts
+
+**Images not updating**:
+- Ensure you pushed to Docker Hub: `docker push xyshyniaphy/whisper_summarizer-server:latest`
+- Pull with digest: `docker pull xyshyniaphy/whisper_summarizer-server:latest@sha256:...`
+- Force recreate: `docker compose -f docker-compose.prod.yml up -d --force-recreate server`
