@@ -16,12 +16,13 @@ router = APIRouter()
 
 @router.get("/me")
 async def get_me(
-    current_db_user: User = Depends(require_active)
+    current_db_user: User = Depends(get_current_db_user)
 ):
     """
     現在のユーザー情報を取得
 
     Returns user info from local database including activation status.
+    This endpoint works for both active and inactive accounts.
     """
     # Combine Supabase auth data with local database data
     return {

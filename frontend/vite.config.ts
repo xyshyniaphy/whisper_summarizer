@@ -12,7 +12,7 @@ export default defineConfig({
     },
     proxy: {
       '/api': {
-        target: 'http://backend:8000',
+        target: 'http://server:8000',
         changeOrigin: true,
         // Enable WebSocket support (also helps with SSE streaming)
         ws: true,
