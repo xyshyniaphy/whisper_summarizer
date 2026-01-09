@@ -74,6 +74,7 @@ services:
       PYTHONUNBUFFERED: 1
       TZ: UTC
     volumes:
+      - ./data/uploads:/app/data/uploads:rw
       - ./data/transcribes:/app/data/transcribes:rw
     depends_on:
       postgres:
