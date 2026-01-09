@@ -55,7 +55,7 @@ http {
 
     # Upstream frontend server
     upstream frontend {
-        server frontend:80;
+        server frontend:3000;
         keepalive 16;
     }
 
