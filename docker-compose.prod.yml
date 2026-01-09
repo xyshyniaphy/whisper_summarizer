@@ -49,9 +49,7 @@ services:
   # FastAPI Backend Server (Internal Only)
   # ========================================
   server:
-    build:
-      context: ./server
-      dockerfile: Dockerfile
+    image: xyshyniaphy/whisper_summarizer-server:latest
     container_name: whisper_server_prd
     restart: unless-stopped
     environment:
@@ -94,13 +92,7 @@ services:
   # Frontend (Production Build)
   # ========================================
   frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile.prod
-      args:
-        VITE_SUPABASE_URL: ${SUPABASE_URL}
-        VITE_SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
-        VITE_BACKEND_URL: ${VITE_BACKEND_URL:-/api}
+    image: xyshyniaphy/whisper_summarizer-frontend:latest
     container_name: whisper_frontend_prd
     restart: unless-stopped
     networks:

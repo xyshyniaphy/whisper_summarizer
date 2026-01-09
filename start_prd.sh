@@ -144,9 +144,9 @@ if lsof -Pi :3080 -sTCP:LISTEN -t >/dev/null 2>&1; then
     exit 1
 fi
 
-# Note: Images are built locally using Dockerfile.prod
-# No need to pull - docker compose will use locally built images
-log_info "Using locally built Docker images..."
+# Pull pre-built images from Docker registry
+log_info "Pulling pre-built Docker images from registry..."
+$DOCKER_COMPOSE -f docker-compose.prod.yml pull
 
 # Start services
 log_info "Starting production services..."
