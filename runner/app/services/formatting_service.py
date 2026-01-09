@@ -253,6 +253,56 @@ class TextFormattingService:
 
         return formatted_text
 
+    def format_transcription(
+        self,
+        raw_text: str,
+        language: Optional[str] = None
+    ) -> dict:
+        """
+        Format transcribed text and return both formatted text and summary.
+
+        This method matches the interface expected by AudioProcessor, which
+        expects a dict with 'formatted_text' and 'summary' keys.
+
+        Args:
+            raw_text: Raw transcribed text from Whisper
+            language: Language code (e.g., "zh", "en", "ja")
+
+        Returns:
+            Dict with keys:
+            - formatted_text: The formatted transcription text
+            - summary: Generated summary (empty string for now)
+        """
+        if not raw_text or len(raw_text.strip()) < 50:
+            # Too short to format, return as-is
+            logger.info(f"Text too short to format ({len(raw_text)} chars), returning original")
+            return {
+                "formatted_text": raw_text,
+                "summary": ""
+            }
+
+        try:
+            # Format the text using the existing method
+            formatted_text = self.format_transcription_text(raw_text)
+
+            logger.info(f"Formatting complete: {len(raw_text)} -> {len(formatted_text)} chars")
+
+            # For now, we don't generate a separate summary
+            # The formatted_text is the punctuation-enhanced version
+            return {
+                "formatted_text": formatted_text,
+                "summary": ""  # TODO: Implement summarization if needed
+            }
+        except Exception as e:
+            logger.error(f"Error in format_transcription: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            # Return original text on failure
+            return {
+                "formatted_text": raw_text,
+                "summary": ""
+            }
+
 
 # Singleton instance
 _formatting_service: Optional[TextFormattingService] = None
