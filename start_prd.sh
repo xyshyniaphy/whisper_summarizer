@@ -146,7 +146,31 @@ fi
 
 # Pull pre-built images from Docker registry
 log_info "Pulling pre-built Docker images from registry..."
-$DOCKER_COMPOSE -f docker-compose.prod.yml pull
+log_info "This ensures you have the latest version from Docker Hub..."
+echo ""
+echo "Pulling images:"
+echo "  → xyshyniaphy/whisper_summarizer-server:latest"
+echo "  → xyshyniaphy/whisper_summarizer-frontend:latest"
+echo "  → postgres:18-alpine"
+echo "  → nginx:1.25-alpine"
+echo ""
+
+if ! $DOCKER_COMPOSE -f docker-compose.prod.yml pull; then
+    log_error "Failed to pull images from Docker Hub"
+    echo ""
+    echo "Possible reasons:"
+    echo "  - Network connectivity issues"
+    echo "  - Docker Hub is unavailable"
+    echo "  - Image names are incorrect"
+    echo ""
+    echo "Troubleshooting:"
+    echo "  1. Check internet connection: ping hub.docker.com"
+    echo "  2. Verify Docker is running: docker ps"
+    echo "  3. Try manual pull: docker pull xyshyniaphy/whisper_summarizer-server:latest"
+    exit 1
+fi
+echo ""
+log_success "All images pulled successfully"
 
 # Start services
 log_info "Starting production services..."
