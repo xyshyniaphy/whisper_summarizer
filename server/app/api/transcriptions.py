@@ -35,6 +35,26 @@ router = APIRouter()
 # Helper Functions
 # ============================================================================
 
+def get_local_user_id(
+    current_user: dict,
+    db: Session
+) -> str:
+    """
+    Get local database user ID from Supabase user dict.
+    Syncs user to local database if not exists.
+
+    This is a helper for endpoints that use get_current_active_user
+    (Supabase auth) but need the local database user ID.
+    """
+    from app.models.user import User
+    from app.api.audio import get_or_create_user
+
+    user_id = get_local_user_id(current_user, db)
+    user_email = current_user.get("email", "")
+    local_user = get_or_create_user(db, user_id, user_email)
+    return str(local_user.id)
+
+
 def _format_fake_srt(text: str) -> str:
   """
   Generate fake SRT format from plain text (fallback for old transcriptions).
@@ -149,7 +169,7 @@ async def list_transcriptions(
 async def get_transcription(
     transcription_id: str,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_active_user)
+    current_db_user: User = Depends(get_current_db_user)
 ):
     """
     文字起こし詳細を取得
@@ -159,14 +179,21 @@ async def get_transcription(
         transcription_uuid = UUID(transcription_id)
     except ValueError:
         raise HTTPException(status_code=422, detail="Invalid transcription ID format")
-    transcription = db.query(Transcription).filter(
-        Transcription.id == transcription_uuid,
-        Transcription.user_id == current_user.get("id")
-    ).first()
-    
+
+    # Admin users can see any transcription, regular users only their own
+    if current_db_user.is_admin:
+        transcription = db.query(Transcription).filter(
+            Transcription.id == transcription_uuid
+        ).first()
+    else:
+        transcription = db.query(Transcription).filter(
+            Transcription.id == transcription_uuid,
+            Transcription.user_id == current_db_user.id
+        ).first()
+
     if not transcription:
         raise HTTPException(status_code=404, detail="文字起こしが見つかりません")
-    
+
     return transcription
 
 
@@ -194,7 +221,7 @@ async def delete_all_transcriptions(
 
     # Get all user's transcriptions
     transcriptions = db.query(Transcription).filter(
-        Transcription.user_id == current_user.get("id")
+        Transcription.user_id == get_local_user_id(current_user, db)
     ).all()
 
     if not transcriptions:
@@ -274,7 +301,7 @@ async def delete_transcription(
         raise HTTPException(status_code=422, detail="Invalid transcription ID format")
     transcription = db.query(Transcription).filter(
         Transcription.id == transcription_uuid,
-        Transcription.user_id == current_user.get("id")
+        Transcription.user_id == get_local_user_id(current_user, db)
     ).first()
 
     if not transcription:
@@ -392,7 +419,7 @@ async def download_transcription(
     raise HTTPException(status_code=422, detail="Invalid transcription ID format")
   transcription = db.query(Transcription).filter(
     Transcription.id == transcription_uuid,
-    Transcription.user_id == current_user.get("id")
+    Transcription.user_id == get_local_user_id(current_user, db)
   ).first()
 
   if not transcription:
@@ -505,7 +532,7 @@ async def download_summary_docx(
         raise HTTPException(status_code=422, detail="Invalid transcription ID format")
     transcription = db.query(Transcription).filter(
         Transcription.id == transcription_uuid,
-        Transcription.user_id == current_user.get("id")
+        Transcription.user_id == get_local_user_id(current_user, db)
     ).first()
 
     if not transcription:
@@ -668,7 +695,7 @@ async def download_notebooklm_guideline(
 
     transcription = db.query(Transcription).filter(
         Transcription.id == transcription_uuid,
-        Transcription.user_id == current_user.get("id")
+        Transcription.user_id == get_local_user_id(current_user, db)
     ).first()
 
     if not transcription:
@@ -731,7 +758,7 @@ async def get_chat_history(
     # Verify ownership
     transcription = db.query(Transcription).filter(
         Transcription.id == transcription_uuid,
-        Transcription.user_id == current_user.get("id")
+        Transcription.user_id == get_local_user_id(current_user, db)
     ).first()
 
     if not transcription:
@@ -766,7 +793,7 @@ async def send_chat_message(
     # Verify ownership
     transcription = db.query(Transcription).filter(
         Transcription.id == transcription_uuid,
-        Transcription.user_id == current_user.get("id")
+        Transcription.user_id == get_local_user_id(current_user, db)
     ).first()
 
     if not transcription:
@@ -783,7 +810,7 @@ async def send_chat_message(
     # Save user message
     user_message = ChatMessage(
         transcription_id=transcription_uuid,
-        user_id=current_user.get("id"),
+        user_id=get_local_user_id(current_user, db),
         role="user",
         content=user_content
     )
@@ -830,7 +857,7 @@ async def send_chat_message(
     # Save assistant message
     assistant_message = ChatMessage(
         transcription_id=transcription_uuid,
-        user_id=current_user.get("id"),
+        user_id=get_local_user_id(current_user, db),
         role="assistant",
         content=assistant_content
     )
@@ -865,7 +892,7 @@ async def send_chat_message_stream(
     # Verify ownership
     transcription = db.query(Transcription).filter(
         Transcription.id == transcription_uuid,
-        Transcription.user_id == current_user.get("id")
+        Transcription.user_id == get_local_user_id(current_user, db)
     ).first()
 
     if not transcription:
@@ -882,7 +909,7 @@ async def send_chat_message_stream(
     # Save user message immediately
     user_message = ChatMessage(
         transcription_id=transcription_uuid,
-        user_id=current_user.get("id"),
+        user_id=get_local_user_id(current_user, db),
         role="user",
         content=user_content
     )
@@ -942,7 +969,7 @@ async def send_chat_message_stream(
             logger.info(f"[ChatStream] Stream complete, saving assistant message (length: {len(full_response)})")
             assistant_message = ChatMessage(
                 transcription_id=transcription_uuid,
-                user_id=current_user.get("id"),
+                user_id=get_local_user_id(current_user, db),
                 role="assistant",
                 content=full_response
             )
@@ -959,7 +986,7 @@ async def send_chat_message_stream(
             # Save error message
             assistant_message = ChatMessage(
                 transcription_id=transcription_uuid,
-                user_id=current_user.get("id"),
+                user_id=get_local_user_id(current_user, db),
                 role="assistant",
                 content="抱歉，AI回复失败，请稍后再试。"
             )
@@ -1004,7 +1031,7 @@ async def create_share_link(
     # Verify ownership
     transcription = db.query(Transcription).filter(
         Transcription.id == transcription_uuid,
-        Transcription.user_id == current_user.get("id")
+        Transcription.user_id == get_local_user_id(current_user, db)
     ).first()
 
     if not transcription:
