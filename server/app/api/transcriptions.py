@@ -49,7 +49,7 @@ def get_local_user_id(
     from app.models.user import User
     from app.api.audio import get_or_create_user
 
-    user_id = get_local_user_id(current_user, db)
+    user_id = current_user.get("id")  # Supabase user ID
     user_email = current_user.get("email", "")
     local_user = get_or_create_user(db, user_id, user_email)
     return str(local_user.id)
