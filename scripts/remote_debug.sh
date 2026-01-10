@@ -41,20 +41,26 @@ log_success() { echo -e "${GREEN}[SUCCESS]${NC} $1"; }
 log_error() { echo -e "${RED}[ERROR]${NC} $1"; }
 log_warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 
-# Execute curl in remote container
-remote_curl() {
+# Execute Python request in remote container (no curl available)
+remote_request() {
     local method=${1:-GET}
     local endpoint=$2
     local data=${3:-}
-    local extra_args=${4:-}
 
-    ssh "$SERVER" "docker exec $CONTAINER curl -s -X $method $extra_args $API_BASE$endpoint $data"
+    local python_code=""
+    if [ "$method" = "GET" ]; then
+        python_code="import urllib.request, json; req = urllib.request.Request('$API_BASE$endpoint'); print(urllib.request.urlopen(req).read().decode())"
+    else
+        python_code="import urllib.request, json; req = urllib.request.Request('$API_BASE$endpoint', method='$method'); print(urllib.request.urlopen(req).read().decode())"
+    fi
+
+    ssh "$SERVER" "docker exec $CONTAINER python -c \"$python_code\""
 }
 
 # Main commands
 cmd_transcriptions() {
     log_info "Fetching transcriptions from production server..."
-    remote_curl GET "/api/transcriptions" | jq .
+    remote_request "GET" "/api/transcriptions"
 }
 
 cmd_upload() {
@@ -99,7 +105,7 @@ cmd_status() {
     log_info "Production server status:"
     echo ""
 
-    ssh "$SERVER" "docker exec $CONTAINER curl -s $API_BASE/health" | jq .
+    ssh "$SERVER" "docker exec $CONTAINER python -c \"import urllib.request; print(urllib.request.urlopen('$API_BASE/health').read().decode())\""
 
     echo ""
     log_info "Container status:"

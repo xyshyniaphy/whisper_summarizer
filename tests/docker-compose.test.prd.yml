@@ -1,0 +1,85 @@
+# Docker Compose for Testing Against Remote Production Server via SSH
+#
+# This setup runs backend tests in a local Docker container that:
+# 1. SSH's into the production server
+# 2. Executes Python commands via docker exec (localhost auth bypass)
+# 3. Validates production API responses
+#
+# Usage:
+#   ./tests/run.prd.sh                    # Run all tests
+#   ./tests/run.prd.sh test_supabase_auth # Run specific test file
+#   ./tests/run.prd.sh -k "auth_bypass"   # Run tests matching pattern
+#
+# Environment:
+#   REMOTE_DEBUG_SERVER    Production SSH server (default: root@192.3.249.169)
+#   REMOTE_DEBUG_CONTAINER Production container name (default: whisper_server_prd)
+
+services:
+  test-runner:
+    build:
+      context: ..
+      dockerfile: tests/Dockerfile.test
+    container_name: whisper_test_prd_runner
+    environment:
+      # SSH connection to production server
+      REMOTE_DEBUG_SERVER: "${REMOTE_DEBUG_SERVER:-root@192.3.249.169}"
+      REMOTE_DEBUG_CONTAINER: "${REMOTE_DEBUG_CONTAINER:-whisper_server_prd}"
+
+      # Test configuration
+      TEST_ENVIRONMENT: production
+      PYTHONDONTWRITEBYTECODE: 1
+      PYTHONUNBUFFERED: 1
+      PYTHONPATH: /app
+
+      # Supabase config (required by app imports)
+      SUPABASE_URL: ${SUPABASE_URL}
+      SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
+
+      # Database (for model tests)
+      DATABASE_URL: postgresql+psycopg2://postgres:postgres@test-postgres:5432/test_db
+
+      # GLM API
+      GLM_API_KEY: ${GLM_API_KEY}
+
+    volumes:
+      # Mount test files
+      - ./backend:/app/tests
+      # Mount server app code for imports
+      - ../server/app:/app/app:ro
+      # SSH key for production access (using ed25519)
+      - ~/.ssh/id_ed25519:/root/.ssh/id_ed25519:ro
+      - ~/.ssh/id_ed25519.pub:/root/.ssh/id_ed25519.pub:ro
+      - ~/.ssh/known_hosts:/root/.ssh/known_hosts:ro
+
+    networks:
+      - test_network
+
+    # Keep container running for interactive testing
+    stdin_open: true
+    tty: true
+
+    depends_on:
+      test-postgres:
+        condition: service_healthy
+
+    command: /bin/sh -c "tail -f /dev/null"
+
+  test-postgres:
+    image: postgres:18-alpine
+    container_name: whisper_test_prd_postgres
+    environment:
+      POSTGRES_DB: test_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    networks:
+      - test_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+networks:
+  test_network:
+    driver: bridge
