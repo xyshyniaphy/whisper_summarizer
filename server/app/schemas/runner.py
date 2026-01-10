@@ -32,6 +32,7 @@ class JobCompleteRequest(BaseModel):
     """Request to mark job as completed."""
     text: str
     summary: Optional[str] = None
+    notebooklm_guideline: Optional[str] = None
     processing_time_seconds: int
 
 

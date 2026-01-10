@@ -183,13 +183,43 @@ async def complete_job(
         logger.error(f"Failed to save transcription text for job {job_id}: {e}")
         # Don't fail the job if text save fails, log and continue
 
-    # Save summary if provided
+    # Save summary to database if provided
     if result.summary:
         try:
-            storage_service.save_formatted_text(str(job.id), result.summary)
-            logger.info(f"Saved summary for job {job_id}")
+            from app.models.summary import Summary
+            import os
+
+            # Check if summary already exists
+            existing_summary = db.query(Summary).filter(
+                Summary.transcription_id == job.id
+            ).first()
+
+            if not existing_summary:
+                new_summary = Summary(
+                    transcription_id=job.id,
+                    summary_text=result.summary,
+                    model_name=os.getenv("GLM_MODEL", "GLM-4.5-Air")
+                )
+                db.add(new_summary)
+                logger.info(f"Saved summary to database for job {job_id}")
+            else:
+                logger.info(f"Summary already exists for job {job_id}, skipping")
         except Exception as e:
-            logger.error(f"Failed to save summary for job {job_id}: {e}")
+            logger.error(f"Failed to save summary to database for job {job_id}: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+
+    # Save NotebookLM guideline if provided
+    if result.notebooklm_guideline:
+        try:
+            from app.services.storage_service import get_storage_service
+            storage_service = get_storage_service()
+            storage_service.save_notebooklm_guideline(str(job.id), result.notebooklm_guideline)
+            logger.info(f"Saved NotebookLM guideline for job {job_id}")
+        except Exception as e:
+            logger.error(f"Failed to save NotebookLM guideline for job {job_id}: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
 
     # Update job status
     job.status = TranscriptionStatus.COMPLETED
