@@ -167,6 +167,7 @@ class JobClient:
                 json={
                     "text": result.text,
                     "summary": result.summary,
+                    "notebooklm_guideline": result.notebooklm_guideline,
                     "processing_time_seconds": result.processing_time_seconds
                 }
             )

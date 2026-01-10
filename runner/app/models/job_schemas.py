@@ -18,6 +18,7 @@ class JobResult(BaseModel):
     """Result of processing a job."""
     text: str
     summary: Optional[str] = None
+    notebooklm_guideline: Optional[str] = None
     processing_time_seconds: int
 
 

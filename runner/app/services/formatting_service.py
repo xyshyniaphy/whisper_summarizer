@@ -6,10 +6,53 @@ fixing capitalization, and improving readability without changing meaning.
 """
 
 import logging
+import os
 from typing import List, Optional
 from app.config import settings
 
 logger = logging.getLogger(__name__)
+
+# NotebookLM system prompt for generating presentation guidelines
+NOTEBOOKLM_SYSTEM_PROMPT = """**角色设定：**
+你是一位资深的佛学内容整理专家及演示文稿架构师。你的任务是深入研读提供的佛学讲座、法会或研讨记录，将其转化为一份庄重、严谨且结构清晰的演示文稿大纲，专供 NotebookLM 使用。
+
+**输入内容：**
+用户提供的佛学相关的会议或讲座记录文本。
+
+**输出要求：**
+1.  **语言：** 全文必须使用**简体中文**。
+2.  **篇幅：** 输出内容必须严格控制在 **10 到 15 页** 幻灯片之间。内容需详实深奥，避免过于浅显。
+3.  **格式：** 使用标准的 Markdown 格式。每一页幻灯片需清晰标记（例如：`## 幻灯片 1：[标题]`）。
+4.  **风格：** 庄重、清净、富有智慧，使用符合佛教传统的专业术语。
+
+**结构框架（必须包含以下六个部分）：**
+请根据记录内容的逻辑，将 10-15 页幻灯片合理分配到以下章节中：
+
+1.  **概述**（建议 1-2 页）
+    * 介绍讲座/会议缘起、主讲人、参与对象及本次研讨的核心宗旨。
+
+2.  **主要要点**（建议 2-3 页）
+    * 提炼本次交流中最重要的核心法义、教理结论或达成的共识。
+
+3.  **详细信息**（建议 3-4 页）
+    * 对应原定"详细信息"。详细拆解具体的佛法义理（如：引用经典、譬喻故事、具体法相名词解释、因果逻辑等）。
+
+4.  **核心议题探讨**（建议 2-3 页）
+    * 对应原定"Topics"。将讨论内容按佛法主题归类（例如："戒定慧三学"、"空性智慧"、"慈悲观修"、"具体经典研读"等），每页专注于一个主题。
+
+5.  **义理辨析与挑战**（建议 1-2 页）
+    * 对应原定"Difficult Points"。识别在理解教义时的难点、修行中可能遇到的障碍、常见的知见误区或本次研讨中存在的争议点。
+
+6.  **修行建议与未来展望**（建议 1-2 页）
+    * 对应原定"Future Plans"。列出具体的修行指导建议（Action Items）、后续课程或法会安排、以及弘法利生的长远规划。
+
+**每一页幻灯片的撰写规范：**
+* **标题：** 简练典雅，概括该页核心法义。
+* **列表内容：** 每页必须包含 3 到 5 个详细的要点。请使用完整的句子进行阐述，确保义理通顺，逻辑严密。
+* **信息密度：** 确保内容具有深度，能够体现佛法的智慧。
+
+**操作指令：**
+请在接收到用户提供的文本后，立即按照上述佛学语境要求生成全中文的演示文稿大纲。"""
 
 
 class TextFormattingService:
@@ -259,10 +302,9 @@ class TextFormattingService:
         language: Optional[str] = None
     ) -> dict:
         """
-        Format transcribed text and return both formatted text and summary.
+        Format transcribed text and return formatted text, summary, and NotebookLM guideline.
 
-        This method matches the interface expected by AudioProcessor, which
-        expects a dict with 'formatted_text' and 'summary' keys.
+        This method matches the interface expected by AudioProcessor.
 
         Args:
             raw_text: Raw transcribed text from Whisper
@@ -271,14 +313,16 @@ class TextFormattingService:
         Returns:
             Dict with keys:
             - formatted_text: The formatted transcription text
-            - summary: Generated summary (empty string for now)
+            - summary: Generated summary
+            - notebooklm_guideline: Generated NotebookLM presentation guideline
         """
         if not raw_text or len(raw_text.strip()) < 50:
             # Too short to format, return as-is
             logger.info(f"Text too short to format ({len(raw_text)} chars), returning original")
             return {
                 "formatted_text": raw_text,
-                "summary": ""
+                "summary": "",
+                "notebooklm_guideline": ""
             }
 
         try:
@@ -287,11 +331,16 @@ class TextFormattingService:
 
             logger.info(f"Formatting complete: {len(raw_text)} -> {len(formatted_text)} chars")
 
-            # For now, we don't generate a separate summary
-            # The formatted_text is the punctuation-enhanced version
+            # Generate summary using GLM
+            summary = self._generate_summary(formatted_text)
+
+            # Generate NotebookLM guideline
+            notebooklm_guideline = self._generate_notebooklm_guideline(formatted_text)
+
             return {
                 "formatted_text": formatted_text,
-                "summary": ""  # TODO: Implement summarization if needed
+                "summary": summary,
+                "notebooklm_guideline": notebooklm_guideline
             }
         except Exception as e:
             logger.error(f"Error in format_transcription: {e}")
@@ -300,8 +349,105 @@ class TextFormattingService:
             # Return original text on failure
             return {
                 "formatted_text": raw_text,
-                "summary": ""
+                "summary": "",
+                "notebooklm_guideline": ""
             }
+
+    def _generate_summary(self, text: str) -> str:
+        """
+        Generate a summary of the transcribed text using GLM.
+
+        Args:
+            text: Formatted transcribed text
+
+        Returns:
+            Generated summary or empty string if generation fails
+        """
+        if not self.glm_client:
+            logger.warning("GLM client not available, skipping summary generation")
+            return ""
+
+        try:
+            logger.info(f"[SUMMARY] Generating summary for text ({len(text)} chars)")
+
+            # Generate summary synchronously using the OpenAI client directly
+            from app.core.glm import get_glm_client
+
+            # Get system prompt for summarization
+            glm_client = get_glm_client()
+            system_prompt = glm_client._get_system_prompt_by_language()
+
+            # Use synchronous OpenAI client call
+            response = glm_client.client.chat.completions.create(
+                model=glm_client.model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": f"以下の文字起こしテキストを要約してください:\n\n{text}"}
+                ],
+                temperature=0.7,
+                max_tokens=2000,
+            )
+
+            summary = response.choices[0].message.content or ""
+            logger.info(f"[SUMMARY] Generated summary: {len(summary)} chars")
+
+            return summary
+
+        except Exception as e:
+            logger.error(f"[SUMMARY] Failed to generate summary: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            return ""
+
+    def _generate_notebooklm_guideline(self, text: str) -> str:
+        """
+        Generate a NotebookLM guideline for presentation slides using GLM.
+
+        Args:
+            text: Formatted transcribed text
+
+        Returns:
+            Generated NotebookLM guideline or empty string if generation fails
+        """
+        if not self.glm_client:
+            logger.warning("GLM client not available, skipping NotebookLM guideline generation")
+            return ""
+
+        try:
+            logger.info(f"[NOTEBOOKLM] Generating guideline for text ({len(text)} chars)")
+
+            # Truncate text if too long (keep first 15000 chars for context)
+            max_input_length = 15000
+            input_text = text[:max_input_length]
+            if len(text) > max_input_length:
+                logger.info(f"[NOTEBOOKLM] Text truncated from {len(text)} to {max_input_length} chars")
+
+            # Generate guideline synchronously using the OpenAI client directly
+            from app.core.glm import get_glm_client
+
+            glm_client = get_glm_client()
+
+            # Use synchronous OpenAI client call
+            response = glm_client.client.chat.completions.create(
+                model=glm_client.model,
+                messages=[
+                    {"role": "system", "content": NOTEBOOKLM_SYSTEM_PROMPT},
+                    {"role": "user", "content": f"请根据以下转录文本生成 NotebookLM 演示文稿大纲指南：\n\n{input_text}"}
+                ],
+                temperature=0.7,
+                max_tokens=4000,
+            )
+
+            guideline = response.choices[0].message.content or ""
+            logger.info(f"[NOTEBOOKLM] Generated guideline: {len(guideline)} chars")
+
+            return guideline
+
+        except Exception as e:
+            logger.error(f"[NOTEBOOKLM] Failed to generate guideline: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            return ""
 
 
 # Singleton instance

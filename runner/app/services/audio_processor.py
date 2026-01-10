@@ -72,7 +72,7 @@ class AudioProcessor:
             logger.error(f"Whisper transcription failed: {e}")
             raise
 
-        # Step 2: Format with LLM (punctuation, paragraphs, summary)
+        # Step 2: Format with LLM (punctuation, paragraphs, summary, NotebookLM guideline)
         logger.info("Step 2: Formatting with LLM...")
         try:
             formatted_result = self.formatting_service.format_transcription(
@@ -82,12 +82,14 @@ class AudioProcessor:
 
             formatted_text = formatted_result.get("formatted_text", raw_text)
             summary = formatted_result.get("summary", "")
+            notebooklm_guideline = formatted_result.get("notebooklm_guideline", "")
 
-            logger.info(f"Formatting complete: summary={bool(summary)}")
+            logger.info(f"Formatting complete: summary={bool(summary)}, notebooklm_guideline={bool(notebooklm_guideline)}")
         except Exception as e:
             logger.warning(f"LLM formatting failed: {e}, using raw text")
             formatted_text = raw_text
             summary = ""
+            notebooklm_guideline = ""
 
         # Calculate processing time
         processing_time = int(time.time() - start_time)
@@ -96,6 +98,7 @@ class AudioProcessor:
         return JobResult(
             text=formatted_text,
             summary=summary,
+            notebooklm_guideline=notebooklm_guideline,
             processing_time_seconds=processing_time
         )
 
