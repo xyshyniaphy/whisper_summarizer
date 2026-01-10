@@ -55,20 +55,38 @@ services:
     environment:
       # Database
       DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
 
-      # Supabase Auth (Production values required)
+      # Supabase Auth
       SUPABASE_URL: ${SUPABASE_URL}
       SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
       SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
+
+      # GLM API (for AI chat feature)
+      GLM_API_KEY: ${GLM_API_KEY}
+      GLM_MODEL: ${GLM_MODEL:-GLM-4.5-Air}
+      GLM_BASE_URL: ${GLM_BASE_URL:-https://api.z.ai/api/paas/v4/}
+      REVIEW_LANGUAGE: ${REVIEW_LANGUAGE:-zh}
 
       # Runner Authentication
       RUNNER_API_KEY: ${RUNNER_API_KEY}
 
       # Server Configuration
+      BACKEND_PORT: ${BACKEND_PORT:-3080}
       CORS_ORIGINS: ${CORS_ORIGINS}
+      PUBLIC_HOSTNAME: ${PUBLIC_HOSTNAME:-https://w.198066.xyz}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       DISABLE_AUTH: ${DISABLE_AUTH:-false}
-      TRUSTED_HOSTS: ${TRUSTED_HOSTS}
+      TRUSTED_HOSTS: ${TRUSTED_HOSTS:-w.198066.xyz}
+
+      # Data Retention
+      MAX_KEEP_DAYS: ${MAX_KEEP_DAYS:-30}
+      CLEANUP_HOUR: ${CLEANUP_HOUR:-9}
+
+      # Text Formatting (LLM-based)
+      MAX_FORMAT_CHUNK: ${MAX_FORMAT_CHUNK:-10000}
 
       # Production settings
       PYTHONUNBUFFERED: 1
@@ -102,6 +120,9 @@ services:
     restart: unless-stopped
     ports:
       - "3080:80"  # Only exposed port (HTTP for cloudflared)
+    environment:
+      NGINX_HOST: ${NGINX_HOST:-w.198066.xyz}
+      NGINX_PORT: ${NGINX_PORT:-3080}
     depends_on:
       - server
     networks:

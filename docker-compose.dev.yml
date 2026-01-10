@@ -27,7 +27,8 @@ services:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./nginx/conf.d:/etc/nginx/conf.d:ro
     environment:
-      - NGINX_HOST=${NGINX_HOST:-localhost}
+      NGINX_HOST: ${NGINX_HOST:-localhost}
+      NGINX_PORT: ${NGINX_PORT:-8130}
     depends_on:
       - server
       - frontend
@@ -49,20 +50,38 @@ services:
     environment:
       # Database (Local PostgreSQL)
       DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-whisper_summarizer}
+      POSTGRES_DB: ${POSTGRES_DB:-whisper_summarizer}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
 
-      # Supabase
+      # Supabase Auth
       SUPABASE_URL: ${SUPABASE_URL}
       SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
       SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
 
+      # GLM API (for AI chat feature)
+      GLM_API_KEY: ${GLM_API_KEY}
+      GLM_MODEL: ${GLM_MODEL:-GLM-4.5-Air}
+      GLM_BASE_URL: ${GLM_BASE_URL:-https://api.z.ai/api/paas/v4/}
+      REVIEW_LANGUAGE: ${REVIEW_LANGUAGE:-zh}
+
       # Runner Authentication
       RUNNER_API_KEY: ${RUNNER_API_KEY:-dev-secret-key}
 
-      # Server Config (Updated for nginx)
+      # Server Config
+      BACKEND_PORT: ${BACKEND_PORT:-3080}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost}
+      PUBLIC_HOSTNAME: ${PUBLIC_HOSTNAME:-http://localhost:8130}
       LOG_LEVEL: ${LOG_LEVEL:-DEBUG}
       DISABLE_AUTH: ${DISABLE_AUTH:-false}
       TRUSTED_HOSTS: ${TRUSTED_HOSTS:-localhost,nginx}
+
+      # Data Retention
+      MAX_KEEP_DAYS: ${MAX_KEEP_DAYS:-7}
+      CLEANUP_HOUR: ${CLEANUP_HOUR:-9}
+
+      # Text Formatting (LLM-based)
+      MAX_FORMAT_CHUNK: ${MAX_FORMAT_CHUNK:-10000}
     # No ports section - internal only
     volumes:
       # Source code mount for hot reload
@@ -87,7 +106,7 @@ services:
       dockerfile: Dockerfile
     container_name: whisper_runner_dev
     environment:
-      # Server Connection (now via nginx for external, internal for dev)
+      # Server Connection
       SERVER_URL: ${RUNNER_SERVER_URL:-http://server:8000}
       RUNNER_API_KEY: ${RUNNER_API_KEY:-dev-secret-key}
       RUNNER_ID: runner-dev
@@ -96,7 +115,7 @@ services:
       POLL_INTERVAL_SECONDS: ${POLL_INTERVAL_SECONDS:-10}
       MAX_CONCURRENT_JOBS: ${MAX_CONCURRENT_JOBS:-2}
 
-      # GLM API (moved from server)
+      # GLM API
       GLM_API_KEY: ${GLM_API_KEY}
       GLM_MODEL: ${GLM_MODEL:-GLM-4.5-Air}
       GLM_BASE_URL: ${GLM_BASE_URL:-https://api.z.ai/api/paas/v4/}
@@ -106,18 +125,21 @@ services:
       FASTER_WHISPER_DEVICE: ${FASTER_WHISPER_DEVICE:-cuda}
       FASTER_WHISPER_COMPUTE_TYPE: ${FASTER_WHISPER_COMPUTE_TYPE:-int8_float16}
       FASTER_WHISPER_MODEL_SIZE: ${FASTER_WHISPER_MODEL_SIZE:-large-v3-turbo}
-      WHISPER_LANGUAGE: ${WHISPER_LANGUAGE:-zh}
+      WHISPER_LANGUAGE: ${WHISPER_LANGUAGE:-auto}
       WHISPER_THREADS: ${WHISPER_THREADS:-4}
 
       # Audio Chunking
       ENABLE_CHUNKING: ${ENABLE_CHUNKING:-true}
-      CHUNK_SIZE_MINUTES: ${CHUNK_SIZE_MINUTES:-10}
+      CHUNK_SIZE_MINUTES: ${CHUNK_SIZE_MINUTES:-5}
       CHUNK_OVERLAP_SECONDS: ${CHUNK_OVERLAP_SECONDS:-15}
       MAX_CONCURRENT_CHUNKS: ${MAX_CONCURRENT_CHUNKS:-4}
-      USE_VAD_SPLIT: ${USE_VAD_SPLIT:-true}
+      USE_VAD_SPLIT: ${USE_VAD_SPLIT:-false}
       VAD_SILENCE_THRESHOLD: ${VAD_SILENCE_THRESHOLD:--30}
       VAD_MIN_SILENCE_DURATION: ${VAD_MIN_SILENCE_DURATION:-0.5}
       MERGE_STRATEGY: ${MERGE_STRATEGY:-lcs}
+
+      # Text Formatting (LLM-based)
+      MAX_FORMAT_CHUNK: ${MAX_FORMAT_CHUNK:-10000}
 
       # Logging
       LOG_LEVEL: ${LOG_LEVEL:-DEBUG}
