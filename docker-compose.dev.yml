@@ -73,7 +73,7 @@ services:
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost}
       PUBLIC_HOSTNAME: ${PUBLIC_HOSTNAME:-http://localhost:8130}
       LOG_LEVEL: ${LOG_LEVEL:-DEBUG}
-      DISABLE_AUTH: ${DISABLE_AUTH:-false}
+      # DISABLE_AUTH removed - auth bypass is now hardcoded for localhost only
       TRUSTED_HOSTS: ${TRUSTED_HOSTS:-localhost,nginx}
 
       # Data Retention

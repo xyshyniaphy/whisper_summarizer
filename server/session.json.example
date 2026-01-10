@@ -1,0 +1,13 @@
+{
+  "version": "1.0",
+  "created_at": "2026-01-10T00:00:00Z",
+  "updated_at": "2026-01-10T00:00:00Z",
+  "test_user": {
+    "id": "fc47855d-6973-4931-b6fd-bd28515bec0d",
+    "email": "test@example.com",
+    "is_admin": true,
+    "is_active": true
+  },
+  "test_channels": [],
+  "test_transcriptions": []
+}

@@ -4,6 +4,7 @@
 .env.*.local
 .env.prod
 prd_server_info
+session.json
 
 # Pythonキャッシュ
 __pycache__/

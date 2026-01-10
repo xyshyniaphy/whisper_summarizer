@@ -26,7 +26,8 @@ class Settings(BaseSettings):
     CORS_ORIGINS: str = "http://localhost:3000"
     PUBLIC_BASE_URL: Optional[str] = None  # Public base URL for download links (e.g., https://example.com)
     LOG_LEVEL: str = "INFO"
-    DISABLE_AUTH: bool = False  # Disable authentication for testing
+    # DISABLE_AUTH removed - auth bypass is now hardcoded for localhost only
+    # See: server/app/core/auth_bypass.py
 
     # Data Retention
     MAX_KEEP_DAYS: int = 30  # Maximum days to keep transcriptions before auto-delete

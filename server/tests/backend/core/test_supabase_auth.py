@@ -2,13 +2,14 @@
 Supabase Core Tests
 
 Tests for Supabase authentication and user management functions.
+Tests updated for localhost auth bypass system (replaces DISABLE_AUTH).
 """
 
 import pytest
 from unittest.mock import Mock, patch, MagicMock
 from uuid import uuid4, UUID
 from datetime import datetime, timezone
-from fastapi import HTTPException
+from fastapi import HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials
 
 from app.core.supabase import get_current_user, get_current_active_user, sign_out
@@ -24,6 +25,32 @@ def mock_credentials():
     creds = Mock(spec=HTTPAuthorizationCredentials)
     creds.credentials = "valid-test-token"
     return creds
+
+
+@pytest.fixture
+def mock_request():
+    """Mock FastAPI Request object."""
+    request = Mock(spec=Request)
+    request.client = Mock()
+    request.client.host = "192.168.1.100"  # Non-localhost by default
+    request.headers = {}
+    request.url = Mock()
+    request.url.path = "/api/test"
+    request.method = "GET"
+    return request
+
+
+@pytest.fixture
+def mock_localhost_request():
+    """Mock FastAPI Request for localhost (triggers auth bypass)."""
+    request = Mock(spec=Request)
+    request.client = Mock()
+    request.client.host = "127.0.0.1"  # Localhost
+    request.headers = {}
+    request.url = Mock()
+    request.url.path = "/api/test"
+    request.method = "GET"
+    return request
 
 
 @pytest.fixture
@@ -47,31 +74,28 @@ def mock_supabase_user():
 # ============================================================================
 
 class TestGetCurrentUser:
-    """Test get_current_user function."""
+    """Test get_current_user function with localhost auth bypass."""
 
     @pytest.mark.asyncio
-    @patch('app.core.supabase.settings')
-    async def test_should_return_test_user_when_auth_disabled(self, mock_settings):
-        """Should return test user when DISABLE_AUTH is enabled."""
-        mock_settings.DISABLE_AUTH = True
-
-        result = await get_current_user(credentials=None)
+    async def test_should_return_test_user_for_localhost_request(self, mock_localhost_request):
+        """Should return test user when request is from localhost (auth bypass)."""
+        result = await get_current_user(mock_localhost_request, credentials=None)
 
         assert result is not None
         assert result["email"] == "test@example.com"
         assert isinstance(result["id"], UUID)
+        # Check auth bypass marker
+        assert result["user_metadata"].get("auth_bypass") is True
 
     @pytest.mark.asyncio
-    @patch('app.core.supabase.settings')
     @patch('app.core.supabase.supabase')
-    async def test_should_return_user_with_valid_token(self, mock_supabase, mock_settings, mock_credentials, mock_supabase_user):
-        """Should return user with valid token."""
-        mock_settings.DISABLE_AUTH = False
+    async def test_should_return_user_with_valid_token(self, mock_supabase, mock_request, mock_credentials, mock_supabase_user):
+        """Should return user with valid token for non-localhost request."""
         mock_user_obj = Mock()
         mock_user_obj.user = mock_supabase_user
         mock_supabase.auth.get_user.return_value = mock_user_obj
 
-        result = await get_current_user(mock_credentials)
+        result = await get_current_user(mock_request, mock_credentials)
 
         assert result["email"] == "test@example.com"
         assert result["email_confirmed_at"] is not None
@@ -79,75 +103,64 @@ class TestGetCurrentUser:
         mock_supabase.auth.get_user.assert_called_once_with("valid-test-token")
 
     @pytest.mark.asyncio
-    @patch('app.core.supabase.settings')
-    async def test_should_raise_401_without_credentials(self, mock_settings):
-        """Should raise 401 when no credentials provided."""
-        mock_settings.DISABLE_AUTH = False
-
+    async def test_should_raise_401_without_credentials(self, mock_request):
+        """Should raise 401 when no credentials provided (non-localhost)."""
         with pytest.raises(HTTPException) as exc_info:
-            await get_current_user(credentials=None)
+            await get_current_user(mock_request, credentials=None)
 
         assert exc_info.value.status_code == 401
         assert "認証が必要です" in exc_info.value.detail
 
     @pytest.mark.asyncio
-    @patch('app.core.supabase.settings')
     @patch('app.core.supabase.supabase')
-    async def test_should_raise_401_with_invalid_token(self, mock_supabase, mock_settings, mock_credentials):
+    async def test_should_raise_401_with_invalid_token(self, mock_supabase, mock_request, mock_credentials):
         """Should raise 401 with invalid token (None is truthy check fails)."""
-        mock_settings.DISABLE_AUTH = False
         # When get_user returns None, the "if not user" check triggers
         # but the actual code might throw an exception when accessing user.user
         mock_supabase.auth.get_user.side_effect = AttributeError("'NoneType' object has no attribute 'user'")
 
         with pytest.raises(HTTPException) as exc_info:
-            await get_current_user(mock_credentials)
+            await get_current_user(mock_request, mock_credentials)
 
         assert exc_info.value.status_code == 401
 
     @pytest.mark.asyncio
-    @patch('app.core.supabase.settings')
     @patch('app.core.supabase.supabase')
-    async def test_should_raise_401_when_supabase_returns_none(self, mock_supabase, mock_settings, mock_credentials):
+    async def test_should_raise_401_when_supabase_returns_none(self, mock_supabase, mock_request, mock_credentials):
         """Should raise 401 when Supabase get_user returns None (line 77)."""
-        mock_settings.DISABLE_AUTH = False
         # Simulate Supabase returning None for invalid/expired token
         # When None is returned, accessing user.user raises AttributeError
         # which is caught by the generic exception handler (lines 95-100)
         mock_supabase.auth.get_user.return_value = None
 
         with pytest.raises(HTTPException) as exc_info:
-            await get_current_user(mock_credentials)
+            await get_current_user(mock_request, mock_credentials)
 
         assert exc_info.value.status_code == 401
         # The generic exception handler catches the AttributeError from accessing None.user
         assert "認証に失敗しました" in exc_info.value.detail
 
     @pytest.mark.asyncio
-    @patch('app.core.supabase.settings')
     @patch('app.core.supabase.supabase')
-    async def test_should_handle_auth_exception(self, mock_supabase, mock_settings, mock_credentials):
+    async def test_should_handle_auth_exception(self, mock_supabase, mock_request, mock_credentials):
         """Should handle authentication exceptions."""
-        mock_settings.DISABLE_AUTH = False
         mock_supabase.auth.get_user.side_effect = Exception("Auth failed")
 
         with pytest.raises(HTTPException) as exc_info:
-            await get_current_user(mock_credentials)
+            await get_current_user(mock_request, mock_credentials)
 
         assert exc_info.value.status_code == 401
         assert "認証に失敗しました" in exc_info.value.detail
 
     @pytest.mark.asyncio
-    @patch('app.core.supabase.settings')
     @patch('app.core.supabase.supabase')
-    async def test_should_convert_user_to_dict(self, mock_supabase, mock_settings, mock_credentials, mock_supabase_user):
+    async def test_should_convert_user_to_dict(self, mock_supabase, mock_request, mock_credentials, mock_supabase_user):
         """Should convert User object to dict correctly."""
-        mock_settings.DISABLE_AUTH = False
         mock_user_obj = Mock()
         mock_user_obj.user = mock_supabase_user
         mock_supabase.auth.get_user.return_value = mock_user_obj
 
-        result = await get_current_user(mock_credentials)
+        result = await get_current_user(mock_request, mock_credentials)
 
         assert isinstance(result, dict)
         assert "id" in result
@@ -269,33 +282,29 @@ class TestUserMetadata:
     """Test user metadata handling."""
 
     @pytest.mark.asyncio
-    @patch('app.core.supabase.settings')
     @patch('app.core.supabase.supabase')
-    async def test_should_include_user_metadata_in_response(self, mock_supabase, mock_settings, mock_credentials, mock_supabase_user):
+    async def test_should_include_user_metadata_in_response(self, mock_supabase, mock_request, mock_credentials, mock_supabase_user):
         """Should include user_metadata in response."""
-        mock_settings.DISABLE_AUTH = False
         mock_supabase_user.user_metadata = {"name": "Test User", "avatar": "avatar.png"}
         mock_user_obj = Mock()
         mock_user_obj.user = mock_supabase_user
         mock_supabase.auth.get_user.return_value = mock_user_obj
 
-        result = await get_current_user(mock_credentials)
+        result = await get_current_user(mock_request, mock_credentials)
 
         assert result["user_metadata"]["name"] == "Test User"
         assert result["user_metadata"]["avatar"] == "avatar.png"
 
     @pytest.mark.asyncio
-    @patch('app.core.supabase.settings')
     @patch('app.core.supabase.supabase')
-    async def test_should_include_app_metadata_in_response(self, mock_supabase, mock_settings, mock_credentials, mock_supabase_user):
+    async def test_should_include_app_metadata_in_response(self, mock_supabase, mock_request, mock_credentials, mock_supabase_user):
         """Should include app_metadata in response."""
-        mock_settings.DISABLE_AUTH = False
         mock_supabase_user.app_metadata = {"provider": "google", "role": "user"}
         mock_user_obj = Mock()
         mock_user_obj.user = mock_supabase_user
         mock_supabase.auth.get_user.return_value = mock_user_obj
 
-        result = await get_current_user(mock_credentials)
+        result = await get_current_user(mock_request, mock_credentials)
 
         assert result["app_metadata"]["provider"] == "google"
         assert result["app_metadata"]["role"] == "user"
@@ -309,47 +318,42 @@ class TestEdgeCases:
     """Test edge cases and error handling."""
 
     @pytest.mark.asyncio
-    @patch('app.core.supabase.settings')
     @patch('app.core.supabase.supabase')
-    async def test_should_handle_user_with_none_email(self, mock_supabase, mock_settings, mock_credentials, mock_supabase_user):
+    async def test_should_handle_user_with_none_email(self, mock_supabase, mock_request, mock_credentials, mock_supabase_user):
         """Should handle user with None email."""
-        mock_settings.DISABLE_AUTH = False
         mock_supabase_user.email = None
         mock_user_obj = Mock()
         mock_user_obj.user = mock_supabase_user
         mock_supabase.auth.get_user.return_value = mock_user_obj
 
-        result = await get_current_user(mock_credentials)
+        result = await get_current_user(mock_request, mock_credentials)
 
         assert result["email"] is None
 
     @pytest.mark.asyncio
-    @patch('app.core.supabase.settings')
     @patch('app.core.supabase.supabase')
-    async def test_should_handle_user_with_empty_metadata(self, mock_supabase, mock_settings, mock_credentials, mock_supabase_user):
+    async def test_should_handle_user_with_empty_metadata(self, mock_supabase, mock_request, mock_credentials, mock_supabase_user):
         """Should handle user with empty metadata."""
-        mock_settings.DISABLE_AUTH = False
         mock_supabase_user.user_metadata = {}
         mock_supabase_user.app_metadata = {}
         mock_user_obj = Mock()
         mock_user_obj.user = mock_supabase_user
         mock_supabase.auth.get_user.return_value = mock_user_obj
 
-        result = await get_current_user(mock_credentials)
+        result = await get_current_user(mock_request, mock_credentials)
 
         assert result["user_metadata"] == {}
         assert result["app_metadata"] == {}
 
     @pytest.mark.asyncio
-    @patch('app.core.supabase.settings')
-    async def test_should_return_uuid_as_string_when_auth_disabled(self, mock_settings):
-        """When auth is disabled, ID should be UUID object for SQLAlchemy."""
-        mock_settings.DISABLE_AUTH = True
-
-        result = await get_current_user(credentials=None)
+    async def test_should_return_uuid_object_when_localhost_bypass(self, mock_localhost_request):
+        """When localhost bypass triggers, ID should be UUID object for SQLAlchemy."""
+        result = await get_current_user(mock_localhost_request, credentials=None)
 
         # Test user has UUID object (for SQLAlchemy)
         assert isinstance(result["id"], UUID)
+        # Check auth bypass marker
+        assert result["user_metadata"].get("auth_bypass") is True
 
 
 # ============================================================================
@@ -360,11 +364,9 @@ class TestTimestamps:
     """Test timestamp handling."""
 
     @pytest.mark.asyncio
-    @patch('app.core.supabase.settings')
     @patch('app.core.supabase.supabase')
-    async def test_should_preserve_timestamps(self, mock_supabase, mock_settings, mock_credentials, mock_supabase_user):
+    async def test_should_preserve_timestamps(self, mock_supabase, mock_request, mock_credentials, mock_supabase_user):
         """Should preserve user timestamps."""
-        mock_settings.DISABLE_AUTH = False
         now = datetime.now(timezone.utc)
         mock_supabase_user.created_at = now
         mock_supabase_user.updated_at = now
@@ -374,7 +376,7 @@ class TestTimestamps:
         mock_user_obj.user = mock_supabase_user
         mock_supabase.auth.get_user.return_value = mock_user_obj
 
-        result = await get_current_user(mock_credentials)
+        result = await get_current_user(mock_request, mock_credentials)
 
         assert result["created_at"] == now
         assert result["updated_at"] == now
@@ -382,18 +384,16 @@ class TestTimestamps:
         assert result["email_confirmed_at"] == now
 
     @pytest.mark.asyncio
-    @patch('app.core.supabase.settings')
     @patch('app.core.supabase.supabase')
-    async def test_should_handle_none_timestamps(self, mock_supabase, mock_settings, mock_credentials, mock_supabase_user):
+    async def test_should_handle_none_timestamps(self, mock_supabase, mock_request, mock_credentials, mock_supabase_user):
         """Should handle None timestamps."""
-        mock_settings.DISABLE_AUTH = False
         mock_supabase_user.last_sign_in_at = None
         mock_supabase_user.phone = None
         mock_user_obj = Mock()
         mock_user_obj.user = mock_supabase_user
         mock_supabase.auth.get_user.return_value = mock_user_obj
 
-        result = await get_current_user(mock_credentials)
+        result = await get_current_user(mock_request, mock_credentials)
 
         assert result["last_sign_in_at"] is None
         assert result["phone"] is None
