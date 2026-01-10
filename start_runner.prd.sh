@@ -2,12 +2,13 @@
 set -euo pipefail
 
 # ========================================
-# start_runner.sh - Start Runner
+# start_runner.prd.sh - Start Production Runner
 # ========================================
 # This script starts the GPU runner for processing audio
+# Connects to the remote production server at w.198066.xyz
 #
 # Usage:
-#   ./start_runner.sh [command]
+#   ./start_runner.prd.sh [command]
 #
 # Commands:
 #   up       - Start the runner (default)
@@ -26,30 +27,37 @@ NC='\033[0m' # No Color
 
 # Configuration
 COMPOSE_FILE="docker-compose.runner.yml"
-ENV_FILE="runner/.env"
+ENV_FILE=".env"
 
 # Get command (default: up)
 COMMAND="${1:-up}"
 
 echo -e "${BLUE}========================================${NC}"
-echo -e "${BLUE}Whisper Summarizer Runner${NC}"
+echo -e "${BLUE}Whisper Summarizer - Production Runner${NC}"
 echo -e "${BLUE}========================================${NC}"
 echo ""
 
-# Check if runner/.env exists
+# Check if .env exists
 if [ ! -f "$ENV_FILE" ]; then
     echo -e "${RED}Error: $ENV_FILE not found${NC}"
     echo ""
     echo "Please create $ENV_FILE with your configuration:"
-    echo "  cp runner/.env.sample runner/.env"
-    echo "  nano runner/.env  # Edit with your values"
-    echo ""
-    echo "Required values:"
-    echo "  - SERVER_URL (your main server URL)"
-    echo "  - RUNNER_API_KEY (must match server)"
-    echo "  - GLM_API_KEY (your GLM API key)"
+    echo "  cp .env.sample .env"
+    echo "  nano .env  # Edit with your values"
     echo ""
     exit 1
+fi
+
+# Load environment variables to check required values
+if grep -q "^RUNNER_API_KEY=.*change-this" "$ENV_FILE" 2>/dev/null || ! grep -q "^RUNNER_API_KEY=" "$ENV_FILE" 2>/dev/null; then
+    echo -e "${RED}Error: RUNNER_API_KEY not configured in .env${NC}"
+    echo ""
+    echo "The RUNNER_API_KEY must match the production server's API key."
+    exit 1
+fi
+
+if ! grep -q "^GLM_API_KEY=" "$ENV_FILE" 2>/dev/null; then
+    echo -e "${YELLOW}Warning: GLM_API_KEY may not be configured${NC}"
 fi
 
 # Create necessary directories
@@ -68,51 +76,61 @@ if ! docker compose version &> /dev/null; then
     fi
 fi
 
+# Show production server configuration
+if [ "$COMMAND" = "up" ] || [ "$COMMAND" = "status" ]; then
+    SERVER_URL="${RUNNER_SERVER_URL:-https://w.198066.xyz}"
+    echo -e "${BLUE}Production Server:${NC} $SERVER_URL"
+    echo -e "${BLUE}Runner ID:${NC} ${RUNNER_ID:-runner-gpu-01}"
+    echo ""
+fi
+
 # Execute command based on argument
 case "$COMMAND" in
     up)
-        echo -e "${YELLOW}Starting runner...${NC}"
+        echo -e "${YELLOW}Starting production runner...${NC}"
         $DOCKER_COMPOSE -f "$COMPOSE_FILE" up -d
         echo ""
 
-        echo -e "${GREEN}✓ Runner started${NC}"
+        echo -e "${GREEN}✓ Production runner started${NC}"
         echo ""
         echo "View logs: $0 logs"
         echo "Stop runner: $0 down"
         echo "Build runner: $0 build"
+        echo ""
+        echo "Runner connects to: $SERVER_URL/api/runner"
         ;;
 
     down)
-        echo -e "${YELLOW}Stopping runner...${NC}"
+        echo -e "${YELLOW}Stopping production runner...${NC}"
         $DOCKER_COMPOSE -f "$COMPOSE_FILE" down
-        echo -e "${GREEN}✓ Runner stopped${NC}"
+        echo -e "${GREEN}✓ Production runner stopped${NC}"
         ;;
 
     restart)
-        echo -e "${YELLOW}Restarting runner...${NC}"
+        echo -e "${YELLOW}Restarting production runner...${NC}"
         $DOCKER_COMPOSE -f "$COMPOSE_FILE" restart
-        echo -e "${GREEN}✓ Runner restarted${NC}"
+        echo -e "${GREEN}✓ Production runner restarted${NC}"
         echo ""
         echo "View logs: $0 logs"
         ;;
 
     logs)
-        echo -e "${YELLOW}Showing runner logs (Ctrl+C to exit)...${NC}"
+        echo -e "${YELLOW}Showing production runner logs (Ctrl+C to exit)...${NC}"
         echo ""
         $DOCKER_COMPOSE -f "$COMPOSE_FILE" logs -f
         ;;
 
     build)
-        echo -e "${YELLOW}Building runner...${NC}"
+        echo -e "${YELLOW}Building production runner...${NC}"
         $DOCKER_COMPOSE -f "$COMPOSE_FILE" up -d --build
         echo ""
-        echo -e "${GREEN}✓ Runner built and started${NC}"
+        echo -e "${GREEN}✓ Production runner built and started${NC}"
         echo ""
         echo "View logs: $0 logs"
         ;;
 
     status)
-        echo -e "${YELLOW}Runner status:${NC}"
+        echo -e "${YELLOW}Production runner status:${NC}"
         echo ""
         $DOCKER_COMPOSE -f "$COMPOSE_FILE" ps
         ;;
