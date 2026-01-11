@@ -3,6 +3,16 @@ from typing import Optional, Literal
 from datetime import datetime
 from pathlib import Path
 
+
+class SharedChatMessage(BaseModel):
+    """Single chat message in shared transcription."""
+    id: UUID4
+    role: Literal["user", "assistant"]
+    content: str
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
 class ShareLinkBase(BaseModel):
     transcription_id: UUID4
 
@@ -32,6 +42,7 @@ class SharedTranscriptionResponse(BaseModel):
     language: Optional[str] = None
     duration_seconds: Optional[float] = None
     created_at: datetime
+    chat_messages: list[SharedChatMessage] = []  # Chat history for shared view
 
     model_config = ConfigDict(from_attributes=True)
 

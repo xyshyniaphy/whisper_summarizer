@@ -110,7 +110,7 @@ class RemoteProductionClient:
             return RemoteResponse(
                 status=-2,
                 data=None,
-                error="Request timeout after 30s"
+                error="Request timeout after 60s"
             )
         except Exception as e:
             return RemoteResponse(

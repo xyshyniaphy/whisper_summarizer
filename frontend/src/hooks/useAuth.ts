@@ -126,6 +126,13 @@ export function useAuth(): [
       return
     }
 
+    // Supabase client not initialized (missing env vars)
+    if (!supabase) {
+      console.error('[useAuth] Supabase client not initialized. Check VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY environment variables.')
+      setLoading(false)
+      return
+    }
+
     // 現在のセッションを取得
     const getSession = async () => {
       console.log('[getSession] Starting...')
@@ -136,7 +143,7 @@ export function useAuth(): [
       try {
         console.log('[getSession] Calling supabase.auth.getSession()')
         // Add a timeout fallback in case supabase.auth.getSession() hangs
-        const sessionPromise = supabase!.auth.getSession()
+        const sessionPromise = supabase.auth.getSession()
         const timeoutPromise = new Promise((_, reject) =>
           setTimeout(() => reject(new Error('Session retrieval timeout')), 3000)
         )
@@ -218,7 +225,7 @@ export function useAuth(): [
     getSession()
 
     // 認証状態の変更を監視
-    const { data: { subscription } } = supabase!.auth.onAuthStateChange(async (_event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       console.log('[onAuthStateChange] Event:', _event, 'hasSession:', !!session, 'userEmail:', session?.user?.email)
       if (session?.user) {
         try {
@@ -258,7 +265,11 @@ export function useAuth(): [
       return { error: null }
     }
 
-    const { error } = await supabase!.auth.signInWithOAuth({
+    if (!supabase) {
+      return { error: { name: 'SupabaseError', message: 'Supabase client not initialized' } as AuthError }
+    }
+
+    const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
         redirectTo: `${import.meta.env.VITE_PUBLIC_URL || window.location.origin}/dashboard`,
@@ -276,6 +287,14 @@ export function useAuth(): [
   // サインアウト
   const signOut = useCallback(async () => {
     if (isE2ETestMode()) {
+      setUser(null)
+      setSession(null)
+      setRole(null)
+      setIsActive(false)
+      return { error: null }
+    }
+
+    if (!supabase) {
       setUser(null)
       setSession(null)
       setRole(null)
