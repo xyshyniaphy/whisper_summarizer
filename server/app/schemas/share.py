@@ -1,5 +1,5 @@
-from pydantic import BaseModel, UUID4, ConfigDict, field_serializer
-from typing import Optional
+from pydantic import BaseModel, UUID4, ConfigDict, Field, field_serializer
+from typing import Optional, Literal
 from datetime import datetime
 from pathlib import Path
 
@@ -34,3 +34,24 @@ class SharedTranscriptionResponse(BaseModel):
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class SharedChatRequest(BaseModel):
+    """Request schema for anonymous chat via shared link."""
+    content: str = Field(
+        ...,
+        min_length=1,
+        max_length=5000,
+        description="User message content"
+    )
+
+
+class SharedChatResponse(BaseModel):
+    """Response schema for anonymous chat via shared link."""
+    role: Literal["assistant"]
+    content: str
+    created_at: str = Field(
+        default_factory=lambda: datetime.now(
+            datetime.now().tzinfo
+        ).isoformat()
+    )
