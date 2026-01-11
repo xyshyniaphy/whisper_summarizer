@@ -114,22 +114,23 @@ services:
   # - Serves static frontend files (React SPA)
   # - Proxies /api/* to backend server
   # - Only exposed port (3080 → 80)
-  # IMPORTANT: Vite env vars are baked in at BUILD time, not runtime
-  # To rebuild with new env vars, use: docker compose -f docker-compose.prod.yml build --no-cache web
+  # IMPORTANT: Frontend uses pre-built image from Docker Hub
+  # To rebuild with new Supabase credentials, run: ./push.sh
+  # Then deploy with: ./pull.sh && docker compose -f docker-compose.prod.yml up -d web
   web:
     image: xyshyniaphy/whisper_summarizer-frontend:latest
     container_name: whisper_web_prd
     restart: unless-stopped
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile.prod
-      args:
-        VITE_SUPABASE_URL: ${SUPABASE_URL}
-        VITE_SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
-        VITE_BACKEND_URL: /api
     ports:
       - "3080:80"  # Only exposed port (HTTP for cloudflared)
     environment:
+      # Frontend runtime configuration (injected by entrypoint.sh)
+      # These are NOT baked into the image - set from .env file
+      VITE_SUPABASE_URL: ${SUPABASE_URL}
+      VITE_SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
+      VITE_BACKEND_URL: /api
+
+      # Nginx configuration
       NGINX_HOST: ${NGINX_HOST:-w.198066.xyz}
       NGINX_PORT: ${NGINX_PORT:-3080}
     depends_on:

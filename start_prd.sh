@@ -90,8 +90,11 @@ if [ ! -f .env ]; then
     exit 1
 fi
 
-# Source .env to validate (without exposing values)
+# Source .env to validate (with debug disabled for security)
+# This prevents secrets from being exposed in debug output
+set +x  # Disable debug tracing temporarily
 source .env
+set -e  # Re-enable exit on error
 
 # Validate critical environment variables
 log_info "Validating environment configuration..."
@@ -133,9 +136,26 @@ mkdir -p data/transcribes 2>/dev/null || true
 chmod 755 data/transcribes 2>/dev/null || log_warning "Could not set permissions on data/transcribes (may be owned by root)"
 log_success "Data directories ready"
 
-# Check if ports are already in use
+# Check if port 3080 is already in use
 log_info "Checking port 3080..."
-if lsof -Pi :3080 -sTCP:LISTEN -t >/dev/null 2>&1; then
+port_in_use=false
+
+# Try lsof first (most reliable)
+if command -v lsof &> /dev/null; then
+    if lsof -Pi :3080 -sTCP:LISTEN -t >/dev/null 2>&1; then
+        port_in_use=true
+    fi
+# Fallback: check with docker ps (containers binding to port)
+elif docker ps --format "{{.Ports}}" 2>/dev/null | grep -q "0.0.0.0:3080"; then
+    port_in_use=true
+# Fallback: try netstat if available
+elif command -v netstat &> /dev/null; then
+    if netstat -tuln 2>/dev/null | grep -q ":3080 "; then
+        port_in_use=true
+    fi
+fi
+
+if [ "$port_in_use" = true ]; then
     log_error "Port 3080 is already in use"
     echo
     echo "Please stop the service using port 3080 first:"
@@ -144,15 +164,16 @@ if lsof -Pi :3080 -sTCP:LISTEN -t >/dev/null 2>&1; then
     exit 1
 fi
 
-# Pull pre-built images from Docker registry
-log_info "Pulling pre-built Docker images from registry..."
-log_info "This ensures you have the latest version from Docker Hub..."
+# Pull pre-built images from Docker Hub
+log_info "Pulling Docker images from Docker Hub..."
 echo ""
-echo "Pulling images:"
+echo "This will pull pre-built images:"
 echo "  → xyshyniaphy/whisper_summarizer-server:latest"
 echo "  → xyshyniaphy/whisper_summarizer-frontend:latest"
 echo "  → postgres:18-alpine"
-echo "  → nginx:1.25-alpine"
+echo ""
+echo "Note: Frontend was built locally with ./push.sh"
+echo "      Supabase credentials are baked into the JavaScript bundle"
 echo ""
 
 if ! $DOCKER_COMPOSE -f docker-compose.prod.yml pull; then
@@ -161,15 +182,13 @@ if ! $DOCKER_COMPOSE -f docker-compose.prod.yml pull; then
     echo "Possible reasons:"
     echo "  - Network connectivity issues"
     echo "  - Docker Hub is unavailable"
-    echo "  - Image names are incorrect"
+    echo "  - Images haven't been built yet"
     echo ""
-    echo "Troubleshooting:"
-    echo "  1. Check internet connection: ping hub.docker.com"
-    echo "  2. Verify Docker is running: docker ps"
-    echo "  3. Try manual pull: docker pull xyshyniaphy/whisper_summarizer-server:latest"
+    echo "To build and push images:"
+    echo "  1. Run ./push.sh locally to build with your Supabase credentials"
+    echo "  2. Then run ./pull.sh here to download them"
     exit 1
 fi
-echo ""
 log_success "All images pulled successfully"
 
 # Start services

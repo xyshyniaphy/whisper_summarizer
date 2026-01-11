@@ -63,15 +63,16 @@ echo
 
 # Verify cleanup
 log_info "Verifying cleanup..."
-remaining_containers=$(docker ps -q --filter "name=whisper_.*_prd" || true)
+# Docker filter uses simple string matching, not regex
+remaining_containers=$(docker ps -q --filter "name=whisper_" || true)
 
 if [ -n "$remaining_containers" ]; then
     log_warning "Some containers are still running:"
-    docker ps --filter "name=whisper_.*_prd" --format "table {{.Names}}\t{{.Status}}"
+    docker ps --filter "name=whisper_" --format "table {{.Names}}\t{{.Status}}"
     echo
     log_info "You can force remove them with:"
-    echo "  docker stop \$(docker ps -q --filter \"name=whisper_.*_prd\")"
-    echo "  docker rm \$(docker ps -aq --filter \"name=whisper_.*_prd\")"
+    echo "  docker stop \$(docker ps -q --filter \"name=whisper_\")"
+    echo "  docker rm \$(docker ps -aq --filter \"name=whisper_\")"
 else
     log_success "All containers cleaned up successfully"
 fi

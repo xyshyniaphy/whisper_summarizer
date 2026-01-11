@@ -370,14 +370,34 @@ docker-compose -f docker-compose.dev.yml up frontend
 ```
 
 **Production Mode:**
-```bash
-# Uses Dockerfile.prod with optimized static files
-docker-compose -f docker-compose.prod.yml up frontend
 
-# Build-time environment variables (baked into image)
-docker-compose build --build-arg VITE_SUPABASE_URL=https://xxx.supabase.co \
-                     --build-arg VITE_SUPABASE_ANON_KEY=eyJ... \
-                     frontend
+The production frontend uses pre-built Docker images from Docker Hub. Vite environment variables (VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY) are **build-time only** - they must be baked into the JavaScript bundle during the Docker image build.
+
+**Build and Push Workflow (run locally):**
+```bash
+# 1. Ensure .env has SUPABASE_URL and SUPABASE_ANON_KEY
+# 2. Build and push to Docker Hub
+./push.sh
+
+# This builds frontend with your Supabase credentials baked in
+# and pushes to: xyshyniaphy/whisper_summarizer-frontend:latest
+```
+
+**Deploy on Production Server:**
+```bash
+# SSH to production server
+ssh root@192.3.249.169
+
+# Pull latest images
+./pull.sh
+
+# Restart services
+./stop_prd.sh
+./start_prd.sh
+
+# Or restart specific service
+docker compose -f docker-compose.prod.yml pull web
+docker compose -f docker-compose.prod.yml up -d web
 ```
 
 **Key Differences:**

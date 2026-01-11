@@ -1,9 +1,20 @@
 #!/bin/bash
 # Pull Docker images from Docker Hub
+#
+# This script pulls pre-built production images from Docker Hub.
+# Use this after running ./push.sh locally to deploy updated images to production.
+#
 # Usage: ./pull.sh [username]
 # Default username: xyshyniaphy
 
 set -e
+
+# Colors for output
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+RED='\033[0;31m'
+NC='\033[0m' # No Color
 
 # Get username from argument or use default
 DOCKER_USERNAME="${1:-xyshyniaphy}"
@@ -14,27 +25,33 @@ echo "Username: $DOCKER_USERNAME"
 echo "========================================="
 echo
 
-# Images to pull (Server/Runner architecture)
+# Images to pull (production deployment)
+# Note: Runner is deployed separately on GPU machine
 IMAGES=(
     "whisper_summarizer-frontend"
     "whisper_summarizer-server"
-    "whisper_summarizer-runner"
-    "whisper-summarizer-fastwhisper-base"
 )
 
 for image in "${IMAGES[@]}"; do
     target="${DOCKER_USERNAME}/${image}:latest"
-    echo "📥 Pulling ${target}"
-    docker pull "${target}" || echo "⚠️  Failed to pull ${target}, skipping..."
+    echo -e "${BLUE}[INFO]${NC} Pulling ${target}"
+    if docker pull "${target}"; then
+        echo -e "${GREEN}[SUCCESS]${NC} Pulled ${target}"
+    else
+        echo -e "${YELLOW}[WARNING]${NC} Failed to pull ${target}"
+    fi
     echo
 done
 
 echo "========================================="
-echo "✅ All images pulled!"
+echo -e "${GREEN}Pull complete!${NC}"
 echo "========================================="
 echo
-echo "To retag images for local use:"
-echo "  docker tag ${DOCKER_USERNAME}/whisper_summarizer-frontend:latest whisper_summarizer-frontend:latest"
-echo "  docker tag ${DOCKER_USERNAME}/whisper_summarizer-server:latest whisper_summarizer-server:latest"
-echo "  docker tag ${DOCKER_USERNAME}/whisper_summarizer-runner:latest whisper_summarizer-runner:latest"
-echo "  docker tag ${DOCKER_USERNAME}/whisper-summarizer-fastwhisper-base:latest whisper-summarizer-fastwhisper-base:latest"
+echo "To start services with the new images:"
+echo "  ./stop_prd.sh"
+echo "  ./start_prd.sh"
+echo
+echo "Or to restart a specific service:"
+echo "  docker compose -f docker-compose.prod.yml up -d web"
+echo "  docker compose -f docker-compose.prod.yml up -d server"
+echo

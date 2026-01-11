@@ -21,16 +21,7 @@ RUN bun install --frozen-lockfile && \
 # ========================================
 FROM oven/bun:1-alpine AS builder
 
-# Build arguments for environment variables
-# These are baked in at build time (cannot be changed at runtime)
-ARG VITE_SUPABASE_URL
-ARG VITE_SUPABASE_ANON_KEY
-ARG VITE_BACKEND_URL=/api
-
-# Set as environment variables for Vite build
-ENV VITE_SUPABASE_URL=${VITE_SUPABASE_URL}
-ENV VITE_SUPABASE_ANON_KEY=${VITE_SUPABASE_ANON_KEY}
-ENV VITE_BACKEND_URL=${VITE_BACKEND_URL}
+# Set production mode
 ENV NODE_ENV=production
 
 WORKDIR /app
@@ -60,7 +51,7 @@ RUN bun run vite build && \
 # ========================================
 FROM nginx:alpine AS production
 
-# Install curl for health checks and remove unnecessary packages
+# Install curl for health checks
 RUN apk add --no-cache curl && \
     apk cache clean
 
@@ -69,6 +60,16 @@ COPY nginx.conf /etc/nginx/conf.d/default.conf
 
 # Copy built assets from builder stage
 COPY --from=builder /app/dist /usr/share/nginx/html
+
+# Copy entrypoint script for runtime configuration
+COPY entrypoint.sh /docker-entrypoint.sh
+RUN chmod +x /docker-entrypoint.sh
+
+# Declare environment variables (injected at container runtime)
+# These are NOT baked into the image - set in docker-compose.prod.yml
+ENV VITE_SUPABASE_URL=""
+ENV VITE_SUPABASE_ANON_KEY=""
+ENV VITE_BACKEND_URL=/api
 
 # Add non-root user for security (reduces attack surface)
 RUN addgroup -g 1001 -S nginx-app && \
@@ -89,5 +90,5 @@ EXPOSE 80
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:80/ || exit 1
 
-# Start nginx (foreground mode)
-CMD ["nginx", "-g", "daemon off;"]
+# Use entrypoint script to generate config.js at runtime
+ENTRYPOINT ["/docker-entrypoint.sh"]
