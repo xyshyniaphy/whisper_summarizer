@@ -183,6 +183,8 @@ Shows real-time updates of processing jobs.
 
 For advanced operations, SSH manually:
 
+**IMPORTANT**: Server container uses `python:3.12-slim` (lightweight, no curl, no requests package). Use Python standard library `urllib.request` for HTTP requests.
+
 ```bash
 # Connect to server
 ssh -i ~/.ssh/id_ed25519 root@192.3.249.169
@@ -190,8 +192,11 @@ ssh -i ~/.ssh/id_ed25519 root@192.3.249.169
 # Change to project directory
 cd /root/whisper_summarizer
 
-# Execute command in container
-docker exec whisper_server_prd curl -s http://localhost:8000/api/transcriptions
+# Check health (using Python urllib - always available)
+docker exec whisper_server_prd python -c "import urllib.request; print(urllib.request.urlopen('http://localhost:8000/health').status)"
+
+# Get API response as JSON
+docker exec whisper_server_prd python -c "import urllib.request, json; data=json.loads(urllib.request.urlopen('http://localhost:8000/api/transcriptions').read().decode()); print(json.dumps(data, indent=2))"
 
 # View logs
 docker logs whisper_server_prd --tail=50
@@ -219,25 +224,36 @@ The production server has a **localhost authentication bypass** for testing:
 ### Check transcription status
 
 ```bash
-docker exec whisper_server_prd curl -s http://localhost:8000/api/transcriptions | \
-  jq '.[] | {id, file_name, status, created_at}'
+# Get transcriptions with status
+docker exec whisper_server_prd python -c "
+import urllib.request, json
+data = json.loads(urllib.request.urlopen('http://localhost:8000/api/transcriptions').read().decode())
+for item in data:
+    print(f\"{item['id'][:8]}... {item['file_name'][:30]:30} {item['status']:10} {item['created_at']}\")
+"
 ```
 
 ### Test runner API
 
 ```bash
 # Check pending jobs
-docker exec whisper_server_prd curl -s http://localhost:8000/api/runner/jobs?status=pending
+docker exec whisper_server_prd python -c "import urllib.request, json; print(json.loads(urllib.request.urlopen('http://localhost:8000/api/runner/jobs?status=pending').read().decode()))"
 
 # Check active jobs
-docker exec whisper_server_prd curl -s http://localhost:8000/api/runner/jobs?status=processing
+docker exec whisper_server_prd python -c "import urllib.request, json; print(json.loads(urllib.request.urlopen('http://localhost:8000/api/runner/jobs?status=processing').read().decode()))"
 ```
 
 ### Monitor job processing
 
 ```bash
-watch -n 2 'docker exec whisper_server_prd curl -s http://localhost:8000/api/transcriptions | \
-  jq -r ".[] | select(.status == \"processing\") | {file_name, status}"'
+# Watch processing jobs (simple version)
+watch -n 2 'docker exec whisper_server_prd python -c "
+import urllib.request, json
+data = json.loads(urllib.request.urlopen(\"http://localhost:8000/api/transcriptions\").read().decode())
+processing = [t for t in data if t[\"status\"] == \"processing\"]
+for t in processing:
+    print(f\"{t['file_name']} - {t['status']}\")
+"'
 ```
 
 ### Query database directly
@@ -249,16 +265,56 @@ docker exec whisper_postgres_prd psql -U postgres -d whisper_summarizer -c \
 
 ### Upload and test audio file
 
+**NOTE**: File upload requires multipart form data. Use the `/prd_debug upload` command which handles this properly.
+
 ```bash
-# From local machine
+# From local machine - use the prd_debug skill
+/prd_debug upload /path/to/audio.m4a
+
+# Or manually: copy file and use Python for upload
 scp -i ~/.ssh/id_ed25519 test.m4a root@192.3.249.169:/tmp/test.m4a
 
-# On server
+# On server - upload using Python (multipart form)
 ssh -i ~/.ssh/id_ed25519 root@192.3.249.169
 docker cp /tmp/test.m4a whisper_server_prd:/tmp/test.m4a
-docker exec whisper_server_prd curl -X POST \
-  http://localhost:8000/api/audio/upload \
-  -F "file=@/tmp/test.m4a"
+docker exec whisper_server_prd python -c "
+import urllib.request
+import os
+from urllib.parse import urlencode
+
+# Read file data
+with open('/tmp/test.m4a', 'rb') as f:
+    file_data = f.read()
+
+# Create multipart boundary
+boundary = b'----WebKitFormBoundary7MA4YWxkTrZu0gW'
+
+# Build multipart body
+lines = [
+    b'--' + boundary,
+    b'Content-Disposition: form-data; name=\"file\"; filename=\"test.m4a\"',
+    b'Content-Type: audio/m4a',
+    b'',
+    file_data,
+    b'--' + boundary + b'--',
+    b'',
+]
+body = b'\r\n'.join([
+    b'--' + boundary,
+    b'Content-Disposition: form-data; name=\"file\"; filename=\"test.m4a\"',
+    b'Content-Type: audio/m4a',
+    b'',
+    file_data,
+    b'--' + boundary + b'--',
+    b'',
+])
+
+req = urllib.request.Request('http://localhost:8000/api/audio/upload', data=body)
+req.add_header('Content-Type', 'multipart/form-data; boundary=' + boundary.decode())
+req.add_header('Content-Length', str(len(body)))
+response = urllib.request.urlopen(req)
+print(response.read().decode())
+"
 ```
 
 ### View session.json
@@ -295,7 +351,7 @@ docker compose -f docker-compose.prod.yml restart server
 **Problem**: Auth bypass not working
 
 **Solution**:
-- Verify you're inside the container: `docker exec whisper_server_prd curl ...`
+- Verify you're using Python urllib (not curl - curl is NOT installed): `docker exec whisper_server_prd python -c "import urllib.request; print(urllib.request.urlopen('http://localhost:8000/health').status)"`
 - Check server logs: `docker logs whisper_server_prd --tail=50 | grep AuthBypass`
 
 ### Session file not found

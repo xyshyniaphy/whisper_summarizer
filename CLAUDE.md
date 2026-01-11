@@ -652,12 +652,23 @@ For comprehensive remote debugging and testing capabilities, use the **`/prd_deb
 
 ### Manual SSH Access
 
+**IMPORTANT**: Server container uses `python:3.12-slim` (lightweight, no curl, no requests package). Use Python standard library for HTTP requests.
+
 ```bash
 # Connect to server
 ssh -i ~/.ssh/id_ed25519 root@192.3.249.169
 
-# Execute command in container (localhost = auth bypass)
-docker exec whisper_server_prd curl -s http://localhost:8000/api/transcriptions
+# Quick health check (using Python urllib - always available)
+docker exec whisper_server_prd python -c "import urllib.request; print(urllib.request.urlopen('http://localhost:8000/health').status)"
+
+# Get API response as JSON
+docker exec whisper_server_prd python -c "import urllib.request, json; data=json.loads(urllib.request.urlopen('http://localhost:8000/api/transcriptions').read().decode()); print(json.dumps(data, indent=2))"
+
+# Check response headers
+docker exec whisper_server_prd python -c "import urllib.request; response=urllib.request.urlopen('http://localhost:8000/api/shared/xxx/download?format=txt'); print(dict(response.headers))"
+
+# Test status code only
+docker exec whisper_server_prd python -c "import urllib.request; print(urllib.request.urlopen('http://localhost:8000/api/transcriptions').status)"
 
 # View logs
 docker logs whisper_server_prd --tail=50
@@ -843,10 +854,14 @@ GPU Server (RunPod, Lambda Labs, etc.):
 **IMPORTANT**: Production server is **low spec** - DO NOT build images on production server.
 
 **Production API Testing Pattern**:
-When testing production APIs, **always** SSH into the server and use curl inside the Docker container. This bypasses Cloudflare protection and uses localhost auth bypass:
+Server container uses `python:3.12-slim` (lightweight, no curl). Use Python standard library `urllib.request` for HTTP testing. This bypasses Cloudflare protection and uses localhost auth bypass:
 
 ```bash
-ssh -i ~/.ssh/id_ed25519 root@192.3.249.169 "docker exec whisper_server_prd curl -s http://localhost:8000/api/transcriptions"
+# Check health status
+ssh -i ~/.ssh/id_ed25519 root@192.3.249.169 "docker exec whisper_server_prd python -c \"import urllib.request; print(urllib.request.urlopen('http://localhost:8000/health').status)\""
+
+# Get transcriptions (JSON)
+ssh -i ~/.ssh/id_ed25519 root@192.3.249.169 "docker exec whisper_server_prd python -c \"import urllib.request, json; data=json.loads(urllib.request.urlopen('http://localhost:8000/api/transcriptions').read().decode()); print(json.dumps(data, indent=2))\""
 ```
 
 ### Deployment Workflow

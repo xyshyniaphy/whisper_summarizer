@@ -145,6 +145,22 @@ export const api = {
     return response.data;
   },
 
+  downloadSharedFile: async (shareToken: string, format: 'txt' | 'srt'): Promise<Blob> => {
+    // Public download endpoint for shared transcriptions (no authentication required)
+    const response = await apiClient.get(`/shared/${shareToken}/download?format=${format}`, {
+      responseType: 'blob'
+    });
+    return response.data;
+  },
+
+  downloadSharedDocx: async (shareToken: string): Promise<Blob> => {
+    // Public DOCX download endpoint for shared transcriptions (no authentication required)
+    const response = await apiClient.get(`/shared/${shareToken}/download-docx`, {
+      responseType: 'blob'
+    });
+    return response.data;
+  },
+
   downloadSummaryDocx: async (transcriptionId: string): Promise<Blob> => {
     const response = await apiClient.get(`/transcriptions/${transcriptionId}/download-docx`, {
       responseType: 'blob'

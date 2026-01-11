@@ -5,6 +5,7 @@ from sqlalchemy import or_
 from typing import List, Optional
 from pathlib import Path
 from uuid import UUID
+from urllib.parse import quote
 import secrets
 import base64
 from app.api.deps import get_db, get_current_db_user, require_active, require_admin
@@ -76,6 +77,27 @@ def _format_fake_srt(text: str) -> str:
       end_time = f"{i:02d}:00:01,000"
       srt_lines.append(f"{i}\n{start_time} --> {end_time}\n{line}\n")
   return "\n".join(srt_lines)
+
+
+def _create_content_disposition(filename: str) -> dict:
+  """
+  Create Content-Disposition header with proper encoding for non-ASCII filenames.
+
+  Uses RFC 2231 encoding for filenames with non-ASCII characters (e.g., Japanese).
+
+  Args:
+    filename: The filename to encode
+
+  Returns:
+    Dict with Content-Disposition header
+  """
+  if filename.isascii():
+    # Simple header for ASCII-only names
+    return {"Content-Disposition": f'attachment; filename="{filename}"'}
+  else:
+    # RFC 2231 encoding for non-ASCII names
+    encoded_filename = quote(filename)
+    return {"Content-Disposition": f'attachment; filename*=UTF-8\'\'{encoded_filename}'}
 
 
 # ============================================================================
@@ -450,9 +472,7 @@ async def download_transcription(
     return StreamingResponse(
       buffer,
       media_type="text/plain; charset=utf-8",
-      headers={
-        "Content-Disposition": f'attachment; filename="{download_filename}"'
-      }
+      headers=_create_content_disposition(download_filename)
     )
 
   # TXT/SRT - 从存储的转录文本按需生成
@@ -501,9 +521,7 @@ async def download_transcription(
   return StreamingResponse(
     buffer,
     media_type="text/plain; charset=utf-8",
-    headers={
-      "Content-Disposition": f'attachment; filename="{download_filename}"'
-    }
+    headers=_create_content_disposition(download_filename)
   )
 
 
@@ -652,8 +670,8 @@ async def download_summary_docx(
 
         return FileResponse(
             path=docx_path,
-            filename=download_filename,
-            media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            headers=_create_content_disposition(download_filename)
         )
 
     except ImportError:
@@ -727,9 +745,7 @@ async def download_notebooklm_guideline(
         return StreamingResponse(
             buffer,
             media_type="text/plain; charset=utf-8",
-            headers={
-                "Content-Disposition": f'attachment; filename="{download_filename}"'
-            }
+            headers=_create_content_disposition(download_filename)
         )
 
     except FileNotFoundError:

@@ -128,9 +128,9 @@ export function SharedTranscription() {
 
     // Reuse download handlers from TranscriptionDetail
     const handleDownload = async (format: 'txt' | 'srt') => {
-        if (!data) return
+        if (!data || !shareToken) return
         try {
-            const blob = await api.downloadFile(data.id, format)
+            const blob = await api.downloadSharedFile(shareToken, format)
             const link = document.createElement('a')
             link.href = URL.createObjectURL(blob)
             link.download = `${data.file_name.replace(/\.[^/.]+$/, '')}.${format}`
@@ -146,9 +146,9 @@ export function SharedTranscription() {
 
     // Download DOCX
     const handleDownloadDocx = async () => {
-        if (!data || !data.summary) return
+        if (!data || !data.summary || !shareToken) return
         try {
-            const blob = await api.downloadSummaryDocx(data.id)
+            const blob = await api.downloadSharedDocx(shareToken)
             const link = document.createElement('a')
             link.href = URL.createObjectURL(blob)
             link.download = `${data.file_name.replace(/\.[^/.]+$/, '')}-摘要.docx`
