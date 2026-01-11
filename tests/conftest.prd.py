@@ -84,7 +84,7 @@ class RemoteProductionClient:
                 cmd,
                 capture_output=True,
                 text=True,
-                timeout=30,
+                timeout=60,
                 shell=False
             )
 
@@ -129,12 +129,15 @@ class RemoteProductionClient:
         Returns:
             RemoteResponse with parsed JSON data
         """
-        code = f"""import urllib.request, json
+        code = f"""import urllib.request, json, urllib.error
 req = urllib.request.Request('http://localhost:8000{endpoint}')
 try:
-    with urllib.request.urlopen(req, timeout=30) as response:
+    with urllib.request.urlopen(req, timeout=60) as response:
         print(response.status)
         print(response.read().decode())
+except urllib.error.HTTPError as e:
+    print(e.code)
+    print(e.read().decode() if hasattr(e, 'read') else '{{\"detail\": \"Not Found\"}}')
 except Exception as e:
     print(f"ERROR: {{e}}")
 """
@@ -156,31 +159,6 @@ except Exception as e:
                     pass
 
         return response
-
-    def post(self, endpoint: str, data: dict = None) -> RemoteResponse:
-        """
-        Send POST request to production API.
-
-        Args:
-            endpoint: API endpoint
-            data: Request body (will be JSON encoded)
-
-        Returns:
-            RemoteResponse with parsed JSON data
-        """
-        json_data = json.dumps(data) if data else "{}"
-        code = f"""import urllib.request, json
-req = urllib.request.Request('http://localhost:8000{endpoint}', method='POST')
-req.add_header('Content-Type', 'application/json')
-req.data = json.dumps({json_data}).encode()
-try:
-    with urllib.request.urlopen(req, timeout=30) as response:
-        print(response.status)
-        print(response.read().decode())
-except Exception as e:
-    print(f"ERROR: {{e}}")
-"""
-        return self.get(endpoint)  # Reuse response parsing
 
     def get_session(self) -> dict:
         """Get session.json content from production container."""
@@ -220,7 +198,7 @@ except Exception as e:
             RemoteResponse with parsed JSON data
         """
         json_data = json.dumps(data) if data else "{}"
-        code = f"""import urllib.request, json, sys
+        code = f"""import urllib.request, json, sys, urllib.error
 req = urllib.request.Request('http://localhost:8000{endpoint}', method='POST')
 req.add_header('Content-Type', 'application/json')
 req.data = json.dumps({json_data}).encode()
@@ -228,6 +206,9 @@ try:
     with urllib.request.urlopen(req, timeout=60) as response:
         print(response.status)
         print(response.read().decode())
+except urllib.error.HTTPError as e:
+    print(e.code)
+    print(e.read().decode() if hasattr(e, 'read') else '{{\"detail\": \"Not Found\"}}')
 except Exception as e:
     print(f"ERROR: {{e}}", file=sys.stderr)
         """
@@ -274,13 +255,17 @@ except Exception as e:
         Returns:
             RemoteResponse with file content
         """
-        code = f"""import urllib.request
+        code = f"""import urllib.request, urllib.error
 req = urllib.request.Request('http://localhost:8000{endpoint}')
 try:
     with urllib.request.urlopen(req, timeout=60) as response:
         print(response.status)
         print(response.headers.get('Content-Type', ''))
         print(response.read().decode('latin-1'))
+except urllib.error.HTTPError as e:
+    print(e.code)
+    print('')
+    print(e.read().decode('latin-1') if hasattr(e, 'read') else '')
 except Exception as e:
     print(f"ERROR: {{e}}")
         """
