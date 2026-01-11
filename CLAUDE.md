@@ -674,181 +674,67 @@ curl http://localhost:8130/api/transcriptions
 
 ## Remote Production Debugging
 
-### Overview
-
-Remote debugging allows you to test and debug the production server directly from inside the Docker container, bypassing authentication for localhost requests.
-
-### Quick Start
+For comprehensive remote debugging and testing capabilities, use the **`/prd_debug`** skill:
 
 ```bash
-# Use the remote debug helper script
-./scripts/remote_debug.sh transcriptions    # List all transcriptions
-./scripts/remote_debug.sh status            # Server status
-./scripts/remote_debug.sh logs              # View logs
-./scripts/remote_debug.sh session           # Show session.json
+# View all transcriptions
+/prd_debug transcriptions
+
+# Check server status
+/prd_debug status
+
+# View logs
+/prd_debug logs
+
+# Test API endpoint (localhost bypass)
+/prd_debug api /health
+
+# Upload audio file for testing
+/prd_debug upload /path/to/audio.m4a
+
+# Test chat streaming
+/prd_debug chat <transcription_id> "your question"
+
+# Open shell in container
+/prd_debug shell
+
+# Query database
+/prd_debug db "SELECT * FROM transcriptions LIMIT 5"
+
+# Monitor job processing
+/prd_debug watch
 ```
 
-### Manual SSH Debugging
+### Quick Reference
 
 **Production Server**: `ssh -i ~/.ssh/id_ed25519 root@192.3.249.169`
+**Project Path**: `/root/whisper_summarizer`
+**URL**: https://w.198066.xyz
 
-#### 1. Connect to Production Server
+### Key Features
+
+- **Auth Bypass**: Uses localhost auth bypass inside container
+- **No Authentication**: All API calls work without Supabase OAuth
+- **Bypasses Cloudflare**: Direct container access
+- **Quick Diagnostics**: Check status, logs, APIs from terminal
+
+### Manual SSH Access
 
 ```bash
+# Connect to server
 ssh -i ~/.ssh/id_ed25519 root@192.3.249.169
-cd /root/whisper_summarizer
-```
 
-#### 2. Execute Commands Inside Container
+# Execute command in container (localhost = auth bypass)
+docker exec whisper_server_prd curl -s http://localhost:8000/api/transcriptions
 
-```bash
-# List transcriptions (localhost = auth bypass)
-docker exec whisper_server_prd curl -s http://localhost:8000/api/transcriptions | jq .
+# View logs
+docker logs whisper_server_prd --tail=50
 
-# View server health
-docker exec whisper_server_prd curl -s http://localhost:8000/health | jq .
-
-# Check session.json
-docker exec whisper_server_prd cat /app/session.json | jq .
-```
-
-#### 3. Upload Audio File for Testing
-
-```bash
-# Copy file from local machine to server
-scp -i ~/.ssh/id_ed25519 test_audio.m4a root@192.3.249.169:/tmp/test_audio.m4a
-
-# On server: copy into container
-ssh -i ~/.ssh/id_ed25519 root@192.3.249.169
-docker cp /tmp/test_audio.m4a whisper_server_prd:/tmp/test.m4a
-
-# Upload via API (localhost = bypass)
-docker exec whisper_server_prd curl -X POST \
-  http://localhost:8000/api/audio/upload \
-  -F "file=@/tmp/test.m4a" | jq .
-```
-
-#### 4. Test Chat Streaming
-
-```bash
-# Get transcription ID from session
-TRANSCRIPTION_ID=$(docker exec whisper_server_prd cat /app/session.json | jq -r '.test_transcriptions[0].id')
-
-# Test chat streaming (localhost = bypass)
-docker exec whisper_server_prd curl -N \
-  "http://localhost:8000/api/transcriptions/$TRANSCRIPTION_ID/chat/stream?message=总结内容"
-```
-
-#### 5. Query Database Directly
-
-```bash
-# Interactive SQL
+# Database access
 docker exec -it whisper_postgres_prd psql -U postgres -d whisper_summarizer
-
-# Quick query
-docker exec whisper_postgres_prd psql -U postgres -d whisper_summarizer -c \
-  "SELECT id, file_name, status, runner_id FROM transcriptions ORDER BY created_at DESC LIMIT 5;"
 ```
 
-#### 6. View and Update Session
-
-```bash
-# View current session
-docker exec whisper_server_prd cat /app/session.json | jq .
-
-# Update test user (e.g., switch to different user)
-docker exec whisper_server_prd sh -c 'cat > /app/session.json << EOF
-{
-  "version": "1.0",
-  "test_user": {
-    "id": "new-user-id",
-    "email": "newuser@example.com",
-    "is_admin": true,
-    "is_active": true
-  },
-  "test_channels": [],
-  "test_transcriptions": []
-}
-EOF'
-
-# Restart server to reload session
-docker compose -f docker-compose.prod.yml restart server
-```
-
-### Remote Debug Script Commands
-
-The `scripts/remote_debug.sh` helper provides convenient commands:
-
-```bash
-./scripts/remote_debug.sh transcriptions    # List all transcriptions
-./scripts/remote_debug.sh upload <file>     # Upload audio file
-./scripts/remote_debug.sh chat <id> <msg>   # Test chat streaming
-./scripts/remote_debug.sh status            # Show server status
-./scripts/remote_debug.sh session           # Show session.json
-./scripts/remote_debug.sh shell             # Open shell in container
-./scripts/remote_debug.sh logs [lines]      # Show server logs (default: 50)
-```
-
-### Common Debugging Scenarios
-
-#### Check Transcription Status
-
-```bash
-# Get all transcriptions with status
-docker exec whisper_server_prd curl -s http://localhost:8000/api/transcriptions | \
-  jq '.[] | {id, file_name, status, runner_id, created_at}'
-```
-
-#### Test Runner API
-
-```bash
-# Check pending jobs
-docker exec whisper_server_prd curl -s http://localhost:8000/api/runner/jobs?status=pending | jq .
-
-# Check active jobs
-docker exec whisper_server_prd curl -s http://localhost:8000/api/runner/jobs?status=processing | jq .
-```
-
-#### Monitor Job Processing
-
-```bash
-# Watch transcriptions as they process
-watch -n 2 'docker exec whisper_server_prd curl -s http://localhost:8000/api/transcriptions | jq -r ".[] | select(.status == \"processing\") | {file_name, status, runner_id}"'
-```
-
-#### Test Admin Endpoints
-
-```bash
-# List users (requires admin test user)
-docker exec whisper_server_prd curl -s http://localhost:8000/api/admin/users | jq .
-
-# List channels
-docker exec whisper_server_prd curl -s http://localhost:8000/api/channels | jq .
-```
-
-### Security Notes
-
-⚠️ **Important Security Considerations**:
-
-1. **Localhost only** - Auth bypass ONLY works for requests from `127.0.0.1`, `::1`, or `localhost`
-2. **Container-internal** - Docker network requests (e.g., `172.17.0.x`) require normal auth
-3. **External requests** - All external requests (via Cloudflare Tunnel) require Supabase OAuth
-4. **Audit trail** - All bypassed requests are logged with `[AuthBypass]` marker
-5. **Session file** - Stored in container at `/app/session.json`, not exposed externally
-
-### Troubleshooting Remote Debugging
-
-**"401 Unauthorized" even with localhost request**:
-- Verify you're inside the container: `docker exec whisper_server_prd curl ...`
-- Check server logs: `docker logs whisper_server_prd --tail=50 | grep AuthBypass`
-
-**Session file not found**:
-- Check if file exists: `docker exec whisper_server_prd ls -la /app/session.json`
-- Restart server to auto-create: `docker compose -f docker-compose.prod.yml restart server`
-
-**Container access denied**:
-- Ensure you're SSH'd into production server first: `ssh -i ~/.ssh/id_ed25519 root@192.3.249.169`
-- Check container is running: `docker ps | grep whisper_server_prd`
+**See**: [`/prd_debug`](.claude/skills/prd_debug) skill for full documentation
 
 ## Frontend UI Patterns
 
@@ -1078,10 +964,15 @@ ssh -i ~/.ssh/id_ed25519 root@192.3.249.169 "cd /root/whisper_summarizer && git 
 
 ### Debugging on Production Server
 
-**For comprehensive remote debugging guide**, see the [Remote Production Debugging](#remote-production-debugging) section above.
+For remote debugging and testing, use the **`/prd_debug`** skill or SSH directly:
 
 ```bash
-# Connect to production server
+# Use the prd_debug skill
+/prd_debug status
+/prd_debug logs
+/prd_debug api /health
+
+# Or connect manually
 ssh -i ~/.ssh/id_ed25519 root@192.3.249.169
 
 # Check container status
@@ -1094,21 +985,9 @@ docker logs whisper_web_prd --tail=100
 # Restart services
 cd /root/whisper_summarizer
 docker compose -f docker-compose.prod.yml restart server
-
-# Check database
-docker exec -it whisper_postgres_prd psql -U postgres -d whisper_summarizer
-
-# Quick API test (localhost bypass works inside container)
-docker exec whisper_server_prd curl -s http://localhost:8000/health | jq .
 ```
 
-**Remote Debugging with Auth Bypass**:
-```bash
-# Use remote debug helper script
-./scripts/remote_debug.sh status        # Server status
-./scripts/remote_debug.sh transcriptions # List all
-./scripts/remote_debug.sh logs          # View logs
-```
+**See**: [Remote Production Debugging](#remote-production-debugging) section above for `/prd_debug` skill usage.
 
 ### Common Issues
 
