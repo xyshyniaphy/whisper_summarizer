@@ -16,6 +16,7 @@ set -euo pipefail
 #   restart  - Restart the runner
 #   logs     - Show runner logs
 #   build    - Build and start the runner
+#   push     - Build, push to registry, and start the runner
 #   status   - Show runner status
 
 # Color output
@@ -96,6 +97,7 @@ case "$COMMAND" in
         echo "View logs: $0 logs"
         echo "Stop runner: $0 down"
         echo "Build runner: $0 build"
+        echo "Build & push: $0 push"
         echo ""
         echo "Runner connects to: $SERVER_URL/api/runner"
         ;;
@@ -129,6 +131,34 @@ case "$COMMAND" in
         echo "View logs: $0 logs"
         ;;
 
+    push)
+        echo -e "${YELLOW}Building and pushing production runner to registry...${NC}"
+
+        # Build the image
+        echo -e "${BLUE}Step 1: Building image...${NC}"
+        $DOCKER_COMPOSE -f "$COMPOSE_FILE" build
+
+        # Get the image name
+        IMAGE_NAME="xyshyniaphy/whisper_summarizer-runner:latest"
+
+        # Tag and push to registry
+        echo -e "${BLUE}Step 2: Tagging image as $IMAGE_NAME${NC}"
+        docker tag whisper-summarizer-runner:latest "$IMAGE_NAME" 2>/dev/null || true
+
+        echo -e "${BLUE}Step 3: Pushing to Docker Hub...${NC}"
+        docker push "$IMAGE_NAME"
+
+        # Start the runner
+        echo -e "${BLUE}Step 4: Starting runner...${NC}"
+        $DOCKER_COMPOSE -f "$COMPOSE_FILE" up -d
+
+        echo ""
+        echo -e "${GREEN}✓ Production runner built, pushed, and started${NC}"
+        echo ""
+        echo "Image: $IMAGE_NAME"
+        echo "View logs: $0 logs"
+        ;;
+
     status)
         echo -e "${YELLOW}Production runner status:${NC}"
         echo ""
@@ -144,6 +174,7 @@ case "$COMMAND" in
         echo "  restart  - Restart the runner"
         echo "  logs     - Show runner logs"
         echo "  build    - Build and start the runner"
+        echo "  push     - Build, push to registry, and start the runner"
         echo "  status   - Show runner status"
         echo ""
         exit 1

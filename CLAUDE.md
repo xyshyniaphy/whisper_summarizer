@@ -690,12 +690,12 @@ Remote debugging allows you to test and debug the production server directly fro
 
 ### Manual SSH Debugging
 
-**Production Server**: `ssh root@192.3.249.169`
+**Production Server**: `ssh -i ~/.ssh/id_ed25519 root@192.3.249.169`
 
 #### 1. Connect to Production Server
 
 ```bash
-ssh root@192.3.249.169
+ssh -i ~/.ssh/id_ed25519 root@192.3.249.169
 cd /root/whisper_summarizer
 ```
 
@@ -716,10 +716,10 @@ docker exec whisper_server_prd cat /app/session.json | jq .
 
 ```bash
 # Copy file from local machine to server
-scp test_audio.m4a root@192.3.249.169:/tmp/test_audio.m4a
+scp -i ~/.ssh/id_ed25519 test_audio.m4a root@192.3.249.169:/tmp/test_audio.m4a
 
 # On server: copy into container
-ssh root@192.3.249.169
+ssh -i ~/.ssh/id_ed25519 root@192.3.249.169
 docker cp /tmp/test_audio.m4a whisper_server_prd:/tmp/test.m4a
 
 # Upload via API (localhost = bypass)
@@ -847,7 +847,7 @@ docker exec whisper_server_prd curl -s http://localhost:8000/api/channels | jq .
 - Restart server to auto-create: `docker compose -f docker-compose.prod.yml restart server`
 
 **Container access denied**:
-- Ensure you're SSH'd into production server first: `ssh root@192.3.249.169`
+- Ensure you're SSH'd into production server first: `ssh -i ~/.ssh/id_ed25519 root@192.3.249.169`
 - Check container is running: `docker ps | grep whisper_server_prd`
 
 ## Frontend UI Patterns
@@ -1017,11 +1017,19 @@ GPU Server (RunPod, Lambda Labs, etc.):
 
 ### Production Server Info
 
-**Location**: `ssh root@192.3.249.169`
+**Location**: `ssh -i ~/.ssh/id_ed25519 root@192.3.249.169`
+**SSH Key**: `~/.ssh/id_ed25519`
 **Project Path**: `/root/whisper_summarizer`
 **URL**: https://w.198066.xyz
 
 **IMPORTANT**: Production server is **low spec** - DO NOT build images on production server.
+
+**Production API Testing Pattern**:
+When testing production APIs, **always** SSH into the server and use curl inside the Docker container. This bypasses Cloudflare protection and uses localhost auth bypass:
+
+```bash
+ssh -i ~/.ssh/id_ed25519 root@192.3.249.169 "docker exec whisper_server_prd curl -s http://localhost:8000/api/transcriptions"
+```
 
 ### Deployment Workflow
 
@@ -1035,7 +1043,7 @@ docker push xyshyniaphy/whisper_summarizer-server:latest
 docker push xyshyniaphy/whisper_summarizer-frontend:latest
 
 # 2. Connect to production server and pull images
-ssh root@192.3.249.169
+ssh -i ~/.ssh/id_ed25519 root@192.3.249.169
 cd /root/whisper_summarizer
 
 # 3. Pull latest code
@@ -1065,7 +1073,7 @@ docker compose -f docker-compose.prod.yml logs -f server
 # One-line deploy (run from local machine)
 docker build -t xyshyniaphy/whisper_summarizer-server:latest -f server/Dockerfile server && \
 docker push xyshyniaphy/whisper_summarizer-server:latest && \
-ssh root@192.3.249.169 "cd /root/whisper_summarizer && git pull && docker compose -f docker-compose.prod.yml pull && docker compose -f docker-compose.prod.yml up -d"
+ssh -i ~/.ssh/id_ed25519 root@192.3.249.169 "cd /root/whisper_summarizer && git pull && docker compose -f docker-compose.prod.yml pull && docker compose -f docker-compose.prod.yml up -d"
 ```
 
 ### Debugging on Production Server
@@ -1074,7 +1082,7 @@ ssh root@192.3.249.169 "cd /root/whisper_summarizer && git pull && docker compos
 
 ```bash
 # Connect to production server
-ssh root@192.3.249.169
+ssh -i ~/.ssh/id_ed25519 root@192.3.249.169
 
 # Check container status
 docker ps -a
