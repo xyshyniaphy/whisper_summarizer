@@ -1,0 +1,69 @@
+# Production Server Configuration for test_on_remote skill
+# Copy this file to 'prd_server_info' and update with your server details
+
+[server]
+# Server IP address or hostname
+host = "192.3.249.169"
+# SSH username
+user = "root"
+# SSH port (default: 22)
+port = 22
+
+[ssh]
+# Path to SSH private key (Ed25519 recommended)
+key_path = "~/.ssh/id_ed25519"
+# Path to known_hosts file
+known_hosts_path = "~/.ssh/known_hosts"
+# Connection timeout in seconds
+connect_timeout = 30
+# Command execution timeout in seconds
+command_timeout = 300
+
+[containers]
+# Container names on remote server
+server = "whisper_server_prd"
+runner = "whisper_runner_prd"
+frontend = "whisper_frontend_prd"
+# postgres = "whisper_postgres_prd"  # Optional
+
+[docker]
+# Main Docker Compose file
+compose_file = "docker-compose.prod.yml"
+# Docker project name
+project_name = "whisper"
+# Docker registry (optional, for pushing images)
+# registry = "your-registry.com"
+# Image name prefix
+# image_prefix = "whisper-"
+
+[testing]
+# Test Docker Compose file (relative to project root)
+test_compose = "tests/docker-compose.test.prd.yml"
+# Test timeout in seconds
+test_timeout = 300
+# Maximum fix-verify iterations
+max_retries = 3
+# Path to tests (relative to project root)
+test_path = "tests/integration"
+# Default pytest arguments
+pytest_args = "-v --tb=short"
+
+[git]
+# Automatically commit changes
+auto_commit = true
+# Automatically push commits
+auto_push = true
+# Prefix for auto-generated commits
+commit_prefix = "[test-on-remote]"
+# Branch to commit and push to
+branch = "main"
+# Co-author for commits
+coauthor = "Claude <noreply@anthropic.com>"
+
+[ultrathink]
+# Enable UltraThink for intelligent analysis
+enabled = true
+# Maximum thoughts per analysis
+max_thoughts = 10
+# Timeout per thought (seconds)
+timeout = 60
