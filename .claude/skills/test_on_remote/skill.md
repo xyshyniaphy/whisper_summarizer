@@ -1,4 +1,4 @@
-# Test on Remote
+# /sc:test-on-remote - Automated Remote Testing and Debugging
 
 Automated remote testing and debugging workflow with intelligent fix-verify cycles and UltraThink integration.
 
@@ -19,25 +19,25 @@ This skill automates the end-to-end testing and debugging workflow for remote pr
    - Re-runs tests
 6. Continues until tests pass or max retries reached
 
-## Usage
+## Triggers
 
-```bash
-# Run full test cycle with automated fix-verify loop
-/sc:implement test_on_remote
+- `test on remote` / `test remote` / `remote test` / `test on prod`
+- `debug on remote` / `remote debug`
+- `run tests on remote` / `run remote tests`
+- `deploy and test` / `test deployment`
 
-# Run with specific max retries
-/sc:implement test_on_remote --max-retries 5
+## Parameters
 
-# Run tests only (no fixes)
-/sc:implement test_on_remote --test-only
-
-# Verbose mode with detailed logging
-/sc:implement test_on_remote --verbose
-```
+| Name | Type | Default | Description |
+|------|------|---------|-------------|
+| `config_path` | string | `prd_server_info` | Path to server configuration file |
+| `test_only` | boolean | `false` | Run tests only, skip fix loop |
+| `verbose` | boolean | `false` | Enable verbose logging |
+| `max_retries` | integer | `3` | Maximum fix-verify iterations |
 
 ## Configuration
 
-Create a `prd_server_info` file in your project root (default format is TOML):
+Create a `prd_server_info` file in your project root (TOML format):
 
 ```toml
 [server]
@@ -100,7 +100,7 @@ max_thoughts = 10
 - Branch management
 - Push with conflict detection
 
-## Output
+## Output Example
 
 ```
 ============================================================

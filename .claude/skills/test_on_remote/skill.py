@@ -1,12 +1,26 @@
-"""
-Main skill implementation for test_on_remote.
+# /sc:test-on-remote - Automated Remote Testing and Debugging
 
-Implements the complete automated testing and debugging workflow:
-1. Load configuration from prd_server_info
-2. Start local test container
-3. SSH connect to remote server
-4. Run tests
-5. Fix loop: analyze failures → fix → build → push → deploy → retest
+"""
+Test on Remote Skill for Claude Code
+
+Automated remote testing and debugging workflow with intelligent fix-verify cycles.
+Integrates SSH, Docker, Git, and UltraThink for complete automated debugging.
+
+Usage:
+    /sc:test-on-remote                    # Run full test cycle with fixes
+    /sc:test-on-remote --test-only        # Run tests only, skip fixes
+    /sc:test-on-remote --max-retries 5    # Set max fix-verify iterations
+    /sc:test-on-remote --verbose          # Enable verbose logging
+
+Configuration:
+    Requires a prd_server_info file in project root with:
+    - [server]: host, user, port
+    - [ssh]: key_path, known_hosts_path
+    - [containers]: server, runner, frontend names
+    - [docker]: compose_file, project_name
+    - [testing]: test_compose, test_path, max_retries
+    - [git]: auto_commit, auto_push, commit_prefix
+    - [ultrathink]: enabled, max_thoughts
 """
 
 import asyncio
@@ -18,8 +32,10 @@ from datetime import datetime
 from dataclasses import dataclass
 import argparse
 
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+# Add skill directory to path for imports
+SKILL_DIR = Path(__file__).parent
+if str(SKILL_DIR) not in sys.path:
+    sys.path.insert(0, str(SKILL_DIR))
 
 from config import TestOnRemoteConfig, load_config, ConfigParser, ConfigNotFoundError
 from ssh import RemoteServerClient, SSHConnectionError
@@ -533,6 +549,69 @@ class TestOnRemoteSkill:
             self.cleanup()
 
 
+# =============================================================================
+# Claude Code Skill Entry Point
+# =============================================================================
+
+def skill(config_path: str = None,
+          test_only: bool = False,
+          verbose: bool = False,
+          max_retries: int = None) -> dict:
+    """
+    Claude Code skill entry point.
+
+    This function is called by Claude Code when the skill is invoked.
+
+    Args:
+        config_path: Path to prd_server_info file (optional)
+        test_only: Run tests only, skip fix loop (default: False)
+        verbose: Enable verbose logging (default: False)
+        max_retries: Maximum fix-verify iterations (optional)
+
+    Returns:
+        dict: Result dictionary with keys:
+            - success (bool): Whether execution succeeded
+            - iterations (int): Number of iterations run
+            - final_results (dict): Test results summary
+            - error (str, optional): Error message if failed
+            - duration (float): Execution time in seconds
+    """
+    async def _run():
+        skill_instance = TestOnRemoteSkill(
+            config_path=Path(config_path) if config_path else None
+        )
+
+        result = await skill_instance.execute(
+            test_only=test_only,
+            verbose=verbose,
+            max_iterations=max_retries
+        )
+
+        # Generate report to stdout
+        skill_instance.generate_report(result)
+
+        # Convert to dict for Claude Code
+        return {
+            'success': result.success,
+            'iterations': result.iterations,
+            'final_results': {
+                'total': result.final_results.total if result.final_results else 0,
+                'passed': result.final_results.passed if result.final_results else 0,
+                'failed': result.final_results.failed if result.final_results else 0,
+                'skipped': result.final_results.skipped if result.final_results else 0,
+                'duration': result.final_results.duration if result.final_results else 0.0,
+            } if result.final_results else None,
+            'error': result.error,
+            'duration': result.duration,
+        }
+
+    return asyncio.run(_run())
+
+
+# =============================================================================
+# Standalone CLI Entry Point (for direct execution)
+# =============================================================================
+
 async def main(args=None):
     """Main entry point for skill execution."""
     parser = argparse.ArgumentParser(
@@ -569,18 +648,18 @@ async def main(args=None):
     print()
 
     # Create and run skill
-    skill = TestOnRemoteSkill(
+    skill_instance = TestOnRemoteSkill(
         config_path=Path(parsed_args.config) if parsed_args.config else None
     )
 
-    result = await skill.execute(
+    result = await skill_instance.execute(
         test_only=parsed_args.test_only,
         verbose=parsed_args.verbose,
         max_iterations=parsed_args.max_retries
     )
 
     # Generate report
-    skill.generate_report(result)
+    skill_instance.generate_report(result)
 
     # Exit with appropriate code
     sys.exit(0 if result.success else 1)
