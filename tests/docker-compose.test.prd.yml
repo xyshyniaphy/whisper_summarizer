@@ -45,6 +45,7 @@ services:
     volumes:
       # Mount test files
       - ./backend:/app/tests
+      - ./conftest.prd.py:/app/tests/conftest.py:ro
       # Mount server app code for imports
       - ../server/app:/app/app:ro
       # SSH key for production access (using ed25519)
