@@ -344,84 +344,16 @@ Request                        → Target
    - `CF-Ray` - Request identifier for debugging
    - `CF-Visitor` - Visitor scheme (http/https)
 
-### Production Deployment with Cloudflare Tunnel
+### Cloudflare Tunnel
 
-**Cloudflare Tunnel Setup:**
+**Cloudflare Tunnel** provides SSL/TLS termination for the application.
 
-Cloudflare Tunnel provides secure, SSL-terminated access to your application without opening ports publicly.
+- **No SSL certificates needed** in nginx configuration
+- Cloudflare manages HTTPS at the edge
+- Application runs on HTTP internally
+- Secure outbound connection only (no open ports)
 
-1. **Install cloudflared:**
-```bash
-# Linux
-wget https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
-sudo dpkg -i cloudflared-linux-amd64.deb
-
-# Or using apt
-sudo apt-add-repository ppa:cloudflare/cloudflared
-sudo apt-get update && sudo apt-get install cloudflared
-```
-
-2. **Authenticate with Cloudflare:**
-```bash
-cloudflared tunnel login
-```
-
-3. **Create a tunnel:**
-```bash
-cloudflared tunnel create whisper-summarizer
-```
-
-4. **Configure the tunnel** (`~/.cloudflared/config.yml`):
-```yaml
-tunnel: <your-tunnel-id>
-credentials-file: /home/<user>/.cloudflared/<tunnel-id>.json
-
-ingress:
-  # Frontend and API
-  - hostname: your-domain.com
-    service: http://localhost:8130
-  # Health check
-  - hostname: your-domain.com
-    path: /health
-    service: http://localhost:8130
-
-  # Catch-all: 404
-  - service: http_status:404
-```
-
-5. **Run the tunnel:**
-```bash
-# Development (foreground)
-cloudflared tunnel run whisper-summarizer
-
-# Production (background with systemd)
-sudo cloudflared service install
-sudo systemctl enable cloudflared
-sudo systemctl start cloudflared
-```
-
-6. **Configure DNS:**
-```bash
-# Add CNAME record pointing to your tunnel
-cloudflared tunnel route dns whisper-summarizer your-domain.com
-```
-
-**Benefits of Cloudflare Tunnel:**
-- ✅ **SSL/TLS Termination** - Automatic HTTPS at Cloudflare edge
-- ✅ **No Open Ports** - Secure outbound connection only
-- ✅ **DDoS Protection** - Cloudflare's global network
-- ✅ **Global CDN** - Fast content delivery worldwide
-- ✅ **Zero Config** - No SSL certificates to manage
-- ✅ **Real IP Preservation** - CF-Connecting-IP header forwarded
-
-**Alternative: quicktunnel (for testing):**
-```bash
-# Temporary public URL (no domain needed)
-cloudflared tunnel --url http://localhost:8130
-
-# Output: https://xyz.trycloudflare.com
-# Valid for session duration, great for quick demos
-```
+**Note**: Cloudflare Tunnel configuration is handled separately through the Cloudflare dashboard.
 
 **Static File Serving** (production):
 - Development: Proxies to Vite dev server (hot reload, port 3000)
