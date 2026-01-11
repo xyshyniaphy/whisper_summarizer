@@ -246,25 +246,24 @@ generate_message() {
     # Build full message
     local msg=""
     msg="${header} ${description}"
-    msg+=""
-    msg+=""
 
     # Add body with file list
     if [ "$file_count" -gt 0 ]; then
+        msg+=$'\n'
         msg+="Changes:"
         # Build file list using process substitution
         while IFS= read -r file; do
             if [ -n "$file" ]; then
                 local filename=$(basename "$file")
-                msg+=""
+                msg+=$'\n'
                 msg+="  • ${filename}"
             fi
         done <<< "$changes"
     fi
 
     # Add co-author attribution
-    msg+=""
-    msg+=""
+    msg+=$'\n'
+    msg+=$'\n'
     msg+="Co-Authored-By: Claude <noreply@anthropic.com>"
 
     echo "$msg"
