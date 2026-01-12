@@ -263,6 +263,33 @@ GLM_BASE_URL=https://api.z.ai/api/paas/v4/
 REVIEW_LANGUAGE=zh
 ```
 
+### Fixed-Duration SRT Configuration
+
+For long audio files (>1 hour), enable fixed-duration SRT segmentation:
+
+```bash
+# Fixed-Duration SRT Segmentation (NEW)
+ENABLE_FIXED_CHUNKS=true                    # Enable fixed-duration chunks
+FIXED_CHUNK_THRESHOLD_MINUTES=60            # Minimum duration (minutes) to use fixed chunks
+FIXED_CHUNK_TARGET_DURATION=20              # Target SRT duration per line (seconds)
+FIXED_CHUNK_MIN_DURATION=10                 # Minimum SRT duration (seconds)
+FIXED_CHUNK_MAX_DURATION=30                 # Maximum SRT duration (seconds)
+
+# SRT-Aware Formatting (NEW)
+FORMAT_CHUNK_BY_SRT_SECTIONS=true           # Chunk GLM prompts by SRT section count
+MAX_SRT_SECTIONS_PER_CHUNK=50               # Max SRT sections per GLM chunk (~5000 bytes)
+```
+
+**Performance Impact:**
+- Fixed chunks: +10-20% processing time vs native Whisper
+- Accuracy-first settings (5-10 min for 4-hour audio on RTX 3080)
+- Recommended for: lectures, meetings, podcasts (>1 hour)
+
+**SRT Output:**
+- Each subtitle line: 10-30 seconds (configurable)
+- Timestamps aligned to actual audio timing
+- No mid-sentence breaks (uses VAD silence detection)
+
 **Runner Docker Image**: `whisper-summarizer-fastwhisper-base:latest` (~8GB)
 
 ## Nginx Reverse Proxy
