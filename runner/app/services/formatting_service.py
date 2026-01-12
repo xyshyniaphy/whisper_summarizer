@@ -247,7 +247,7 @@ class TextFormattingService:
 
     def __init__(self):
         """Initialize the formatting service."""
-        self.max_chunk_bytes = getattr(settings, 'MAX_FORMAT_CHUNK', 10000)
+        self.max_chunk_bytes = getattr(settings, 'MAX_FORMAT_CHUNK', 5000)  # 5000 bytes to avoid GLM timeouts
         self.glm_client = None
         self._init_glm_client()
 

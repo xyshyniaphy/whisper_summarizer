@@ -31,6 +31,7 @@ class JobStartRequest(BaseModel):
 class JobCompleteRequest(BaseModel):
     """Request to mark job as completed."""
     text: str
+    segments: Optional[List[dict]] = None  # Whisper segments with timestamps
     summary: Optional[str] = None
     notebooklm_guideline: Optional[str] = None
     processing_time_seconds: int

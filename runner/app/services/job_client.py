@@ -162,14 +162,20 @@ class JobClient:
             True if successful, False otherwise
         """
         try:
+            payload = {
+                "text": result.text,
+                "summary": result.summary,
+                "notebooklm_guideline": result.notebooklm_guideline,
+                "processing_time_seconds": result.processing_time_seconds
+            }
+            # Add segments if available (for individual timestamp preservation)
+            if result.segments:
+                payload["segments"] = result.segments
+                logger.info(f"Sending {len(result.segments)} segments for job {job_id}")
+
             response = self.client.post(
                 f"/jobs/{job_id}/complete",
-                json={
-                    "text": result.text,
-                    "summary": result.summary,
-                    "notebooklm_guideline": result.notebooklm_guideline,
-                    "processing_time_seconds": result.processing_time_seconds
-                }
+                json=payload
             )
             response.raise_for_status()
             logger.info(f"Job {job_id} completed successfully")

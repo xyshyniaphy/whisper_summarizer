@@ -248,13 +248,16 @@ FASTER_WHISPER_MODEL_SIZE=large-v3-turbo
 WHISPER_LANGUAGE=zh
 WHISPER_THREADS=4
 
-# Audio Chunking (long audio optimization)
+# Audio Chunking (segments-first approach)
 ENABLE_CHUNKING=true
-CHUNK_SIZE_MINUTES=10
-CHUNK_OVERLAP_SECONDS=15
-MAX_CONCURRENT_CHUNKS=4           # GPU: 4-8 recommended
-USE_VAD_SPLIT=true
-MERGE_STRATEGY=lcs
+CHUNK_SIZE_MINUTES=5                         # 10-minute chunks for parallel processing
+CHUNK_OVERLAP_SECONDS=15                     # Overlap for deduplication
+MAX_CONCURRENT_CHUNKS=4                      # GPU: 4-8 recommended
+USE_VAD_SPLIT=true                           # Use VAD for smart chunking
+MERGE_STRATEGY=lcs                           # Timestamp-based merge for >=10 chunks
+
+# Text Formatting (LLM-based) - 5000 byte chunks to avoid timeouts
+MAX_FORMAT_CHUNK=5000
 
 # GLM API (OpenAI-compatible - Moved from Server)
 GLM_API_KEY=your-glm-api-key
@@ -262,33 +265,6 @@ GLM_MODEL=GLM-4.5-Air
 GLM_BASE_URL=https://api.z.ai/api/paas/v4/
 REVIEW_LANGUAGE=zh
 ```
-
-### Fixed-Duration SRT Configuration
-
-For long audio files (>1 hour), enable fixed-duration SRT segmentation:
-
-```bash
-# Fixed-Duration SRT Segmentation (NEW)
-ENABLE_FIXED_CHUNKS=true                    # Enable fixed-duration chunks
-FIXED_CHUNK_THRESHOLD_MINUTES=60            # Minimum duration (minutes) to use fixed chunks
-FIXED_CHUNK_TARGET_DURATION=20              # Target SRT duration per line (seconds)
-FIXED_CHUNK_MIN_DURATION=10                 # Minimum SRT duration (seconds)
-FIXED_CHUNK_MAX_DURATION=30                 # Maximum SRT duration (seconds)
-
-# SRT-Aware Formatting (NEW)
-FORMAT_CHUNK_BY_SRT_SECTIONS=true           # Chunk GLM prompts by SRT section count
-MAX_SRT_SECTIONS_PER_CHUNK=50               # Max SRT sections per GLM chunk (~5000 bytes)
-```
-
-**Performance Impact:**
-- Fixed chunks: +10-20% processing time vs native Whisper
-- Accuracy-first settings (5-10 min for 4-hour audio on RTX 3080)
-- Recommended for: lectures, meetings, podcasts (>1 hour)
-
-**SRT Output:**
-- Each subtitle line: 10-30 seconds (configurable)
-- Timestamps aligned to actual audio timing
-- No mid-sentence breaks (uses VAD silence detection)
 
 **Runner Docker Image**: `whisper-summarizer-fastwhisper-base:latest` (~8GB)
 
@@ -562,18 +538,51 @@ text = storage.get_transcription_text(transcription_id)  # Auto-decompresses
 
 Transcription model provides `.text` property that reads/decompresses automatically.
 
-## Audio Chunking
+## Audio Chunking (Segments-First Architecture)
+
+The system uses a **segments-first approach** to preserve individual Whisper timestamps throughout the pipeline.
+
+### Data Flow
+
+```
+Whisper Transcription (10-min chunks, parallel)
+    ↓
+Segments: [{start: 0.0, end: 2.5, text: "..."}, ...]
+    ↓
+Runner sends segments (NOT concatenated text)
+    ↓
+Server saves segments.json.gz
+    ↓
+LLM formatting: Text extracted → chunked by 5000 bytes → GLM → formatted
+    ↓
+SRT export: Uses original segments.json.gz with real timestamps ✅
+```
+
+### Chunking Strategy
 
 For faster transcription of long files (10+ min):
 
 1. Split audio at VAD-detected silence points
 2. Extract chunks with FFmpeg
 3. Transcribe in parallel (ThreadPoolExecutor)
-4. Merge results with LCS (deduplicates overlaps)
+4. Merge results with **timestamp-based merge** (O(n), fast)
+
+**Key Configuration:**
+- `CHUNK_SIZE_MINUTES: 5` - Parallel 5-10 minute chunks
+- `MAX_CONCURRENT_CHUNKS: 4` - GPU workers
+- `MAX_FORMAT_CHUNK: 5000` - Max bytes per GLM request (avoids timeouts)
+- Timestamp-based merge (O(n), fast)
 
 **Recommended Settings:**
 - CPU: `MAX_CONCURRENT_CHUNKS=2`, `CHUNK_SIZE_MINUTES=10`
-- GPU (RTX 3080): `MAX_CONCURRENT_CHUNKS=4-6`, `CHUNK_SIZE_MINUTES=10-15`
+- GPU (RTX 3080): `MAX_CONCURRENT_CHUNKS=4-6`, `CHUNK_SIZE_MINUTES=5-10`
+
+### SRT Generation
+
+The SRT export uses the **original Whisper segments** with their individual timestamps, ensuring:
+- Each subtitle line has precise timing from Whisper
+- No fake timestamps at chunk boundaries
+- Accurate alignment between audio and text
 
 ## Debugging & Logging
 

@@ -69,7 +69,21 @@ GLM_API_KEY=your-glm-api-key
 GLM_MODEL=GLM-4.5-Air
 GLM_BASE_URL=https://api.z.ai/api/paas/v4/
 REVIEW_LANGUAGE=zh
+
+# Fixed-Duration SRT Chunking (NEW - for long audio 60+ minutes)
+ENABLE_FIXED_CHUNKS=true
+FIXED_CHUNK_THRESHOLD_MINUTES=60      # Enable for audio >= 60 minutes
+FIXED_CHUNK_TARGET_DURATION=20        # Target: 20 seconds per SRT entry
+FIXED_CHUNK_MIN_DURATION=10           # Minimum: 10 seconds
+FIXED_CHUNK_MAX_DURATION=30           # Maximum: 30 seconds
 ```
+
+**Fixed-Duration SRT Benefits**:
+- **Consistent SRT timestamps**: Each subtitle line is 10-30 seconds
+- **Better readability**: Regular, predictable subtitle timing
+- **SRT-aware formatting**: Chunks by SRT section count (not bytes), preserving structure
+- **VAD-based splitting**: Uses silence detection for natural boundaries
+- **Performance**: +10-20% processing time for long audio
 
 ### Server Settings (.env in server container)
 ```bash
@@ -95,7 +109,7 @@ CORS_ORIGINS=http://localhost:3000
 | 2_min.m4a | 0.08 MB | ~120 sec | NO | 1 (standard) |
 | 20_min.m4a | 4.82 MB | ~1200 sec | YES | ~2 chunks |
 | 60_min.m4a | 14.58 MB | ~3600 sec | YES | ~6 chunks |
-| 210_min.m4a | 51.8 MB | ~12600 sec | YES | ~21 chunks |
+| 210_min.m4a | 51.8 MB | ~12600 sec | YES | ~21 chunks (10-min) OR ~630 chunks (20s fixed) |
 
 ## Process Flow
 
@@ -122,7 +136,9 @@ CORS_ORIGINS=http://localhost:3000
 │                                                                         │
 │  3. TRANSCRIBING STAGE (Runner)                                         │
 │     ├── Get audio duration (ffprobe)                                   │
-│     ├── Decision: duration > 600s? → Use chunking                      │
+│     ├── Decision: duration >= 3600s AND ENABLE_FIXED_CHUNKS=true?     │
+│     │   ├── YES (210_min): Use fixed-duration chunks (10-30s)         │
+│     │   └── NO: duration > 600s? → Use 10-min chunking                │
 │     │                                                                   │
 │     ├── IF NO CHUNKING (2_min.m4a):                                    │
 │     │   ├── Run faster-whisper on full file                            │
@@ -130,9 +146,16 @@ CORS_ORIGINS=http://localhost:3000
 │     │   └── Return transcription result                                │
 │     │                                                                   │
 │     └── IF CHUNKING (20_min, 60_min, 210_min):                         │
-│         ├── Detect silence points (VAD)                                │
-│         ├── Split audio into chunks with overlap                       │
-│         ├── Process chunks in parallel (ThreadPoolExecutor)            │
+│         ├── Decision: ENABLE_FIXED_CHUNKS AND duration >= 3600s?      │
+│         │   ├── YES (210_min only): Fixed-duration chunking            │
+│         │   │   ├── AudioSegmenter: VAD-based 10-30s chunks            │
+│         │   │   ├── Each chunk → separate Whisper transcription       │
+│         │   │   ├── Timestamps aligned to chunk boundaries            │
+│         │   │   └── SRT output: 10-30s per subtitle line              │
+│         │   └── NO (20_min, 60_min): 10-min chunking                  │
+│         │       ├── Detect silence points (VAD)                        │
+│         │       ├── Split audio into chunks with overlap               │
+│         │       └── Process chunks in parallel (ThreadPoolExecutor)    │
 │         │   ├── Chunk 0: faster-whisper → segments                    │
 │         │   ├── Chunk 1: faster-whisper → segments                    │
 │         │   └── Chunk N: faster-whisper → segments                    │
@@ -140,9 +163,11 @@ CORS_ORIGINS=http://localhost:3000
 │                                                                         │
 │  4. FORMATTING STAGE (Runner)                                          │
 │     ├── Call TextFormattingService with raw transcription             │
-│     ├── Split into chunks if > MAX_FORMAT_CHUNK (10KB)                 │
+│     ├── Detect format: SRT (contains '-->') OR plain text              │
+│     ├── IF SRT format: Split by section count (50 sections/chunk)      │
+│     ├── IF plain text: Split by byte size (10KB chunks)               │
 │     ├── Send chunks to GLM-4.5-Air for formatting                      │
-│     │   ├── [FORMAT] Calling GLM API for chunk ({N} chars)             │
+│     │   ├── [FORMAT] Calling GLM API for chunk ({N} chars OR N sections)│
 │     │   └── [FORMAT] GLM returned {N} chars                            │
 │     ├── Merge formatted chunks                                         │
 │     └── Fallback to original if formatting fails                        │
@@ -232,11 +257,19 @@ CORS_ORIGINS=http://localhost:3000
 - **For 2_min.m4a** (duration < 600s):
   - **Runner Log**: "Using standard transcription (duration: 120s < 600s threshold)"
   - **NO**: [CHUNKING] logs should appear
-- **For 20_min.m4a, 60_min.m4a, 210_min.m4a** (duration > 600s):
+- **For 20_min.m4a, 60_min.m4a** (duration > 600s BUT < 3600s):
   - **Runner Log**: "Using chunked transcription (duration: {seconds}s > 600s threshold)"
+  - **YES**: [CHUNKING] logs should appear
+- **For 210_min.m4a** (duration >= 3600s):
+  - **IF ENABLE_FIXED_CHUNKS=true**:
+    - **Runner Log**: "Using fixed-chunk transcription (duration: 12600s >= 3600s threshold)"
+  - **IF ENABLE_FIXED_CHUNKS=false**:
+    - **Runner Log**: "Using chunked transcription (duration: 12600s > 600s threshold)"
   - **YES**: [CHUNKING] logs should appear
 
 ### CP5: Chunk Creation (for 20_min, 60_min, 210_min)
+
+#### For 20_min, 60_min (Standard 10-min Chunking)
 - **Runner Log**: "[CHUNKING] Splitting audio into chunks..."
 - **Runner Log**: "[CHUNKING] Target chunk size: 600 seconds (10 minutes)"
 - **Runner Log**: "[CHUNKING] Overlap: 15 seconds"
@@ -246,7 +279,14 @@ CORS_ORIGINS=http://localhost:3000
 - **Runner Log**: "[CHUNKING] Created {N} chunks"
 - **For 20_min (1200s)**: N ≈ 2 chunks (600s + 600s with overlap)
 - **For 60_min (3600s)**: N ≈ 6 chunks
-- **For 210_min (12600s)**: N ≈ 21 chunks
+
+#### For 210_min (Fixed-Duration Chunking, when ENABLE_FIXED_CHUNKS=true)
+- **Runner Log**: "Loading audio: /app/data/uploads/{filename}"
+- **Runner Log**: "Detecting speech segments..."
+- **Runner Log**: "Created {N} chunks from {duration}ms audio"
+- **For 210_min (12600s, 20s target)**: N ≈ 630 chunks
+- **SRT Output**: Each chunk produces timestamps aligned to 10-30s boundaries
+- **Verify**: SRT entries have consistent duration (not variable like 5s, 2min, etc.)
 
 ### CP6: Parallel Transcription Start (for chunking)
 - **Runner Log**: "[PARALLEL TRANSCRIPTION] Starting {N} chunks with {M} workers"
@@ -284,13 +324,23 @@ CORS_ORIGINS=http://localhost:3000
 - **Runner Log**: "Starting text formatting for: {transcription_id}"
 - **Expected**: TextFormattingService is initialized with GLM client
 - **Runner Log**: "[FORMAT] Input text length: {N} characters"
-- **If text > MAX_FORMAT_CHUNK (10KB)**:
+
+#### Format Detection
+- **If text contains '-->' (SRT format)**:
+  - **Runner Log**: "[FORMAT] Text appears to be SRT format, chunking by sections"
+  - **Runner Log**: "[FORMAT] Splitting into {N} SRT sections (max 50 per chunk)"
+  - **Runner Log**: "[FORMAT] Processing chunk 1/{N} (1-50 sections)"
+- **If plain text**:
   - **Runner Log**: "[FORMAT] Splitting into {N} chunks for formatting"
   - **Runner Log**: "[FORMAT] Processing chunk 1/{N} ({start}-{end} chars)"
-- **Runner Log**: "[FORMAT] Calling GLM-4.5-Air API for chunk ({N} chars)"
+
+#### GLM API Calls
+- **Runner Log**: "[FORMAT] Calling GLM-4.5-Air API for chunk ({N} chars OR N sections)"
 - **Expected**: GLM API is called with formatting prompt
 - **Runner Log**: "[FORMAT] GLM returned {N} chars"
 - **Expected**: Formatted text has proper punctuation and spacing
+
+#### Completion
 - **If multiple chunks**:
   - **Runner Log**: "[FORMAT] Merging {N} formatted chunks"
 - **On GLM failure**:
@@ -384,7 +434,8 @@ CORS_ORIGINS=http://localhost:3000
 | 2 minutes | ~2-5 seconds |
 | 20 minutes | ~30-60 seconds |
 | 60 minutes | ~90-120 seconds |
-| 210 minutes | ~300-420 seconds |
+| 210 minutes (10-min chunks) | ~300-420 seconds |
+| 210 minutes (fixed chunks) | ~360-500 seconds (+10-20%) |
 
 **Note**: These are approximate for GPU (RTX 3080) with cuDNN. Speedup ~40-60x real-time.
 
@@ -448,6 +499,10 @@ CORS_ORIGINS=http://localhost:3000
 - [ ] GET /api/transcriptions/{id}/download?format=srt works
 - [ ] SRT file contains proper timestamps (not fake ones)
 - [ ] SRT file format is valid (sequential numbering, time codes)
+- **For fixed-duration chunks (210_min with ENABLE_FIXED_CHUNKS=true)**:
+  - [ ] SRT entries have consistent 10-30s duration per line
+  - [ ] No extremely long (>60s) or extremely short (<5s) SRT entries
+  - [ ] SRT timestamps aligned to chunk boundaries (no gaps/overlaps)
 
 ### Chunking-Specific (20_min, 60_min, 210_min)
 - [ ] [CHUNKING] logs present in runner logs
@@ -511,7 +566,7 @@ CORS_ORIGINS=http://localhost:3000
 [INFO] Uploading result to server: POST /api/runner/jobs/{id}/complete
 ```
 
-### Runner Logs - For 20_min.m4a, 60_min.m4a, 210_min.m4a (WITH Chunking)
+### Runner Logs - For 20_min.m4a, 60_min.m4a (WITH 10-min Chunking)
 ```
 [INFO] Polling for pending jobs...
 [INFO] Claimed job {id}: {filename}
@@ -561,6 +616,52 @@ CORS_ORIGINS=http://localhost:3000
 [INFO] Summarization successful: {id} | Tokens: {N} | Time: {M}ms
 [INFO] Uploading result to server: POST /api/runner/jobs/{id}/complete
 ```
+
+### Runner Logs - For 210_min.m4a WITH Fixed-Duration Chunks (NEW)
+```
+[INFO] Polling for pending jobs...
+[INFO] Claimed job {id}: {filename}
+[INFO] Downloaded audio file: {filename} ({size} bytes)
+[INFO] Starting transcription for job {id}
+[INFO] Audio duration: 12600 seconds (210.0 minutes)
+[INFO] Using fixed-chunk transcription (duration: 12600s >= 3600s threshold)
+[INFO] Loading audio: /app/data/uploads/{filename}
+[INFO] Detecting speech segments...
+[INFO] Created 630 chunks from 12600000ms audio
+[INFO] Processing chunk 1/630 (0-15000ms)
+[INFO] Processing chunk 2/630 (15000-30000ms)
+[INFO] Processing chunk 3/630 (30000-45000ms)
+...
+[INFO] Processing chunk 628/630 (12570000-12600000ms)
+[INFO] Transcription completed for job {id}
+[INFO] Total segments: ~630 (one per chunk, aligned to chunk boundaries)
+[INFO] Total characters: {N}
+[INFO] Detected language: zh (confidence: 0.95)
+[INFO] Starting text formatting for: {id}
+[INFO] [FORMAT] Input text length: {N} characters
+[INFO] [FORMAT] Text appears to be SRT format, chunking by sections
+[INFO] [FORMAT] Splitting into 13 SRT sections (max 50 per chunk)
+[INFO] [FORMAT] Processing chunk 1/13 (1-50 sections)
+[INFO] [FORMAT] Calling GLM-4.5-Air API for chunk (50 sections)
+[INFO] [FORMAT] GLM returned 9500 chars
+[INFO] [FORMAT] Processing chunk 2/13 (51-100 sections)
+...
+[INFO] [FORMAT] Merging 13 formatted chunks
+[INFO] Text formatting completed: {id} | Original: {N} chars -> Formatted: {M} chars
+[INFO] Starting summarization for: {id}
+[INFO] [SUMMARY] Input text: formatted ({N} chars)
+[INFO] [SUMMARY] Calling GLM-4.5-Air API
+[INFO] [SUMMARY] GLM returned summary: {N} chars
+[INFO] Summarization successful: {id} | Tokens: {N} | Time: {M}ms
+[INFO] Uploading result to server: POST /api/runner/jobs/{id}/complete
+```
+
+**Key Differences for Fixed-Duration Chunks**:
+- **Chunk count**: ~630 chunks (20s target) vs ~21 chunks (10-min target)
+- **SRT timestamps**: Consistent 10-30s per subtitle line (vs variable duration)
+- **Formatting**: Chunks by SRT section count (50 sections/chunk) instead of byte size
+- **Processing**: Sequential chunk processing (no parallel ThreadPoolExecutor)
+- **Merge**: No LCS merge needed (chunks don't overlap)
 
 ### On GLM Formatting Failure (Runner Logs)
 ```
@@ -882,6 +983,8 @@ This test plan verifies:
 - ✅ Server/Runner job queue communication
 - ✅ Audio upload and download flow
 - ✅ Chunking logic (VAD + LCS merge)
+- ✅ **Fixed-duration SRT segmentation (10-30s chunks for 60+ min audio)**
+- ✅ **SRT-aware formatting (chunks by section count, not bytes)**
 - ✅ Standard transcription (no chunking)
 - ✅ GLM formatting with fallback
 - ✅ GLM summarization with retries
@@ -914,6 +1017,15 @@ This test plan verifies:
 
 ---
 
-**Document Version**: 2.0 (Server/Runner Architecture)
-**Last Updated**: 2025-01-09
+**Document Version**: 2.1 (Server/Runner Architecture with Fixed-Duration SRT)
+**Last Updated**: 2026-01-12
 **Status**: Ready for execution
+
+**Version 2.1 Changes**:
+- Added fixed-duration SRT segmentation configuration (ENABLE_FIXED_CHUNKS)
+- Updated Process Flow for fixed-duration chunking (10-30s chunks)
+- Added AudioSegmenter logs and checkpoints
+- Added SRT-aware formatting (section-based chunking)
+- Updated expected logs for 210_min.m4a with fixed chunks (~630 chunks)
+- Added performance impact notes (+10-20% processing time)
+- Added SRT verification requirements for fixed-duration chunks

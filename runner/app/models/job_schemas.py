@@ -1,6 +1,6 @@
 """Job schemas for runner-server communication"""
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, List, Dict
 from datetime import datetime
 
 
@@ -17,6 +17,7 @@ class Job(BaseModel):
 class JobResult(BaseModel):
     """Result of processing a job."""
     text: str
+    segments: Optional[List[Dict]] = None  # Whisper segments with individual timestamps
     summary: Optional[str] = None
     notebooklm_guideline: Optional[str] = None
     processing_time_seconds: int

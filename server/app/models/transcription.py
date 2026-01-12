@@ -25,6 +25,8 @@ class Transcription(Base):
     file_path = Column(Text, nullable=True)
     # Path to compressed text file in local filesystem (format: {uuid}.txt.gz)
     storage_path = Column(String, nullable=True)
+    # Path to compressed segments JSON file (format: {uuid}.segments.json.gz)
+    segments_path = Column(String, nullable=True)
     language = Column(String, nullable=True)
     duration_seconds = Column(Float, nullable=True)
 

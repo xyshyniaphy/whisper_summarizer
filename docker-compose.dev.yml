@@ -80,8 +80,8 @@ services:
       MAX_KEEP_DAYS: ${MAX_KEEP_DAYS:-7}
       CLEANUP_HOUR: ${CLEANUP_HOUR:-9}
 
-      # Text Formatting (LLM-based)
-      MAX_FORMAT_CHUNK: ${MAX_FORMAT_CHUNK:-10000}
+      # Text Formatting (LLM-based) - 5000 byte chunks to avoid timeouts
+      MAX_FORMAT_CHUNK: ${MAX_FORMAT_CHUNK:-5000}
     # No ports section - internal only
     volumes:
       # Source code mount for hot reload
@@ -128,7 +128,7 @@ services:
       WHISPER_LANGUAGE: ${WHISPER_LANGUAGE:-auto}
       WHISPER_THREADS: ${WHISPER_THREADS:-4}
 
-      # Audio Chunking
+      # Audio Chunking (10-min chunks with timestamp-based merge)
       ENABLE_CHUNKING: ${ENABLE_CHUNKING:-true}
       CHUNK_SIZE_MINUTES: ${CHUNK_SIZE_MINUTES:-5}
       CHUNK_OVERLAP_SECONDS: ${CHUNK_OVERLAP_SECONDS:-15}
@@ -138,8 +138,8 @@ services:
       VAD_MIN_SILENCE_DURATION: ${VAD_MIN_SILENCE_DURATION:-0.5}
       MERGE_STRATEGY: ${MERGE_STRATEGY:-lcs}
 
-      # Text Formatting (LLM-based)
-      MAX_FORMAT_CHUNK: ${MAX_FORMAT_CHUNK:-10000}
+      # Text Formatting (LLM-based) - 5000 byte chunks to avoid timeouts
+      MAX_FORMAT_CHUNK: ${MAX_FORMAT_CHUNK:-5000}
 
       # Logging
       LOG_LEVEL: ${LOG_LEVEL:-DEBUG}

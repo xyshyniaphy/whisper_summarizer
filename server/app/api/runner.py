@@ -183,6 +183,18 @@ async def complete_job(
         logger.error(f"Failed to save transcription text for job {job_id}: {e}")
         # Don't fail the job if text save fails, log and continue
 
+    # Save segments if provided (for individual timestamp preservation)
+    if result.segments:
+        try:
+            storage_service = get_storage_service()
+            storage_service.save_transcription_segments(str(job.id), result.segments)
+            job.segments_path = f"{job.id}.segments.json.gz"
+            logger.info(f"Saved {len(result.segments)} segments for job {job_id}")
+        except Exception as e:
+            logger.error(f"Failed to save segments for job {job_id}: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+
     # Save summary to database if provided
     if result.summary:
         try:
