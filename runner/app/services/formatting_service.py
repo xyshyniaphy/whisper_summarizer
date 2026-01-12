@@ -501,7 +501,9 @@ class TextFormattingService:
     def format_transcription(
         self,
         raw_text: str,
-        language: Optional[str] = None
+        language: Optional[str] = None,
+        chunk_by_srt_sections: bool = False,
+        max_srt_sections_per_chunk: int = 50,
     ) -> dict:
         """
         Format transcribed text and return formatted text, summary, and NotebookLM guideline.
@@ -511,6 +513,8 @@ class TextFormattingService:
         Args:
             raw_text: Raw transcribed text from Whisper
             language: Language code (e.g., "zh", "en", "ja")
+            chunk_by_srt_sections: If True, chunk by SRT section count instead of bytes
+            max_srt_sections_per_chunk: Maximum SRT sections per chunk when chunk_by_srt_sections=True
 
         Returns:
             Dict with keys:
@@ -528,8 +532,30 @@ class TextFormattingService:
             }
 
         try:
-            # Format the text using the existing method
-            formatted_text = self.format_transcription_text(raw_text)
+            # Split text into chunks
+            if chunk_by_srt_sections:
+                chunks = self.split_text_by_srt_sections(
+                    raw_text,
+                    max_sections_per_chunk=max_srt_sections_per_chunk
+                )
+            else:
+                chunks = self.split_text_into_chunks(raw_text)
+
+            if len(chunks) == 1:
+                logger.info(f"Formatting single chunk ({len(raw_text)} chars)")
+                formatted_text = self.format_text_chunk(chunks[0])
+            else:
+                # Format chunks sequentially
+                logger.info(f"Formatting {len(chunks)} chunks sequentially")
+                formatted_chunks = []
+
+                for i, chunk in enumerate(chunks, 1):
+                    logger.debug(f"Formatting chunk {i}/{len(chunks)} ({len(chunk)} chars)")
+                    formatted_chunk = self.format_text_chunk(chunk)
+                    formatted_chunks.append(formatted_chunk)
+
+                # Join with paragraph breaks
+                formatted_text = "\n\n".join(formatted_chunks)
 
             logger.info(f"Formatting complete: {len(raw_text)} -> {len(formatted_text)} chars")
 
