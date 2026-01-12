@@ -148,8 +148,7 @@ def test_whisper_service_handles_chunk_overlap(whisper_service, sample_audio_30s
 
         result = whisper_service.transcribe_fixed_chunks(
             audio_path=str(temp_file),
-            target_duration_seconds=15,
-            chunk_overlap_seconds=1
+            target_duration_seconds=15
         )
 
         # Should process all chunks including overlap
@@ -214,3 +213,43 @@ def test_whisper_service_returns_language_info(whisper_service, sample_audio_30s
 
         # Should have language info
         assert "info" in result or "language" in result
+
+
+def test_whisper_service_cleans_up_temp_files(whisper_service, tmp_path):
+    """Should clean up temporary audio chunk files after processing"""
+    import tempfile
+    from pydub import AudioSegment
+    from pydub.generators import Sine
+
+    service = whisper_service
+
+    # Create test audio
+    tone = Sine(440).to_audio_segment(duration=30000, volume=-10.0)
+    audio_file = tmp_path / "test.wav"
+    tone.export(str(audio_file), format="wav")
+
+    # Track temp files before transcription
+    temp_dir = tempfile.gettempdir()
+    temp_files_before = set(os.listdir(temp_dir))
+
+    # Mock the segmenter to return predictable chunks
+    chunks = [
+        {"start": 0, "end": 15000, "start_s": 0.0, "end_s": 15.0},
+        {"start": 15000, "end": 30000, "start_s": 15.0, "end_s": 30.0},
+    ]
+
+    with patch('app.services.audio_segmenter.AudioSegmenter') as mock_segmenter_class:
+        mock_segmenter = MagicMock()
+        mock_segmenter.segment.return_value = chunks
+        mock_segmenter_class.return_value = mock_segmenter
+
+        # Transcribe
+        service.transcribe_fixed_chunks(str(audio_file))
+
+    # Verify temp files were cleaned up
+    temp_files_after = set(os.listdir(temp_dir))
+    new_files = temp_files_after - temp_files_before
+
+    # Filter out files that don't match our chunk pattern
+    chunk_files = [f for f in new_files if f.startswith("chunk_")]
+    assert len(chunk_files) == 0, f"Temp files not cleaned up: {chunk_files}"

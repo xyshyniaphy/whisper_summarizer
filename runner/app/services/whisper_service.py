@@ -9,7 +9,7 @@ import re
 import difflib
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from typing import Optional, Dict, List, Tuple
+from typing import Optional, Dict, List, Tuple, Any
 from threading import Event
 import logging
 
@@ -121,7 +121,7 @@ class TranscribeService:
         output_dir: Optional[str] = None,
         cancel_event: Optional[Event] = None,
         transcription_id: Optional[str] = None
-    ) -> Dict[str, any]:
+    ) -> Dict[str, Any]:
         """
         音声ファイルを文字起こし
 
@@ -166,7 +166,7 @@ class TranscribeService:
         output_dir: Optional[str] = None,
         cancel_event: Optional[Event] = None,
         transcription_id: Optional[str] = None
-    ) -> Dict[str, any]:
+    ) -> Dict[str, Any]:
         """
         Standard transcription without chunking using faster-whisper.
 
@@ -331,7 +331,7 @@ class TranscribeService:
         output_dir: Optional[str] = None,
         cancel_event: Optional[Event] = None,
         transcription_id: Optional[str] = None
-    ) -> Dict[str, any]:
+    ) -> Dict[str, Any]:
         """
         Transcribe audio using chunking strategy for faster processing.
 
@@ -430,7 +430,7 @@ class TranscribeService:
         audio_path: str,
         output_dir: str,
         total_duration: int
-    ) -> List[Dict[str, any]]:
+    ) -> List[Dict[str, Any]]:
         """
         Split audio into chunks, optionally using VAD for smart splitting.
 
@@ -654,11 +654,11 @@ class TranscribeService:
 
     def _transcribe_chunks_parallel(
         self,
-        chunks_info: List[Dict[str, any]],
+        chunks_info: List[Dict[str, Any]],
         output_dir: str,
         cancel_event: Optional[Event] = None,
         transcription_id: Optional[str] = None
-    ) -> List[Dict[str, any]]:
+    ) -> List[Dict[str, Any]]:
         """
         Transcribe multiple chunks in parallel using ThreadPoolExecutor.
 
@@ -736,11 +736,11 @@ class TranscribeService:
 
     def _transcribe_chunk(
         self,
-        chunk_info: Dict[str, any],
+        chunk_info: Dict[str, Any],
         output_dir: str,
         cancel_event: Optional[Event] = None,
         transcription_id: Optional[str] = None
-    ) -> Dict[str, any]:
+    ) -> Dict[str, Any]:
         """
         Transcribe a single audio chunk using faster-whisper.
 
@@ -841,8 +841,8 @@ class TranscribeService:
 
     def _merge_chunk_results(
         self,
-        chunks_results: List[Dict[str, any]]
-    ) -> Dict[str, any]:
+        chunks_results: List[Dict[str, Any]]
+    ) -> Dict[str, Any]:
         """
         Merge transcription results from multiple chunks.
 
@@ -877,8 +877,8 @@ class TranscribeService:
 
     def _merge_with_timestamps(
         self,
-        chunks_results: List[Dict[str, any]]
-    ) -> Dict[str, any]:
+        chunks_results: List[Dict[str, Any]]
+    ) -> Dict[str, Any]:
         """
         Simple timestamp-based merging (may have duplicates at boundaries).
         
@@ -922,8 +922,8 @@ class TranscribeService:
 
     def _merge_with_lcs(
         self,
-        chunks_results: List[Dict[str, any]]
-    ) -> Dict[str, any]:
+        chunks_results: List[Dict[str, Any]]
+    ) -> Dict[str, Any]:
         """
         Merge chunks using LCS (Longest Common Subsequence) for text alignment.
 
@@ -1001,7 +1001,7 @@ class TranscribeService:
 
     def _extract_text_in_time_window(
         self,
-        chunk_result: Dict[str, any],
+        chunk_result: Dict[str, Any],
         start_time: float,
         end_time: float
     ) -> str:
@@ -1093,9 +1093,8 @@ class TranscribeService:
         target_duration_seconds: int = 20,
         min_duration_seconds: int = 10,
         max_duration_seconds: int = 30,
-        chunk_overlap_seconds: int = 0,
         language: str = None,
-    ) -> Dict[str, any]:
+    ) -> Dict[str, Any]:
         """
         Transcribe audio using fixed-duration chunks for accurate SRT timestamps.
 
@@ -1106,7 +1105,6 @@ class TranscribeService:
             target_duration_seconds: Target chunk duration (default: 20s)
             min_duration_seconds: Minimum chunk duration (default: 10s)
             max_duration_seconds: Maximum chunk duration (default: 30s)
-            chunk_overlap_seconds: Overlap between chunks (default: 0)
             language: Language code (default: uses self.language)
 
         Returns:
@@ -1138,7 +1136,6 @@ class TranscribeService:
 
         for i, chunk in enumerate(chunks):
             chunk_start = chunk["start"]
-            chunk_end = chunk["end"]
             chunk_start_s = chunk["start_s"]
             chunk_end_s = chunk["end_s"]
 
@@ -1234,25 +1231,6 @@ class TranscribeService:
             raise
 
         return temp_path
-
-    def _create_fixed_chunks(self, audio_path: str, **kwargs) -> List[Dict]:
-        """
-        Creates fixed-duration chunks using AudioSegmenter.
-
-        Used for testing/mocking - provides a wrapper around AudioSegmenter
-        that can be easily mocked in tests.
-
-        Args:
-            audio_path: Path to audio file
-            **kwargs: AudioSegmenter configuration parameters
-
-        Returns:
-            List of chunk dictionaries with start/end times
-        """
-        from app.services.audio_segmenter import AudioSegmenter
-
-        segmenter = AudioSegmenter(**kwargs)
-        return segmenter.segment(audio_path)
 
 
 # Singleton instance
