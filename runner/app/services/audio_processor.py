@@ -2,7 +2,7 @@
 import os
 import logging
 import time
-from typing import Optional
+from typing import Optional, Dict, Any
 from pathlib import Path
 
 from .whisper_service import TranscribeService
@@ -28,6 +28,43 @@ class AudioProcessor:
         self.whisper_service = TranscribeService()
         self.formatting_service = TextFormattingService()
         logger.info("AudioProcessor initialized")
+
+    def _get_audio_duration(self, audio_path: str) -> float:
+        """
+        Get audio file duration in seconds.
+
+        Args:
+            audio_path: Path to audio file
+
+        Returns:
+            Duration in seconds
+        """
+        try:
+            from pydub import AudioSegment
+            audio = AudioSegment.from_file(audio_path)
+            return len(audio) / 1000.0
+        except Exception as e:
+            logger.warning(f"Could not get audio duration: {e}")
+            return 0.0
+
+    def _should_use_fixed_chunks(self, audio_path: str) -> bool:
+        """
+        Determine if fixed-duration chunking should be used.
+
+        Args:
+            audio_path: Path to audio file
+
+        Returns:
+            True if fixed chunks should be used
+        """
+        if not getattr(settings, 'ENABLE_FIXED_CHUNKS', False):
+            return False
+
+        duration_seconds = self._get_audio_duration(audio_path)
+        threshold_minutes = getattr(settings, 'FIXED_CHUNK_THRESHOLD_MINUTES', 60)
+        threshold_seconds = threshold_minutes * 60
+
+        return duration_seconds >= threshold_seconds
 
     def process(self, audio_path: str, language: Optional[str] = None) -> JobResult:
         """
@@ -58,16 +95,34 @@ class AudioProcessor:
         # Step 1: Transcribe with Whisper
         logger.info("Step 1: Transcribing with Whisper...")
         try:
-            transcription_result = self.whisper_service.transcribe(
-                audio_file_path=audio_path
-            )
+            # Check if we should use fixed chunks
+            use_fixed_chunks = self._should_use_fixed_chunks(audio_path)
 
-            if not transcription_result or not transcription_result.get("text"):
-                raise ValueError("Transcription returned empty text")
+            if use_fixed_chunks:
+                logger.info(f"Using fixed-chunk transcription for long audio")
+                transcription_result: Dict[str, Any] = self.whisper_service.transcribe_fixed_chunks(
+                    audio_path=audio_path,
+                    target_duration_seconds=getattr(settings, 'FIXED_CHUNK_TARGET_DURATION', 20),
+                    min_duration_seconds=getattr(settings, 'FIXED_CHUNK_MIN_DURATION', 10),
+                    max_duration_seconds=getattr(settings, 'FIXED_CHUNK_MAX_DURATION', 30),
+                    language=language,
+                )
+                # For fixed chunks, raw_text is the concatenation of segment text
+                segments = transcription_result.get("segments", [])
+                raw_text = "\n".join([seg.get("text", "") for seg in segments])
+                logger.info(f"Fixed-chunk transcription complete: {len(segments)} chunks")
+            else:
+                logger.info("Using standard Whisper transcription")
+                transcription_result = self.whisper_service.transcribe(
+                    audio_file_path=audio_path
+                )
 
-            raw_text = transcription_result["text"]
-            segments = transcription_result.get("segments", [])
-            logger.info(f"Transcription complete: {len(raw_text)} characters, {len(segments)} segments")
+                if not transcription_result or not transcription_result.get("text"):
+                    raise ValueError("Transcription returned empty text")
+
+                raw_text = transcription_result["text"]
+                segments = transcription_result.get("segments", [])
+                logger.info(f"Transcription complete: {len(raw_text)} characters, {len(segments)} segments")
         except Exception as e:
             logger.error(f"Whisper transcription failed: {e}")
             raise
@@ -120,13 +175,29 @@ class AudioProcessor:
         start_time = time.time()
         logger.info(f"Processing audio with timestamps: {audio_path}")
 
-        # Transcribe
-        transcription_result = self.whisper_service.transcribe(
-            audio_file_path=audio_path
-        )
+        # Check if we should use fixed chunks
+        use_fixed_chunks = self._should_use_fixed_chunks(audio_path)
 
-        raw_text = transcription_result["text"]
-        segments = transcription_result.get("segments", [])
+        if use_fixed_chunks:
+            logger.info(f"Using fixed-chunk transcription for long audio")
+            transcription_result: Dict[str, Any] = self.whisper_service.transcribe_fixed_chunks(
+                audio_path=audio_path,
+                target_duration_seconds=getattr(settings, 'FIXED_CHUNK_TARGET_DURATION', 20),
+                min_duration_seconds=getattr(settings, 'FIXED_CHUNK_MIN_DURATION', 10),
+                max_duration_seconds=getattr(settings, 'FIXED_CHUNK_MAX_DURATION', 30),
+                language=language or settings.whisper_language,
+            )
+            segments = transcription_result.get("segments", [])
+            raw_text = "\n".join([seg.get("text", "") for seg in segments])
+        else:
+            logger.info("Using standard Whisper transcription")
+            # Transcribe
+            transcription_result = self.whisper_service.transcribe(
+                audio_file_path=audio_path
+            )
+
+            raw_text = transcription_result["text"]
+            segments = transcription_result.get("segments", [])
 
         # Format with LLM
         try:

@@ -34,6 +34,13 @@ class Settings(BaseSettings):
     merge_strategy: str = "lcs"
     lcs_chunk_threshold: float = 0.7  # Threshold for LCS merge algorithm
 
+    # Fixed-duration chunking (SRT segmentation)
+    enable_fixed_chunks: bool = False
+    fixed_chunk_threshold_minutes: int = 60  # Use fixed chunks for audio >= 60 minutes
+    fixed_chunk_target_duration: int = 20  # Target chunk duration in seconds
+    fixed_chunk_min_duration: int = 10  # Min chunk duration in seconds
+    fixed_chunk_max_duration: int = 30  # Max chunk duration in seconds
+
     # GLM API
     glm_api_key: str = ""
     glm_model: str = "GLM-4.5-Air"
@@ -92,6 +99,27 @@ class Settings(BaseSettings):
     @property
     def LCS_CHUNK_THRESHOLD(self):
         return self.lcs_chunk_threshold
+
+    # Fixed-duration chunking aliases
+    @property
+    def ENABLE_FIXED_CHUNKS(self):
+        return self.enable_fixed_chunks
+
+    @property
+    def FIXED_CHUNK_THRESHOLD_MINUTES(self):
+        return self.fixed_chunk_threshold_minutes
+
+    @property
+    def FIXED_CHUNK_TARGET_DURATION(self):
+        return self.fixed_chunk_target_duration
+
+    @property
+    def FIXED_CHUNK_MIN_DURATION(self):
+        return self.fixed_chunk_min_duration
+
+    @property
+    def FIXED_CHUNK_MAX_DURATION(self):
+        return self.fixed_chunk_max_duration
 
 
 settings = Settings()
