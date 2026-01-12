@@ -6,7 +6,9 @@ Developer guidance for Whisper Summarizer project.
 
 GPU-accelerated audio transcription with AI summarization using faster-whisper + cuDNN and GLM-4.5-Air API.
 
-**Performance**: GPU (RTX 3080) achieves **40-60x speedup** vs CPU (20-min file: ~1-1.5 min vs ~60 min).
+**Performance**: GPU (RTX 3080) achieves **11.7x real-time speed** (RTF 0.08) - processes 210-min audio in ~18 minutes.
+
+**Performance Reports**: See `reports/2025-01-13-performance-optimization-report.md` for comprehensive performance analysis.
 
 ### Architecture (Nginx + Server/Runner Split)
 
@@ -584,6 +586,197 @@ The SRT export uses the **original Whisper segments** with their individual time
 - No fake timestamps at chunk boundaries
 - Accurate alignment between audio and text
 
+## Performance Restrictions & Best Practices
+
+**CRITICAL**: Follow these performance guidelines to maintain optimal transcription speed.
+
+### ⚠️ PERFORMANCE RESTRICTIONS
+
+**1. NEVER Use Fixed-Duration Chunking**
+
+Fixed-duration chunks (10-30s) cause **massive FFmpeg overhead**:
+
+| Approach | Chunks (210-min) | FFmpeg Calls | RTF | Processing Time |
+|----------|------------------|--------------|-----|-----------------|
+| **Fixed-Duration (20s)** | 561 | 561 | 0.28 | ~58 min |
+| **10-Minute Chunks** | 42 | 42 | 0.08 | ~18 min |
+
+**Performance Impact**: Fixed-duration is **3.3x slower** due to 561 sequential FFmpeg extractions.
+
+**NEVER do this**:
+```python
+# ❌ WRONG - Fixed-duration chunking (removed from codebase)
+def transcribe_fixed_chunks(audio_path, chunk_duration=20):
+    for i in range(0, total_duration, chunk_duration):
+        extract_audio_with_ffmpeg(audio_path, i, i + chunk_duration)  # 561 calls!
+```
+
+**ALWAYS do this**:
+```python
+# ✅ CORRECT - Use 5-10 minute chunks with parallel processing
+def transcribe_with_chunks(audio_path, chunk_size_minutes=5):
+    chunks = create_chunks(audio_path, chunk_size_minutes)  # Only 42 chunks
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        results = executor.map(transcribe_chunk, chunks)  # Parallel!
+```
+
+**2. NEVER Send Large Text Payloads to GLM API**
+
+GLM-4.5-Air has timeout issues with payloads >5000 bytes:
+
+```python
+# ❌ WRONG - Large payload causes timeout
+formatted_text = glm_format(text)  # 10000+ bytes → timeout
+
+# ✅ CORRECT - Chunk by 5000 bytes
+chunks = chunk_text_by_bytes(text, max_bytes=5000)
+formatted_parts = [glm_format(chunk) for chunk in chunks]
+formatted_text = ''.join(formatted_parts)
+```
+
+**Configuration**: `MAX_FORMAT_CHUNK=5000` (enforced in `docker-compose.dev.yml`)
+
+**3. NEVER Process Chunks Sequentially for Long Audio**
+
+Sequential processing prevents GPU utilization:
+
+| Mode | 42 Chunks | GPU Utilization | Time |
+|------|-----------|-----------------|------|
+| **Sequential** | 1 at a time | 25% | ~70 min |
+| **Parallel (4 workers)** | 4 at a time | 95% | ~18 min |
+
+**Configuration**: `MAX_CONCURRENT_CHUNKS=4-6` (GPU-dependent)
+
+**4. NEVER Skip Segments Preservation**
+
+Segments are required for accurate SRT timestamps:
+
+```python
+# ❌ WRONG - Only sends concatenated text
+result = JobResult(text=concatenated_text, segments=None)
+
+# ✅ CORRECT - Preserves Whisper segments
+result = JobResult(text=concatenated_text, segments=whisper_segments)
+```
+
+### ✅ PERFORMANCE BEST PRACTICES
+
+**1. Use 5-10 Minute Chunks**
+
+Optimal chunk size balances FFmpeg overhead and parallelization:
+
+| Chunk Size | 210-min File | Chunks | Pros | Cons |
+|------------|--------------|--------|------|------|
+| 5 min | 42 chunks | 42 | ✅ More parallelization | More merge overhead |
+| 10 min | 21 chunks | 21 | ✅ Fewer FFmpeg calls | Less parallelization |
+| **20s** | 630 chunks | 630 | ❌ **NEVER USE** | **3.3x slower** |
+
+**Recommended**: `CHUNK_SIZE_MINUTES=5-10`
+
+**2. Match Workers to GPU VRAM**
+
+| GPU Model | VRAM | MAX_CONCURRENT_CHUNKS | CHUNK_SIZE_MINUTES |
+|-----------|------|----------------------|-------------------|
+| RTX 3060/3060 Ti | 12GB | 4 | 5-10 |
+| RTX 3080 | 8GB | 4-6 | 5-10 |
+| RTX 3090/4080 | 10GB+ | 6-8 | 10-15 |
+| RTX 4090 | 24GB | 8-12 | 10-15 |
+
+**Rule of Thumb**: 1 concurrent chunk per 2GB VRAM (minimum 4 for RTX 3080)
+
+**3. Enable VAD Split for Smart Chunking**
+
+VAD (Voice Activity Detection) splits at silence points:
+
+```yaml
+USE_VAD_SPLIT: true
+VAD_SILENCE_THRESHOLD: -30
+VAD_MIN_SILENCE_DURATION: 0.5
+```
+
+**Benefit**: Reduces transcription of silence, improves accuracy.
+
+**4. Use Timestamp-Based Merge for >=10 Chunks**
+
+Auto-selection logic in `whisper_service.py`:
+
+```python
+if chunk_count >= 10:
+    use_timestamp_merge()  # O(n) - fast
+else:
+    use_lcs_merge()  # O(n²) - better deduplication
+```
+
+**Rationale**: LCS merge has O(n²) complexity - unacceptable for 42+ chunks.
+
+**5. Monitor RTF (Real-Time Factor)**
+
+```
+RTF = Processing Time / Audio Duration
+```
+
+| RTF | Performance | Status |
+|-----|-------------|--------|
+| < 0.1 | >10x real-time | ✅ Excellent |
+| 0.1-0.3 | 3-10x real-time | ✅ Good |
+| 0.3-0.5 | 2-3x real-time | ⚠️ Acceptable |
+| > 0.5 | <2x real-time | ❌ Investigate |
+| > 1.0 | Slower than real-time | 🚨 Critical issue |
+
+**Expected RTF**:
+- 2-min audio: 1.0-1.5x (API overhead dominates)
+- 20-min audio: 0.20-0.30x (5x faster than real-time)
+- 60-min audio: 0.35-0.45x (2.2-2.8x faster than real-time)
+- 210-min audio: 0.25-0.35x (3-4x faster than real-time)
+
+### Performance Benchmarks
+
+**Test Configuration**:
+- GPU: NVIDIA RTX 3080
+- Model: faster-whisper large-v3-turbo
+- Compute: int8_float16 (GPU optimized)
+
+| Audio Duration | Expected RTF | Processing Time | Chunks |
+|----------------|-------------|-----------------|--------|
+| 2 min | 1.0-1.5x | ~2-3 min | 1 |
+| 20 min | 0.20-0.30x | ~4-6 min | 5 |
+| 60 min | 0.35-0.45x | ~21-27 min | 6-12 |
+| 210 min | 0.25-0.35x | ~52-73 min | 21-42 |
+
+**Key Insight**: Longer audio = better RTF (fixed API overhead amortized).
+
+### Performance Troubleshooting
+
+**Issue**: RTF > 0.5 (slower than expected)
+
+**Checklist**:
+1. ✅ `CHUNK_SIZE_MINUTES` is 5-10 (not 20s)
+2. ✅ `MAX_CONCURRENT_CHUNKS` matches GPU VRAM (4-6 for RTX 3080)
+3. ✅ `MAX_FORMAT_CHUNK` is 5000 (not 10000)
+4. ✅ `USE_VAD_SPLIT` is true
+5. ✅ `MERGE_STRATEGY` is `lcs`
+6. ✅ GPU is being utilized (`nvidia-smi` shows 80-95% GPU usage)
+
+**Issue**: GLM API timeouts
+
+**Solution**: Reduce `MAX_FORMAT_CHUNK` to 4000 or 3000 bytes.
+
+**Issue**: Out of memory errors
+
+**Solution**: Reduce `MAX_CONCURRENT_CHUNKS` by 1-2 workers.
+
+### Code Review Checklist
+
+Before committing performance-related changes:
+
+- [ ] No fixed-duration chunking logic (20-30s chunks)
+- [ ] Chunks are processed in parallel (ThreadPoolExecutor)
+- [ ] GLM payloads are chunked by 5000 bytes max
+- [ ] Whisper segments are preserved throughout pipeline
+- [ ] FFmpeg extraction is minimized (42 chunks max for 210-min file)
+- [ ] Merge strategy auto-selects based on chunk count
+- [ ] GPU workers match VRAM capacity (4-6 for RTX 3080)
+
 ## Debugging & Logging
 
 **Log limits**: Restrict by **bytes**, NOT lines:
@@ -839,19 +1032,24 @@ const uploadFileViaAPI = async (page: Page, filePath: string) => {
 ## Important Notes
 
 1. **Server/Runner Architecture**: Server is lightweight (~150MB), runner has GPU (~8GB)
-2. **Server**: Runs on any VPS without GPU, handles auth, database, job queue
-3. **Runner**: Runs on GPU server, polls for jobs, processes audio with faster-whisper + GLM
-4. **Communication**: HTTP-based job queue with API key authentication
-5. **Audio cleanup**: Files deleted after processing to save space
-6. **faster-whisper with cuDNN** runs in runner container (not server)
-7. **Base image**: Run `./build_fastwhisper_base.sh` first for runner (~10-15 min, includes model download)
-8. **Hot reload**: Volume mounts for instant code updates (server and runner)
-9. **Test coverage**: Backend ~240 tests ✅, Frontend 73.6% (319/433)
-10. **uv** for Python deps (not pip)
-11. **Jotai** for state (not React Context)
-12. **Data persistence**: `data/` directory volume-mounted with separation (`data/server`, `data/runner`, `data/uploads`)
-13. **SSE Streaming**: Vite proxy disables buffering for real-time AI chat
-14. **Integration test**: Successfully verified end-to-end workflow with real audio processing
+2. **Performance**: RTX 3080 achieves 11.7x real-time speed (RTF 0.08) - see [Performance Restrictions & Best Practices](#performance-restrictions--best-practices)
+3. **Performance Report**: See `reports/2025-01-13-performance-optimization-report.md` for comprehensive analysis
+4. **NEVER use fixed-duration chunking**: Causes 3.3x performance degradation - see restrictions above
+5. **Segments-first architecture**: Preserves Whisper timestamps for accurate SRT export
+6. **Server**: Runs on any VPS without GPU, handles auth, database, job queue
+7. **Runner**: Runs on GPU server, polls for jobs, processes audio with faster-whisper + GLM
+8. **Communication**: HTTP-based job queue with API key authentication
+9. **Audio cleanup**: Files deleted after processing to save space
+10. **faster-whisper with cuDNN** runs in runner container (not server)
+11. **Base image**: Run `./build_fastwhisper_base.sh` first for runner (~10-15 min, includes model download)
+12. **Hot reload**: Volume mounts for instant code updates (server and runner)
+13. **Test coverage**: Backend ~240 tests ✅, Frontend 73.6% (319/433)
+14. **uv** for Python deps (not pip)
+15. **Jotai** for state (not React Context)
+16. **Data persistence**: `data/` directory volume-mounted with separation (`data/server`, `data/runner`, `data/uploads`)
+17. **SSE Streaming**: Vite proxy disables buffering for real-time AI chat
+18. **Integration test**: Successfully verified end-to-end workflow with real audio processing
+19. **MAX_FORMAT_CHUNK=5000**: Prevents GLM API timeouts - enforced in configuration
 
 ## Server/Runner API
 
