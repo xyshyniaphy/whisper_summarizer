@@ -323,6 +323,71 @@ class TextFormattingService:
         logger.info(f"Split text ({text_bytes} bytes) into {len(chunks)} chunks")
         return chunks
 
+    def split_text_by_srt_sections(
+        self,
+        text: str,
+        max_sections_per_chunk: int = 50
+    ) -> List[str]:
+        """
+        Split text into chunks based on SRT section count.
+
+        Each SRT section has:
+        - Section number
+        - Timestamp (HH:MM:SS,mmm --> HH:MM:SS,mmm)
+        - Text content
+        - Empty line
+
+        Args:
+            text: Full transcription text (may be SRT format or plain)
+            max_sections_per_chunk: Maximum SRT sections per chunk
+
+        Returns:
+            List of text chunks
+        """
+        lines = text.split('\n')
+
+        # Check if text looks like SRT format
+        has_srt_timestamps = any('-->' in line for line in lines[:50])
+
+        if not has_srt_timestamps:
+            # Fall back to byte chunking for non-SRT text
+            logger.info("Text does not appear to be SRT format, using byte chunking")
+            return self.split_text_into_chunks(text)
+
+        chunks = []
+        current_chunk = []
+        section_count = 0
+        in_section = False
+
+        for line in lines:
+            current_chunk.append(line)
+
+            # Detect SRT section boundaries
+            if '-->' in line:
+                in_section = True
+            elif in_section and line.strip() == '':
+                # End of section
+                section_count += 1
+                in_section = False
+
+                # Check if we need to start a new chunk
+                if section_count >= max_sections_per_chunk:
+                    chunks.append('\n'.join(current_chunk))
+                    current_chunk = []
+                    section_count = 0
+
+        # Add remaining content
+        if current_chunk:
+            remaining_chunk = '\n'.join(current_chunk).strip()
+            if remaining_chunk:  # Only add non-empty chunks
+                chunks.append(remaining_chunk)
+
+        # Filter out any empty chunks that might have been created
+        chunks = [c for c in chunks if c.strip()]
+
+        logger.info(f"Split into {len(chunks)} SRT-based chunks (max {max_sections_per_chunk} sections each)")
+        return chunks
+
     def format_text_chunk(self, chunk: str) -> str:
         """
         Format a single chunk of text using GLM-4.5-Air.
