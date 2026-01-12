@@ -1145,7 +1145,7 @@ class TranscribeService:
             chunk_audio_path = self._extract_audio_chunk(
                 audio_path,
                 chunk_start,
-                chunk_end,
+                chunk["end"],
                 chunk_index=i
             )
 
