@@ -9,6 +9,10 @@ import logging
 from typing import List, Dict
 from dataclasses import dataclass
 
+import pydub
+from pydub import AudioSegment
+from pydub.silence import detect_nonsilent
+
 logger = logging.getLogger(__name__)
 
 
@@ -46,6 +50,15 @@ class AudioSegmenter:
         silence_threshold: int = -40,  # dB
         min_silence_duration: float = 0.5,  # seconds
     ):
+        if min_duration_seconds >= target_duration_seconds:
+            raise ValueError(
+                f"min_duration_seconds ({min_duration_seconds}) must be less than target_duration_seconds ({target_duration_seconds})"
+            )
+        if target_duration_seconds >= max_duration_seconds:
+            raise ValueError(
+                f"target_duration_seconds ({target_duration_seconds}) must be less than max_duration_seconds ({max_duration_seconds})"
+            )
+
         self.target_duration = target_duration_seconds * 1000  # Convert to ms
         self.min_duration = min_duration_seconds * 1000
         self.max_duration = max_duration_seconds * 1000
@@ -62,13 +75,6 @@ class AudioSegmenter:
         Returns:
             List of AudioChunk dictionaries with start/end timestamps
         """
-        try:
-            from pydub import AudioSegment
-            from pydub.silence import detect_nonsilent
-        except ImportError:
-            logger.error("pydub required for audio segmentation")
-            raise
-
         logger.info(f"Loading audio: {audio_path}")
         audio = AudioSegment.from_file(audio_path)
 
@@ -138,10 +144,12 @@ class AudioSegmenter:
         if split_points:
             time_since_last_split = total_duration - split_points[-1]
             if time_since_last_split > self.max_duration:
-                # Force intermediate splits
+                # Force intermediate splits at equal intervals
+                base_position = split_points[-1]
                 num_forced_splits = int(time_since_last_split / self.target_duration)
+                interval = time_since_last_split / (num_forced_splits + 1)
                 for i in range(1, num_forced_splits + 1):
-                    split_point = split_points[-1] + (time_since_last_split // (num_forced_splits + 1))
+                    split_point = base_position + int(i * interval)
                     split_points.append(split_point)
 
         split_points.append(total_duration)  # Always end at total duration
