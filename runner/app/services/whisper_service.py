@@ -1235,6 +1235,25 @@ class TranscribeService:
 
         return temp_path
 
+    def _create_fixed_chunks(self, audio_path: str, **kwargs) -> List[Dict]:
+        """
+        Creates fixed-duration chunks using AudioSegmenter.
+
+        Used for testing/mocking - provides a wrapper around AudioSegmenter
+        that can be easily mocked in tests.
+
+        Args:
+            audio_path: Path to audio file
+            **kwargs: AudioSegmenter configuration parameters
+
+        Returns:
+            List of chunk dictionaries with start/end times
+        """
+        from app.services.audio_segmenter import AudioSegmenter
+
+        segmenter = AudioSegmenter(**kwargs)
+        return segmenter.segment(audio_path)
+
 
 # Singleton instance
 transcribe_service = TranscribeService()
