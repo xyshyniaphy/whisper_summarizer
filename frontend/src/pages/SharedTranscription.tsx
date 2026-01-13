@@ -7,7 +7,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { AlertCircle, Loader2, Download, ChevronDown, File } from 'lucide-react'
+import { AlertCircle, Loader2, Download, ChevronDown, File, Play } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { api } from '../services/api'
@@ -15,6 +15,8 @@ import { Badge } from '../components/ui/Badge'
 import { Button } from '../components/ui/Button'
 import { cn } from '../utils/cn'
 import { ChatDisplay } from '../components/ChatDisplay'
+import { AudioPlayer, Segment } from '../components/AudioPlayer'
+import SrtList from '../components/SrtList'
 
 interface SharedTranscriptionData {
     id: string
@@ -77,6 +79,9 @@ export function SharedTranscription() {
     const [data, setData] = useState<SharedTranscriptionData | null>(null)
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
+    const [segments, setSegments] = useState<Segment[]>([])
+    const [showAudioPlayer, setShowAudioPlayer] = useState(false)
+    const [currentTime, setCurrentTime] = useState(0)
     const isLoadingRef = useRef(false)
 
     const loadSharedTranscription = useCallback(async () => {
@@ -88,6 +93,18 @@ export function SharedTranscription() {
             setError(null)
             const response = await api.getSharedTranscription(shareToken)
             setData(response)
+
+            // Load segments for audio player
+            try {
+                const segmentsData = await api.getSharedSegments(shareToken)
+                if (segmentsData.length > 0) {
+                    setSegments(segmentsData)
+                    setShowAudioPlayer(true)
+                }
+            } catch (segmentsError) {
+                console.warn('Could not load segments:', segmentsError)
+                // Segments are optional - continue without them
+            }
         } catch (err: any) {
             console.error('Failed to load shared transcription:', err)
             if (err.response?.status === 404) {
@@ -162,6 +179,11 @@ export function SharedTranscription() {
         }
     }
 
+    // Handle seek from audio player or SRT list
+    const handleSeek = useCallback((time: number) => {
+        setCurrentTime(time)
+    }, [])
+
 
     if (loading) {
         return (
@@ -205,12 +227,24 @@ export function SharedTranscription() {
         return `${mins}:${String(secs).padStart(2, '0')}`
     }
 
+    // Audio URL for streaming
+    const audioUrl = shareToken ? api.getSharedAudioUrl(shareToken) : ''
+
     return (
-        <div className="container mx-auto px-4 py-8 max-w-4xl">
+        <div className={cn(
+            "container mx-auto px-4 py-8 max-w-4xl",
+            showAudioPlayer && "pb-20"
+        )}>
             {/* Header */}
             <div className="mb-6">
                 <div className="flex items-center gap-2 mb-4">
                     <Badge variant="info">公开分享</Badge>
+                    {showAudioPlayer && (
+                        <Badge variant="success" className="flex items-center gap-1">
+                            <Play className="w-3 h-3" />
+                            可播放音频
+                        </Badge>
+                    )}
                 </div>
                 <h1 className="text-3xl font-bold mb-2">{data.file_name}</h1>
                 <p className="text-sm text-gray-500 dark:text-gray-400">
@@ -229,6 +263,25 @@ export function SharedTranscription() {
             )}
 
             <div className="space-y-6">
+                {/* SRT Navigation Section - Only show if segments exist */}
+                {showAudioPlayer && (
+                    <CollapsibleSection
+                        title="音频播放与字幕"
+                        defaultOpen={true}
+                    >
+                        <div className="space-y-4">
+                            <p className="text-sm text-gray-600 dark:text-gray-400">
+                                点击任意字幕行跳转到对应时间点
+                            </p>
+                            <SrtList
+                                segments={segments}
+                                currentTime={currentTime}
+                                onSeek={handleSeek}
+                            />
+                        </div>
+                    </CollapsibleSection>
+                )}
+
                 {/* Transcription Text - Reusing CollapsibleSection */}
                 <CollapsibleSection
                     title="转录结果"
@@ -340,6 +393,15 @@ export function SharedTranscription() {
                     由 <a href="/" className="text-blue-600 dark:text-blue-400 hover:underline">Whisper Summarizer</a> 提供支持
                 </p>
             </div>
+
+            {/* Sticky Audio Player - Only show if segments exist */}
+            {showAudioPlayer && (
+                <AudioPlayer
+                    audioUrl={audioUrl}
+                    segments={segments}
+                    onSeek={handleSeek}
+                />
+            )}
         </div>
     )
 }

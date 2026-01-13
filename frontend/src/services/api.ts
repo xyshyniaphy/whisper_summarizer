@@ -303,6 +303,12 @@ export const api = {
     language: string | null;
     duration_seconds: number | null;
     created_at: string;
+    chat_messages: Array<{
+      id: string;
+      role: 'user' | 'assistant';
+      content: string;
+      created_at: string;
+    }>;
   }> => {
     const response = await axios.get(`${API_URL}/shared/${shareToken}`);
     return response.data;
