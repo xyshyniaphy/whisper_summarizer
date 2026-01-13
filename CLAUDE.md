@@ -272,190 +272,31 @@ REVIEW_LANGUAGE=zh
 
 ## Nginx Reverse Proxy
 
-**File Structure:**
-```
-nginx/
-├── nginx.conf          # Main nginx configuration
-└── conf.d/
-    └── default.conf    # Server blocks and routing rules
-```
+For Nginx configuration, URL routing, SSL, and Cloudflare Tunnel integration, use the **`/whisper-nginx`** skill:
 
-**Note:** SSL/TLS handled by Cloudflare Tunnel - no certificates needed in nginx.
-
-### Nginx Configuration
-
-**Development** (docker-compose.dev.yml):
-```yaml
-nginx:
-  image: nginx:alpine
-  ports:
-    - "${NGINX_PORT:-8130}:80"
-  volumes:
-    - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-    - ./nginx/conf.d:/etc/nginx/conf.d:ro
-```
-
-**Environment Variables:**
 ```bash
-# Nginx Configuration ⭐ NEW
-NGINX_HOST=localhost          # Server hostname
-NGINX_PORT=8130               # HTTP port (default: 8130, for Cloudflare Tunnel)
+/whisper-nginx
 ```
 
-### URL Routing
-
-```
-Request                        → Target
---------------------------------------------------------------
-/                              → Frontend (Vite dev server)
-/health                        → Nginx health check
-/api/*                         → Server (FastAPI backend)
-  /api/auth/*                  → Supabase OAuth
-  /api/audio/*                 → Audio upload
-  /api/transcriptions/*        → Transcription CRUD
-  /api/admin/*                 → Admin endpoints
-  /api/runner/*                → Runner API (job queue)
-```
-
-### Key Features
-
-1. **SSE Support** (AI Chat Streaming):
-   - `proxy_buffering off`
-   - `proxy_cache off`
-   - `X-Accel-Buffering: no` header
-   - 1-hour timeout for streaming responses
-
-2. **Large File Uploads**:
-   - `client_max_body_size 500M`
-   - `proxy_request_buffering off` (stream uploads)
-   - Extended timeouts
-
-3. **WebSocket Support** (Vite HMR):
-   - `proxy_http_version 1.1`
-   - `Connection: "upgrade"` header
-
-4. **Security Headers**:
-   - `X-Frame-Options: SAMEORIGIN`
-   - `X-Content-Type-Options: nosniff`
-   - `X-XSS-Protection: 1; mode=block`
-
-5. **Rate Limiting**:
-   - API: 10 req/s with burst of 20
-   - Uploads: 2 req/s with burst of 5
-   - Connection limit: 10 per IP
-
-6. **Cloudflare Headers**:
-   - `CF-Connecting-IP` - Real client IP (preserved through tunnel)
-   - `CF-Ray` - Request identifier for debugging
-   - `CF-Visitor` - Visitor scheme (http/https)
-
-### Cloudflare Tunnel
-
-**Cloudflare Tunnel** provides SSL/TLS termination for the application.
-
-- **No SSL certificates needed** in nginx configuration
-- Cloudflare manages HTTPS at the edge
-- Application runs on HTTP internally
-- Secure outbound connection only (no open ports)
-
-**Note**: Cloudflare Tunnel configuration is handled separately through the Cloudflare dashboard.
-
-**Static File Serving** (production):
-- Development: Proxies to Vite dev server (hot reload, port 3000)
-- Production: Serves static files from Docker image (nginx alpine)
-- SPA routing: `try_files` fallback to `index.html`
-- Asset caching: 1-year cache for hashed assets (js, css, images)
-
-### Frontend Deployment
-
-**Development Mode:**
-```bash
-# Uses Dockerfile.dev with hot reload
-docker-compose -f docker-compose.dev.yml up frontend
-```
-
-**Production Mode:**
-
-The production frontend uses pre-built Docker images from Docker Hub. Vite environment variables (VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY) are **build-time only** - they must be baked into the JavaScript bundle during the Docker image build.
-
-**Build and Push Workflow (run locally):**
-```bash
-# 1. Ensure .env has SUPABASE_URL and SUPABASE_ANON_KEY
-# 2. Build and push to Docker Hub
-./push.sh
-
-# This builds frontend with your Supabase credentials baked in
-# and pushes to: xyshyniaphy/whisper_summarizer-frontend:latest
-```
-
-**Deploy on Production Server:**
-```bash
-# SSH to production server
-ssh root@192.3.249.169
-
-# Pull latest images
-./pull.sh
-
-# Restart services
-./stop_prd.sh
-./start_prd.sh
-
-# Or restart specific service
-docker compose -f docker-compose.prod.yml pull web
-docker compose -f docker-compose.prod.yml up -d web
-```
-
-**Key Differences:**
-
-| Feature | Development | Production |
-|---------|-----------|------------|
-| Dockerfile | `Dockerfile.dev` | `Dockerfile.prod` |
-| Server | Vite dev server (HMR) | Nginx (static files) |
-| Source code | Volume mounted | Baked into image |
-| Hot reload | ✅ Yes | ❌ No |
-| Dev dependencies | ✅ Included | ❌ Excluded |
-| Image size | ~500MB | ~20MB (nginx alpine) |
-| Build time | Fast | Slower (Vite build) |
-| Runtime | Heavy (Node.js) | Light (nginx only) |
+**Quick Reference**:
+- **URL Routing**: `/` → Frontend, `/api/*` → Server
+- **Port**: `http://localhost:8130` (dev), `https://w.198066.xyz` (prod)
+- **SSL**: Handled by Cloudflare Tunnel (no certificates in nginx)
+- **Key Features**: SSE streaming, 500MB uploads, WebSocket support, rate limiting
 
 ## User & Channel Management
 
-**Important**: New users are **inactive** by default. Admin approval required.
-
-### Roles & Access
-
-| Role | Content Visibility |
-|------|-------------------|
-| **Admin** | ALL content + dashboard access |
-| **Regular User** | Own content + assigned channels only |
-
-### First-Time Admin Setup
+For user roles, permissions, channels, and admin dashboard, use the **`/whisper-users`** skill:
 
 ```bash
-# Development
-./scripts/set_first_admin.sh user@example.com
-
-# Production
-DATABASE_URL="postgresql://..." ./scripts/set_first_admin.sh user@example.com
+/whisper-users
 ```
 
-### Admin Dashboard (`/dashboard`)
-
-Three tabs:
-1. **User Management**: Activate, toggle admin, soft delete
-2. **Channel Management**: Create/edit/delete channels, assign users
-3. **Audio Management**: Assign audio to channels
-
-### Channel Assignment Endpoints
-
-**User-accessible** (`/api/transcriptions/{id}/channels`):
-- `GET` - Get transcription channels
-- `POST` - Assign to channels (replaces existing)
-
-**Admin-only** (`/api/admin/*`):
-- `/users` - User management
-- `/channels` - Channel management
-- `/audio` - Audio management
+**Quick Reference**:
+- **Roles**: Admin (all content), Regular User (own + assigned channels only)
+- **New users**: Inactive by default, require admin approval
+- **Admin Dashboard**: `/dashboard` - Manage users, channels, audio
+- **Setup**: `./scripts/set_first_admin.sh user@example.com`
 
 ## Database Schema
 
@@ -542,240 +383,33 @@ Transcription model provides `.text` property that reads/decompresses automatica
 
 ## Audio Chunking (Segments-First Architecture)
 
-The system uses a **segments-first approach** to preserve individual Whisper timestamps throughout the pipeline.
+For chunking architecture, VAD split, parallel processing, and SRT generation, use the **`/whisper-chunking`** skill:
 
-### Data Flow
-
-```
-Whisper Transcription (10-min chunks, parallel)
-    ↓
-Segments: [{start: 0.0, end: 2.5, text: "..."}, ...]
-    ↓
-Runner sends segments (NOT concatenated text)
-    ↓
-Server saves segments.json.gz
-    ↓
-LLM formatting: Text extracted → chunked by 5000 bytes → GLM → formatted
-    ↓
-SRT export: Uses original segments.json.gz with real timestamps ✅
+```bash
+/whisper-chunking
 ```
 
-### Chunking Strategy
+**Quick Reference**:
+- **Segments-first**: Preserves Whisper timestamps for accurate SRT export
+- **VAD Split**: Smart chunking at silence points
+- **Parallel Processing**: ThreadPoolExecutor for GPU utilization
+- **Config**: `CHUNK_SIZE_MINUTES=5-10`, `MAX_CONCURRENT_CHUNKS=4-6` (GPU)
 
-For faster transcription of long files (10+ min):
+## Performance Optimization
 
-1. Split audio at VAD-detected silence points
-2. Extract chunks with FFmpeg
-3. Transcribe in parallel (ThreadPoolExecutor)
-4. Merge results with **timestamp-based merge** (O(n), fast)
+**CRITICAL**: RTX 3080 achieves **11.7x real-time speed** (RTF 0.08). For performance guidelines, restrictions, benchmarks, and troubleshooting, use the **`/whisper-performance`** skill:
 
-**Key Configuration:**
-- `CHUNK_SIZE_MINUTES: 5` - Parallel 5-10 minute chunks
-- `MAX_CONCURRENT_CHUNKS: 4` - GPU workers
-- `MAX_FORMAT_CHUNK: 5000` - Max bytes per GLM request (avoids timeouts)
-- Timestamp-based merge (O(n), fast)
-
-**Recommended Settings:**
-- CPU: `MAX_CONCURRENT_CHUNKS=2`, `CHUNK_SIZE_MINUTES=10`
-- GPU (RTX 3080): `MAX_CONCURRENT_CHUNKS=4-6`, `CHUNK_SIZE_MINUTES=5-10`
-
-### SRT Generation
-
-The SRT export uses the **original Whisper segments** with their individual timestamps, ensuring:
-- Each subtitle line has precise timing from Whisper
-- No fake timestamps at chunk boundaries
-- Accurate alignment between audio and text
-
-## Performance Restrictions & Best Practices
-
-**CRITICAL**: Follow these performance guidelines to maintain optimal transcription speed.
-
-### ⚠️ PERFORMANCE RESTRICTIONS
-
-**1. NEVER Use Fixed-Duration Chunking**
-
-Fixed-duration chunks (10-30s) cause **massive FFmpeg overhead**:
-
-| Approach | Chunks (210-min) | FFmpeg Calls | RTF | Processing Time |
-|----------|------------------|--------------|-----|-----------------|
-| **Fixed-Duration (20s)** | 561 | 561 | 0.28 | ~58 min |
-| **10-Minute Chunks** | 42 | 42 | 0.08 | ~18 min |
-
-**Performance Impact**: Fixed-duration is **3.3x slower** due to 561 sequential FFmpeg extractions.
-
-**NEVER do this**:
-```python
-# ❌ WRONG - Fixed-duration chunking (removed from codebase)
-def transcribe_fixed_chunks(audio_path, chunk_duration=20):
-    for i in range(0, total_duration, chunk_duration):
-        extract_audio_with_ffmpeg(audio_path, i, i + chunk_duration)  # 561 calls!
+```bash
+/whisper-performance
 ```
 
-**ALWAYS do this**:
-```python
-# ✅ CORRECT - Use 5-10 minute chunks with parallel processing
-def transcribe_with_chunks(audio_path, chunk_size_minutes=5):
-    chunks = create_chunks(audio_path, chunk_size_minutes)  # Only 42 chunks
-    with ThreadPoolExecutor(max_workers=4) as executor:
-        results = executor.map(transcribe_chunk, chunks)  # Parallel!
-```
+**Quick Reference**:
+- **RTF target**: <0.1 (excellent), 0.1-0.3 (good), >0.5 (investigate)
+- **NEVER**: Fixed-duration chunking (3.3x slower), large GLM payloads (>5000 bytes), sequential processing
+- **ALWAYS**: 5-10 min chunks, parallel processing, preserve segments
+- **Config (RTX 3080)**: `CHUNK_SIZE_MINUTES=5-10`, `MAX_CONCURRENT_CHUNKS=4-6`
 
-**2. NEVER Send Large Text Payloads to GLM API**
-
-GLM-4.5-Air has timeout issues with payloads >5000 bytes:
-
-```python
-# ❌ WRONG - Large payload causes timeout
-formatted_text = glm_format(text)  # 10000+ bytes → timeout
-
-# ✅ CORRECT - Chunk by 5000 bytes
-chunks = chunk_text_by_bytes(text, max_bytes=5000)
-formatted_parts = [glm_format(chunk) for chunk in chunks]
-formatted_text = ''.join(formatted_parts)
-```
-
-**Configuration**: `MAX_FORMAT_CHUNK=5000` (enforced in `docker-compose.dev.yml`)
-
-**3. NEVER Process Chunks Sequentially for Long Audio**
-
-Sequential processing prevents GPU utilization:
-
-| Mode | 42 Chunks | GPU Utilization | Time |
-|------|-----------|-----------------|------|
-| **Sequential** | 1 at a time | 25% | ~70 min |
-| **Parallel (4 workers)** | 4 at a time | 95% | ~18 min |
-
-**Configuration**: `MAX_CONCURRENT_CHUNKS=4-6` (GPU-dependent)
-
-**4. NEVER Skip Segments Preservation**
-
-Segments are required for accurate SRT timestamps:
-
-```python
-# ❌ WRONG - Only sends concatenated text
-result = JobResult(text=concatenated_text, segments=None)
-
-# ✅ CORRECT - Preserves Whisper segments
-result = JobResult(text=concatenated_text, segments=whisper_segments)
-```
-
-### ✅ PERFORMANCE BEST PRACTICES
-
-**1. Use 5-10 Minute Chunks**
-
-Optimal chunk size balances FFmpeg overhead and parallelization:
-
-| Chunk Size | 210-min File | Chunks | Pros | Cons |
-|------------|--------------|--------|------|------|
-| 5 min | 42 chunks | 42 | ✅ More parallelization | More merge overhead |
-| 10 min | 21 chunks | 21 | ✅ Fewer FFmpeg calls | Less parallelization |
-| **20s** | 630 chunks | 630 | ❌ **NEVER USE** | **3.3x slower** |
-
-**Recommended**: `CHUNK_SIZE_MINUTES=5-10`
-
-**2. Match Workers to GPU VRAM**
-
-| GPU Model | VRAM | MAX_CONCURRENT_CHUNKS | CHUNK_SIZE_MINUTES |
-|-----------|------|----------------------|-------------------|
-| RTX 3060/3060 Ti | 12GB | 4 | 5-10 |
-| RTX 3080 | 8GB | 4-6 | 5-10 |
-| RTX 3090/4080 | 10GB+ | 6-8 | 10-15 |
-| RTX 4090 | 24GB | 8-12 | 10-15 |
-
-**Rule of Thumb**: 1 concurrent chunk per 2GB VRAM (minimum 4 for RTX 3080)
-
-**3. Enable VAD Split for Smart Chunking**
-
-VAD (Voice Activity Detection) splits at silence points:
-
-```yaml
-USE_VAD_SPLIT: true
-VAD_SILENCE_THRESHOLD: -30
-VAD_MIN_SILENCE_DURATION: 0.5
-```
-
-**Benefit**: Reduces transcription of silence, improves accuracy.
-
-**4. Use Timestamp-Based Merge for >=10 Chunks**
-
-Auto-selection logic in `whisper_service.py`:
-
-```python
-if chunk_count >= 10:
-    use_timestamp_merge()  # O(n) - fast
-else:
-    use_lcs_merge()  # O(n²) - better deduplication
-```
-
-**Rationale**: LCS merge has O(n²) complexity - unacceptable for 42+ chunks.
-
-**5. Monitor RTF (Real-Time Factor)**
-
-```
-RTF = Processing Time / Audio Duration
-```
-
-| RTF | Performance | Status |
-|-----|-------------|--------|
-| < 0.1 | >10x real-time | ✅ Excellent |
-| 0.1-0.3 | 3-10x real-time | ✅ Good |
-| 0.3-0.5 | 2-3x real-time | ⚠️ Acceptable |
-| > 0.5 | <2x real-time | ❌ Investigate |
-| > 1.0 | Slower than real-time | 🚨 Critical issue |
-
-**Expected RTF**:
-- 2-min audio: 1.0-1.5x (API overhead dominates)
-- 20-min audio: 0.20-0.30x (5x faster than real-time)
-- 60-min audio: 0.35-0.45x (2.2-2.8x faster than real-time)
-- 210-min audio: 0.25-0.35x (3-4x faster than real-time)
-
-### Performance Benchmarks
-
-**Test Configuration**:
-- GPU: NVIDIA RTX 3080
-- Model: faster-whisper large-v3-turbo
-- Compute: int8_float16 (GPU optimized)
-
-| Audio Duration | Expected RTF | Processing Time | Chunks |
-|----------------|-------------|-----------------|--------|
-| 2 min | 1.0-1.5x | ~2-3 min | 1 |
-| 20 min | 0.20-0.30x | ~4-6 min | 5 |
-| 60 min | 0.35-0.45x | ~21-27 min | 6-12 |
-| 210 min | 0.25-0.35x | ~52-73 min | 21-42 |
-
-**Key Insight**: Longer audio = better RTF (fixed API overhead amortized).
-
-### Performance Troubleshooting
-
-**Issue**: RTF > 0.5 (slower than expected)
-
-**Checklist**:
-1. ✅ `CHUNK_SIZE_MINUTES` is 5-10 (not 20s)
-2. ✅ `MAX_CONCURRENT_CHUNKS` matches GPU VRAM (4-6 for RTX 3080)
-3. ✅ `MAX_FORMAT_CHUNK` is 5000 (not 10000)
-4. ✅ `USE_VAD_SPLIT` is true
-5. ✅ `MERGE_STRATEGY` is `lcs`
-6. ✅ GPU is being utilized (`nvidia-smi` shows 80-95% GPU usage)
-
-**Issue**: GLM API timeouts
-
-**Solution**: Reduce `MAX_FORMAT_CHUNK` to 4000 or 3000 bytes.
-
-**Issue**: Out of memory errors
-
-**Solution**: Reduce `MAX_CONCURRENT_CHUNKS` by 1-2 workers.
-
-### Code Review Checklist
-
-Before committing performance-related changes:
-
-- [ ] No fixed-duration chunking logic (20-30s chunks)
-- [ ] Chunks are processed in parallel (ThreadPoolExecutor)
-- [ ] GLM payloads are chunked by 5000 bytes max
-- [ ] Whisper segments are preserved throughout pipeline
-- [ ] FFmpeg extraction is minimized (42 chunks max for 210-min file)
-- [ ] Merge strategy auto-selects based on chunk count
-- [ ] GPU workers match VRAM capacity (4-6 for RTX 3080)
+**Performance Report**: See `reports/2025-01-13-performance-optimization-report.md` for comprehensive analysis.
 
 ## Debugging & Logging
 
@@ -930,370 +564,54 @@ docker exec -it whisper_postgres_prd psql -U postgres -d whisper_summarizer
 
 ## Frontend UI Patterns
 
-### Confirmation Dialogs
+For React component patterns, Jotai state, Tailwind CSS, and coding standards, use the **`/whisper-frontend`** skill:
 
-**NEVER use `window.confirm()`** - blocks JS thread, can't be customized/tested.
-
-```tsx
-import { ConfirmDialog } from '../components/ui/ConfirmDialog'
-import { useState } from 'react'
-
-function MyComponent() {
-  const [confirm, setConfirm] = useState({ isOpen: false, id: null })
-
-  return (
-    <>
-      <button onClick={() => setConfirm({ isOpen: true, id: '123' })}>Delete</button>
-
-      <ConfirmDialog
-        isOpen={confirm.isOpen}
-        onClose={() => setConfirm({ isOpen: false, id: null })}
-        onConfirm={async () => {
-          await deleteItem(confirm.id)
-          setConfirm({ isOpen: false, id: null })
-        }}
-        title="确认删除"
-        message="确定要删除吗？"
-        confirmLabel="删除"
-        cancelLabel="取消"
-        variant="danger"
-      />
-    </>
-  )
-}
+```bash
+/whisper-frontend
 ```
 
-### Loading States
-
-```tsx
-import { Loader2 } from 'lucide-react'
-
-{isLoading ? (
-  <div className="flex items-center justify-center py-16">
-    <Loader2 className="w-10 h-10 text-blue-500 animate-spin" />
-  </div>
-) : (
-  // content
-)}
-```
-
-### React Hooks Rules
-
-**CRITICAL**: Always use conditional returns, NOT early returns, for components with hooks:
-
-```tsx
-// ❌ WRONG - Early return after hook causes Hooks violation
-export function Modal({ isOpen, ... }) {
-  useEffect(() => { ... }, [isOpen])  // Hook called
-  if (!isOpen) return null            // Early return breaks hook order
-  return ( ... )
-}
-
-// ✅ CORRECT - Conditional return preserves hook order
-export function Modal({ isOpen, ... }) {
-  useEffect(() => { ... }, [isOpen])  // Hook always called
-  return isOpen ? ( ... ) : null      // Conditional return
-}
-```
+**Quick Reference**:
+- **State**: Jotai (not React Context)
+- **Styling**: Tailwind CSS utilities
+- **Icons**: lucide-react
+- **ConfirmDialog**: NEVER use `window.confirm()`
+- **React Hooks**: Use conditional returns, NOT early returns
 
 ## Audio Player with SRT Navigation
 
-The shared transcription page includes an interactive audio player with SRT (subtitle) navigation, allowing users to listen to audio while following along with synchronized text.
+For sticky audio player, SRT navigation, auto-highlighting, and responsive design, use the **`/whisper-player`** skill:
 
-### Overview
-
-The audio player feature enables a seamless listening experience with:
-- **Sticky Audio Player**: Fixed at bottom of viewport for continuous access
-- **SRT Navigation**: Click any subtitle to jump to that timestamp
-- **Auto-Highlighting**: Current subtitle highlighted during playback
-- **Auto-Scrolling**: List automatically scrolls to keep current segment visible
-- **Responsive Design**: Optimized for both desktop and smartphone
-
-### Features
-
-**Sticky Audio Player**
-- Fixed position at bottom of screen
-- Always visible regardless of scroll position
-- Collapsible on mobile to save screen space
-
-**SRT Navigation**
-- Click any subtitle segment to seek audio to that timestamp
-- Smooth scrolling to selected segment
-- Visual feedback for active/clicked segments
-
-**Auto-Highlighting**
-- Current subtitle highlighted during playback
-- Smooth transition between segments
-- Clear visual distinction between played, current, and upcoming segments
-
-**Auto-Scrolling**
-- Automatic scrolling to keep current segment in view
-- Smart scroll behavior (doesn't interrupt manual scrolling)
-- Configurable scroll offset for better visibility
-
-**Responsive Design**
-- Desktop: Full-featured player with expandable subtitle list
-- Smartphone: Compact player with collapsible subtitle list
-- Touch-optimized controls for mobile devices
-
-### API Endpoints
-
-**Get SRT Segments**
-```http
-GET /api/shared/{share_token}/segments
+```bash
+/whisper-player
 ```
 
-**Response** (JSON):
-```json
-{
-  "segments": [
-    {
-      "start": 0.0,
-      "end": 2.5,
-      "text": "第一段字幕内容"
-    },
-    {
-      "start": 2.5,
-      "end": 5.0,
-      "text": "第二段字幕内容"
-    }
-  ]
-}
+**Quick Reference**:
+- **Features**: Sticky player, click-to-seek subtitles, auto-highlight, auto-scroll
+- **API**: `/api/shared/{token}/segments`, `/api/shared/{token}/audio`
+- **Mobile**: Collapsible list, touch-friendly controls
+- **Requirements**: `segments.json.gz`, valid audio file, active share token
+
+## E2E Testing
+
+For Playwright testing patterns, file upload testing, auth token handling, and common patterns, use the **`/whisper-e2e`** skill:
+
+```bash
+/whisper-e2e
 ```
 
-**Get Audio File**
-```http
-GET /api/shared/{share_token}/audio
-```
-
-**Features**:
-- Supports HTTP Range requests for seeking
-- Streams audio in chunks
-- Compatible with HTML5 Audio API
-- Returns appropriate Content-Type based on audio format
-
-**Response Headers**:
-```
-Content-Type: audio/mpeg
-Accept-Ranges: bytes
-Content-Length: 12345678
-Content-Range: bytes 0-1023/12345678
-```
-
-### Frontend Components
-
-**AudioPlayer Component**
-
-```tsx
-interface AudioPlayerProps {
-  audioUrl: string;          // URL to audio file
-  segments: SrtSegment[];    // Array of subtitle segments
-  onTimeUpdate?: (time: number) => void;
-  onSegmentClick?: (segment: SrtSegment) => void;
-}
-
-interface SrtSegment {
-  start: number;    // Start time in seconds
-  end: number;      // End time in seconds
-  text: string;     // Subtitle text
-}
-```
-
-**Example Usage**:
-```tsx
-<AudioPlayer
-  audioUrl="/api/shared/abc123/audio"}
-  onSegmentClick={(segment) => {
-    audioRef.current?.seekTo(segment.start);
-  }}
-/>
-```
-
-**SrtList Component**
-
-```tsx
-interface SrtListProps {
-  segments: SrtSegment[];
-  currentTime: number;
-  onSegmentClick: (segment: SrtSegment) => void;
-  autoScroll?: boolean;  // Default: true
-}
-
-// Segment item styling states:
-// - past: Already played (dimmed)
-// - current: Currently playing (highlighted)
-// - future: Not yet played (normal)
-```
-
-**Example Usage**:
-```tsx
-<SrtList
-  segments={segments}
-  currentTime={currentTime}
-  onSegmentClick={(segment) => handleSegmentClick(segment)}
-  autoScroll={true}
-/>
-```
-
-### Requirements
-
-**Server-Side Requirements**:
-1. **Segments File**: `segments.json.gz` must exist in `/app/data/segments/{transcription_id}.json.gz`
-   - Generated by runner during transcription
-   - Gzip-compressed JSON array of SRT segments
-   - Contains accurate Whisper timestamps
-
-2. **Original Audio**: `file_path` must be accessible and point to valid audio file
-   - Stored in `/app/data/uploads/` or shared storage
-   - Must be readable by server process
-   - Supported formats: MP3, M4A, WAV, OGG, etc.
-
-3. **Share Token**: Valid share token must exist in database
-   - Token must not be expired
-   - Transcription must have `status=completed`
-
-**Client-Side Requirements**:
-1. **Browser Support**: HTML5 Audio API
-   - Chrome/Edge: Full support
-   - Firefox: Full support
-   - Safari: Full support (iOS 13+)
-   - Mobile browsers: Full support
-
-2. **JavaScript Features**:
-   - ES6+ (async/await, arrow functions)
-   - React 18+ hooks (useState, useEffect, useRef)
-   - CSS Scroll Snap module for smooth scrolling
-
-### Implementation Details
-
-**Segment Synchronization**:
-- Audio player's `timeupdate` event triggers highlight updates
-- Current segment determined by `currentTime >= segment.start && currentTime < segment.end`
-- Highlight updates use React state for efficient re-renders
-
-**Auto-Scroll Logic**:
-- Scrolls when current segment changes
-- Uses `scrollIntoView()` with `behavior: 'smooth'`
-- Respects user scroll position (doesn't interrupt manual scrolling)
-- Configurable offset to prevent segment from being too close to edge
-
-**Performance Optimizations**:
-- Segments loaded once on component mount
-- Audio uses native browser streaming (no full download)
-- Highlight updates debounced to 100ms
-- Auto-scroll uses `requestAnimationFrame` for smooth 60fps
-
-### Mobile Optimizations
-
-**Smartphone Layout**:
-- Player minimized to bottom bar by default
-- Expandable subtitle list with toggle button
-- Touch-friendly controls (larger tap targets)
-- Prevents page scroll when interacting with player
-
-**Touch Gestures**:
-- Tap subtitle to seek
-- Swipe up/down to expand/collapse list
-- Pinch to zoom text size (optional feature)
-
-### Testing
-
-**Manual Testing Checklist**:
-- [ ] Audio plays from beginning
-- [ ] Clicking subtitle seeks to correct timestamp
-- [ ] Current subtitle highlights during playback
-- [ ] List scrolls to keep current segment visible
-- [ ] Player remains visible when scrolling page
-- [ ] Responsive design works on mobile
-- [ ] Audio works with Range requests (seeking)
-- [ ] Expired/invalid tokens show error
-
-**E2E Test Example**:
-```typescript
-test('audio player with SRT navigation', async ({ page }) => {
-  // Navigate to shared transcription
-  await page.goto('/shared/abc123');
-
-  // Wait for audio to load
-  await page.waitForSelector('audio');
-
-  // Click a subtitle segment
-  await page.click('[data-segment-index="5"]');
-
-  // Verify audio seeked to correct time
-  const currentTime = await page.evaluate(() => {
-    return document.querySelector('audio')?.currentTime;
-  });
-  expect(currentTime).toBeCloseTo(expectedTime, 1);
-});
-```
-
-### Troubleshooting
-
-**Audio Not Playing**:
-- Check browser console for CORS errors
-- Verify audio file exists at `file_path`
-- Ensure server sends correct `Content-Type` header
-- Test audio file is valid format
-
-**Segments Not Loading**:
-- Verify `segments.json.gz` exists in `/app/data/segments/`
-- Check gzip compression is working
-- Ensure runner generated segments during transcription
-- Check API response for errors
-
-**Auto-Scroll Not Working**:
-- Verify `autoScroll` prop is `true`
-- Check browser supports `scrollIntoView()`
-- Ensure container has `overflow-y: auto`
-- Check for CSS conflicts with scroll behavior
-
-**Mobile Issues**:
-- Test on actual device (emulator may not be accurate)
-- Check viewport meta tag configuration
-- Verify touch events are not blocked by other elements
-- Ensure player has high z-index for visibility
-
-## E2E Testing with File Uploads
-
-**CRITICAL**: NEVER click upload buttons - opens native file picker, blocks automation.
-
-**Correct pattern** - Direct API calls with auth tokens:
-
-```typescript
-// Get auth token from localStorage
-const getAuthToken = async (page: Page) => {
-  return await page.evaluate(() => {
-    const keys = Object.keys(localStorage);
-    const authKey = keys.find(k => k.startsWith('sb-') && k.includes('-auth-token'));
-    if (!authKey) return null;
-    const tokenData = JSON.parse(localStorage.getItem(authKey)!);
-    return tokenData?.currentSession?.access_token || tokenData?.access_token || null;
-  });
-};
-
-// Upload via API
-const uploadFileViaAPI = async (page: Page, filePath: string) => {
-  const token = await getAuthToken(page);
-  const formData = new FormData();
-  const fileBuffer = await fs.readFile(filePath);
-  formData.append('file', new Blob([fileBuffer]), path.basename(filePath));
-
-  const response = await page.request.post('/api/audio/upload', {
-    headers: { 'Authorization': `Bearer ${token}` },
-    data: formData
-  });
-  return response.json();
-};
-```
+**Quick Reference**:
+- **File Upload**: NEVER click buttons - use direct API calls with auth tokens
+- **Auth**: `getAuthToken()` helper from localStorage
+- **Commands**: `./run_test.sh e2e` (requires dev env running)
+- **Helpers**: `uploadFileViaAPI()`, `waitForTranscription()`
 
 ## Important Notes
 
 1. **Server/Runner Architecture**: Server is lightweight (~150MB), runner has GPU (~8GB)
-2. **Performance**: RTX 3080 achieves 11.7x real-time speed (RTF 0.08) - see [Performance Restrictions & Best Practices](#performance-restrictions--best-practices)
+2. **Performance**: RTX 3080 achieves 11.7x real-time speed (RTF 0.08) - see `/whisper-performance`
 3. **Performance Report**: See `reports/2025-01-13-performance-optimization-report.md` for comprehensive analysis
-4. **NEVER use fixed-duration chunking**: Causes 3.3x performance degradation - see restrictions above
-5. **Segments-first architecture**: Preserves Whisper timestamps for accurate SRT export
+4. **NEVER use fixed-duration chunking**: Causes 3.3x performance degradation - see `/whisper-performance`
+5. **Segments-first architecture**: Preserves Whisper timestamps for accurate SRT export - see `/whisper-chunking`
 6. **Server**: Runs on any VPS without GPU, handles auth, database, job queue
 7. **Runner**: Runs on GPU server, polls for jobs, processes audio with faster-whisper + GLM
 8. **Communication**: HTTP-based job queue with API key authentication
@@ -1303,9 +621,9 @@ const uploadFileViaAPI = async (page: Page, filePath: string) => {
 12. **Hot reload**: Volume mounts for instant code updates (server and runner)
 13. **Test coverage**: Backend ~240 tests ✅, Frontend 73.6% (319/433)
 14. **uv** for Python deps (not pip)
-15. **Jotai** for state (not React Context)
+15. **Jotai** for state (not React Context) - see `/whisper-frontend`
 16. **Data persistence**: `data/` directory volume-mounted with separation (`data/server`, `data/runner`, `data/uploads`)
-17. **SSE Streaming**: Vite proxy disables buffering for real-time AI chat
+17. **SSE Streaming**: Vite proxy disables buffering for real-time AI chat - see `/whisper-nginx`
 18. **Integration test**: Successfully verified end-to-end workflow with real audio processing
 19. **MAX_FORMAT_CHUNK=5000**: Prevents GLM API timeouts - enforced in configuration
 
@@ -1356,110 +674,40 @@ GPU Server (RunPod, Lambda Labs, etc.):
 
 ## Production Deployment
 
-### Production Server Info
-
-**Location**: `ssh -i ~/.ssh/id_ed25519 root@192.3.249.169`
-**SSH Key**: `~/.ssh/id_ed25519`
-**Project Path**: `/root/whisper_summarizer`
-**URL**: https://w.198066.xyz
-
-**IMPORTANT**: Production server is **low spec** - DO NOT build images on production server.
-
-**Production API Testing Pattern**:
-Server container uses `python:3.12-slim` (lightweight, no curl). Use Python standard library `urllib.request` for HTTP testing. This bypasses Cloudflare protection and uses localhost auth bypass:
+For deployment instructions, server configuration, and troubleshooting, use the **`/whisper-deploy`** skill:
 
 ```bash
-# Check health status
-ssh -i ~/.ssh/id_ed25519 root@192.3.249.169 "docker exec whisper_server_prd python -c \"import urllib.request; print(urllib.request.urlopen('http://localhost:8000/health').status)\""
-
-# Get transcriptions (JSON)
-ssh -i ~/.ssh/id_ed25519 root@192.3.249.169 "docker exec whisper_server_prd python -c \"import urllib.request, json; data=json.loads(urllib.request.urlopen('http://localhost:8000/api/transcriptions').read().decode()); print(json.dumps(data, indent=2))\""
+/whisper-deploy
 ```
 
-### Deployment Workflow
-
-**Build images locally, push to registry, pull on production:**
-
+**Quick Deploy** (one-line):
 ```bash
-# 1. Build and push images LOCALLY (not on production server)
-docker build -t xyshyniaphy/whisper_summarizer-server:latest -f server/Dockerfile server
-docker build -t xyshyniaphy/whisper_summarizer-frontend:latest -f frontend/Dockerfile.prod frontend
-docker push xyshyniaphy/whisper_summarizer-server:latest
-docker push xyshyniaphy/whisper_summarizer-frontend:latest
-
-# 2. Connect to production server and pull images
-ssh -i ~/.ssh/id_ed25519 root@192.3.249.169
-cd /root/whisper_summarizer
-
-# 3. Pull latest code
-git pull
-
-# 4. Pull and restart services
-docker compose -f docker-compose.prod.yml pull
-docker compose -f docker-compose.prod.yml up -d
-
-# 5. View logs
-docker compose -f docker-compose.prod.yml logs -f server
-```
-
-### What to Deploy
-
-| Service | Deploy to Production? | Notes |
-|---------|----------------------|-------|
-| Frontend | ✅ Yes | Static files, lightweight |
-| Server | ✅ Yes | API server, lightweight |
-| Runner | ❌ NO | Runner runs on separate GPU machine |
-
-**Runner is NOT deployed to production server** - it runs on a separate GPU machine that connects to the production server via `SERVER_URL`.
-
-### Quick Deploy Script
-
-```bash
-# One-line deploy (run from local machine)
 docker build -t xyshyniaphy/whisper_summarizer-server:latest -f server/Dockerfile server && \
 docker push xyshyniaphy/whisper_summarizer-server:latest && \
 ssh -i ~/.ssh/id_ed25519 root@192.3.249.169 "cd /root/whisper_summarizer && git pull && docker compose -f docker-compose.prod.yml pull && docker compose -f docker-compose.prod.yml up -d"
 ```
 
-### Debugging on Production Server
+**Production Server**: `ssh -i ~/.ssh/id_ed25519 root@192.3.249.169`
+**URL**: https://w.198066.xyz
+**Note**: Build images locally (production server is low-spec), runner runs on separate GPU machine.
 
-For remote debugging and testing, use the **`/prd_debug`** skill or SSH directly:
+## Available Skills
 
-```bash
-# Use the prd_debug skill
-/prd_debug status
-/prd_debug logs
-/prd_debug api /health
+Quick reference for all available skills:
 
-# Or connect manually
-ssh -i ~/.ssh/id_ed25519 root@192.3.249.169
+| Skill | Purpose | Command |
+|-------|---------|---------|
+| **whisper-deploy** | Production deployment | `/whisper-deploy` |
+| **whisper-nginx** | Nginx reverse proxy config | `/whisper-nginx` |
+| **whisper-performance** | Performance optimization guide | `/whisper-performance` |
+| **whisper-chunking** | Audio chunking architecture | `/whisper-chunking` |
+| **whisper-frontend** | Frontend UI patterns & coding standards | `/whisper-frontend` |
+| **whisper-player** | Audio player with SRT navigation | `/whisper-player` |
+| **whisper-e2e** | E2E testing patterns | `/whisper-e2e` |
+| **whisper-users** | User & channel management | `/whisper-users` |
+| **prd_debug** | Production server remote debugging | `/prd_debug` |
+| **test_prd** | Automated production testing | `/test_prd` |
+| **check_backup** | Backup and restore verification | `/check_backup` |
+| **git_push** | Git workflow with commit and push | `/git_push` |
 
-# Check container status
-docker ps -a
-
-# View logs
-docker logs whisper_server_prd --tail=100
-docker logs whisper_web_prd --tail=100
-
-# Restart services
-cd /root/whisper_summarizer
-docker compose -f docker-compose.prod.yml restart server
-```
-
-**See**: [Remote Production Debugging](#remote-production-debugging) section above for `/prd_debug` skill usage.
-
-### Common Issues
-
-**DELETE 500 Error**:
-- Check for RecursionError in logs: `docker logs whisper_server_prd | grep -i recursion`
-- Usually caused by function calling itself instead of getting user ID
-
-**Container unhealthy**:
-- Check health status: `docker ps`
-- View logs: `docker logs whisper_server_prd`
-- Common issue: Database not ready when server starts
-
-**Images not updating**:
-- Ensure you pushed to Docker Hub: `docker push xyshyniaphy/whisper_summarizer-server:latest`
-- Pull with digest: `docker pull xyshyniaphy/whisper_summarizer-server:latest@sha256:...`
-- Force recreate: `docker compose -f docker-compose.prod.yml up -d --force-recreate server`
+All skills are located in `.claude/skills/{skill-name}/SKILL.md`.
