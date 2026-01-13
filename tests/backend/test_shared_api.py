@@ -297,3 +297,142 @@ def test_get_shared_audio_file_not_found(test_client: TestClient, db_session: Se
     response = test_client.get(f"/api/shared/{share_link.share_token}/audio")
 
     assert response.status_code == 404
+
+
+def test_get_shared_audio_no_file_path(test_client: TestClient, db_session: Session):
+    """Test audio request when transcription has no file_path."""
+    # Create user
+    user = User(
+        id=UUID("123e4567-e89b-42d3-a456-426614174007"),
+        email=f"test-{uuid4().hex[:8]}@example.com",
+        is_active=True,
+        is_admin=False
+    )
+    db_session.add(user)
+    db_session.commit()
+
+    # Create transcription without file_path
+    transcription = Transcription(
+        id=uuid4(),
+        user_id=user.id,
+        file_name="test_audio_no_path.m4a",
+        file_path=None,
+        status=TranscriptionStatus.COMPLETED
+    )
+    db_session.add(transcription)
+    db_session.commit()
+
+    # Create share link
+    share_link = ShareLink(
+        id=uuid4(),
+        transcription_id=transcription.id,
+        share_token="test_audio_no_path_token",
+        expires_at=None
+    )
+    db_session.add(share_link)
+    db_session.commit()
+
+    response = test_client.get(f"/api/shared/{share_link.share_token}/audio")
+
+    assert response.status_code == 404
+
+
+def test_get_shared_audio_invalid_token(test_client: TestClient):
+    """Test audio request with invalid share token."""
+    response = test_client.get("/api/shared/invalid-token-xyz/audio")
+
+    assert response.status_code == 404
+
+
+def test_get_shared_audio_expired_token(test_client: TestClient, db_session: Session):
+    """Test audio request with expired share token."""
+    from datetime import timedelta
+
+    # Create user
+    user = User(
+        id=UUID("123e4567-e89b-42d3-a456-426614174008"),
+        email=f"test-{uuid4().hex[:8]}@example.com",
+        is_active=True,
+        is_admin=False
+    )
+    db_session.add(user)
+    db_session.commit()
+
+    # Create transcription
+    transcription = Transcription(
+        id=uuid4(),
+        user_id=user.id,
+        file_name="test_audio_expired.m4a",
+        file_path="/tmp/test_audio_expired.m4a",
+        status=TranscriptionStatus.COMPLETED
+    )
+    db_session.add(transcription)
+    db_session.commit()
+
+    # Create expired share link
+    expired_time = datetime.now(timezone.utc) - timedelta(hours=1)
+    share_link = ShareLink(
+        id=uuid4(),
+        transcription_id=transcription.id,
+        share_token="expired_audio_token",
+        expires_at=expired_time
+    )
+    db_session.add(share_link)
+    db_session.commit()
+
+    response = test_client.get(f"/api/shared/{share_link.share_token}/audio")
+
+    assert response.status_code == 410  # Gone
+
+
+def test_get_shared_audio_invalid_range(test_client: TestClient, db_session: Session, tmp_path):
+    """Test audio request with invalid Range header."""
+    # Create user
+    user = User(
+        id=UUID("123e4567-e89b-42d3-a456-426614174009"),
+        email=f"test-{uuid4().hex[:8]}@example.com",
+        is_active=True,
+        is_admin=False
+    )
+    db_session.add(user)
+    db_session.commit()
+
+    # Create transcription
+    transcription = Transcription(
+        id=uuid4(),
+        user_id=user.id,
+        file_name="test_audio_invalid_range.m4a",
+        file_path="",
+        status=TranscriptionStatus.COMPLETED
+    )
+    db_session.add(transcription)
+    db_session.commit()
+
+    # Create share link
+    share_link = ShareLink(
+        id=uuid4(),
+        transcription_id=transcription.id,
+        share_token="test_audio_invalid_range_token",
+        expires_at=None
+    )
+    db_session.add(share_link)
+    db_session.commit()
+
+    # Setup: Create a test audio file
+    audio_path = tmp_path / "test_audio_invalid_range.m4a"
+    audio_data = b"0123456789" * 100  # 1KB
+    audio_path.write_bytes(audio_data)
+
+    transcription.file_path = str(audio_path)
+    db_session.commit()
+
+    # Test invalid range (start > file size)
+    response = test_client.get(
+        f"/api/shared/{share_link.share_token}/audio",
+        headers={"Range": "bytes=9999-10000"}
+    )
+
+    assert response.status_code == 416  # Range Not Satisfiable
+    header_keys = {k.lower(): v for k, v in response.headers.items()}
+    assert "content-range" in header_keys
+    assert header_keys["content-range"] == "bytes */1000"
