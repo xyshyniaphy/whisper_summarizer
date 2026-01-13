@@ -16,7 +16,7 @@ import { Button } from '../components/ui/Button'
 import { cn } from '../utils/cn'
 import { ChatDisplay } from '../components/ChatDisplay'
 import { AudioPlayer, Segment } from '../components/AudioPlayer'
-import SrtList from '../components/SrtList'
+import VirtualizedSrtList from '../components/VirtualizedSrtList'
 
 interface SharedTranscriptionData {
     id: string
@@ -267,17 +267,19 @@ export function SharedTranscription() {
                 {showAudioPlayer && (
                     <CollapsibleSection
                         title="音频播放与字幕"
-                        defaultOpen={true}
+                        defaultOpen={false}
                     >
                         <div className="space-y-4">
                             <p className="text-sm text-gray-600 dark:text-gray-400">
                                 点击任意字幕行跳转到对应时间点
                             </p>
-                            <SrtList
-                                segments={segments}
-                                currentTime={currentTime}
-                                onSeek={handleSeek}
-                            />
+                            <div className="max-h-[50vh] overflow-y-auto rounded-lg border border-gray-200 dark:border-gray-700">
+                                <VirtualizedSrtList
+                                    segments={segments}
+                                    currentTime={currentTime}
+                                    onSeek={handleSeek}
+                                />
+                            </div>
                         </div>
                     </CollapsibleSection>
                 )}
@@ -400,6 +402,7 @@ export function SharedTranscription() {
                     audioUrl={audioUrl}
                     segments={segments}
                     onSeek={handleSeek}
+                    currentTime={currentTime}
                 />
             )}
         </div>

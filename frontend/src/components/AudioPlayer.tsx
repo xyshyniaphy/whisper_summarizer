@@ -24,16 +24,20 @@ interface AudioPlayerProps {
   audioUrl: string
   segments: Segment[]
   onSeek: (time: number) => void
+  currentTime?: number  // External control for seek (from SrtList clicks)
 }
 
-export function AudioPlayer({ audioUrl, segments, onSeek }: AudioPlayerProps) {
+export function AudioPlayer({ audioUrl, segments, onSeek, currentTime: externalCurrentTime }: AudioPlayerProps) {
   const audioRef = useRef<HTMLAudioElement>(null)
   const [isPlaying, setIsPlaying] = useState(false)
-  const [currentTime, setCurrentTime] = useState(0)
+  const [internalCurrentTime, setInternalCurrentTime] = useState(0)
+  // Use external time if provided, otherwise use internal state
+  const currentTime = externalCurrentTime ?? internalCurrentTime
   const [duration, setDuration] = useState(0)
   const [isExpanded, setIsExpanded] = useState(false)
   const [currentSegmentIndex, setCurrentSegmentIndex] = useState<number | null>(null)
   const [audioError, setAudioError] = useState<string | null>(null)
+  const lastSeekTimeRef = useRef<number>(0)
 
   // Handle play/pause toggle with async state update
   const togglePlayPause = async () => {
@@ -59,7 +63,8 @@ export function AudioPlayer({ audioUrl, segments, onSeek }: AudioPlayerProps) {
     const time = parseFloat(e.target.value)
     if (audioRef.current) {
       audioRef.current.currentTime = time
-      setCurrentTime(time)
+      setInternalCurrentTime(time)
+      onSeek(time)
     }
   }
 
@@ -67,7 +72,7 @@ export function AudioPlayer({ audioUrl, segments, onSeek }: AudioPlayerProps) {
   const handleSegmentClick = (segment: Segment) => {
     if (audioRef.current) {
       audioRef.current.currentTime = segment.start
-      setCurrentTime(segment.start)
+      setInternalCurrentTime(segment.start)
       onSeek(segment.start)
     }
   }
@@ -85,7 +90,7 @@ export function AudioPlayer({ audioUrl, segments, onSeek }: AudioPlayerProps) {
 
     const handleTimeUpdate = () => {
       const time = audio.currentTime
-      setCurrentTime(time)
+      setInternalCurrentTime(time)
 
       // Find current segment
       const index = segments.findIndex(
@@ -119,6 +124,25 @@ export function AudioPlayer({ audioUrl, segments, onSeek }: AudioPlayerProps) {
       audio.removeEventListener('error', handleAudioError)
     }
   }, [segments])
+
+  // Handle external seek requests (from SrtList clicks)
+  useEffect(() => {
+    // Only handle external seeks when the time has changed significantly
+    if (externalCurrentTime !== undefined && Math.abs(externalCurrentTime - lastSeekTimeRef.current) > 0.1) {
+      if (audioRef.current) {
+        // Preserve playing state during seek
+        const wasPlaying = !audioRef.current.paused
+        audioRef.current.currentTime = externalCurrentTime
+        lastSeekTimeRef.current = externalCurrentTime
+        // Ensure audio continues playing if it was playing before seek
+        if (wasPlaying && audioRef.current.paused) {
+          audioRef.current.play().catch(err => {
+            console.debug('Autoplay prevented:', err)
+          })
+        }
+      }
+    }
+  }, [externalCurrentTime])
 
   // Format time as MM:SS
   const formatTime = (time: number): string => {
