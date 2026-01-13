@@ -331,6 +331,20 @@ export const api = {
     const response = await apiClient.get(url, config);
     return response.data;
   },
+
+  // Shared transcription audio/segments endpoints
+  getSharedSegments: async (shareToken: string): Promise<Array<{
+    start: number;
+    end: number;
+    text: string;
+  }>> => {
+    const response = await axios.get(`${API_URL}/shared/${shareToken}/segments`);
+    return response.data;
+  },
+
+  getSharedAudioUrl: (shareToken: string): string => {
+    return `${API_URL}/shared/${shareToken}/audio`;
+  },
 };
 
 // Admin API endpoints

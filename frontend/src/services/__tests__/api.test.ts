@@ -426,4 +426,68 @@ describe('API Service', () => {
       )
     })
   })
+
+  describe('Shared transcription audio/segments endpoints', () => {
+    describe('getSharedSegments', () => {
+      it('should fetch segments array successfully', async () => {
+        const mockSegments = [
+          { start: 0, end: 2.5, text: 'First segment' },
+          { start: 2.5, end: 5.0, text: 'Second segment' },
+          { start: 5.0, end: 7.5, text: 'Third segment' },
+        ]
+
+        // Use axios directly for this endpoint (not apiClient)
+        const axios = (await import('axios')).default
+        vi.mocked(axios.get).mockResolvedValue({ data: mockSegments })
+
+        const result = await api.getSharedSegments('test-share-token')
+
+        // Verify the result
+        expect(result).toEqual(mockSegments)
+        expect(result).toHaveLength(3)
+        expect(result[0]).toEqual({ start: 0, end: 2.5, text: 'First segment' })
+      })
+
+      it('should return empty array if no segments exist', async () => {
+        // Use axios directly for this endpoint (not apiClient)
+        const axios = (await import('axios')).default
+        vi.mocked(axios.get).mockResolvedValue({ data: [] })
+
+        const result = await api.getSharedSegments('empty-share-token')
+
+        expect(result).toEqual([])
+        expect(result).toHaveLength(0)
+      })
+    })
+
+    describe('getSharedAudioUrl', () => {
+      it('should return correct audio URL string', () => {
+        const result = api.getSharedAudioUrl('test-share-token')
+
+        expect(result).toBe('/api/shared/test-share-token/audio')
+        expect(typeof result).toBe('string')
+      })
+
+      it('should handle different share tokens', () => {
+        const token1 = 'abc123'
+        const token2 = 'xyz789'
+
+        const url1 = api.getSharedAudioUrl(token1)
+        const url2 = api.getSharedAudioUrl(token2)
+
+        expect(url1).toBe('/api/shared/abc123/audio')
+        expect(url2).toBe('/api/shared/xyz789/audio')
+        expect(url1).not.toBe(url2)
+      })
+
+      it('should not make API calls (synchronous function)', () => {
+        // This function should not use axios at all
+        const result = api.getSharedAudioUrl('test-token')
+
+        expect(global.mockAxiosGet).not.toHaveBeenCalled()
+        expect(global.mockAxiosPost).not.toHaveBeenCalled()
+        expect(result).toBe('/api/shared/test-token/audio')
+      })
+    })
+  })
 })
