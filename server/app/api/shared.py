@@ -172,6 +172,44 @@ async def download_shared_transcription(
     )
 
 
+@router.get("/{share_token}/segments")
+async def get_shared_segments(
+    share_token: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Get transcription segments with timestamps for audio player navigation.
+
+    Returns JSON array of segments with start, end, text fields.
+    Returns empty array if segments file doesn't exist.
+    """
+    # Find share link
+    share_link = db.query(ShareLink).filter(
+        ShareLink.share_token == share_token
+    ).first()
+
+    if not share_link:
+        raise HTTPException(status_code=404, detail="分享链接不存在")
+
+    # Check expiration
+    if share_link.expires_at and share_link.expires_at < __import__('datetime').datetime.now(__import__('datetime').timezone.utc):
+        raise HTTPException(status_code=410, detail="分享链接已过期")
+
+    # Get transcription
+    transcription = db.query(Transcription).filter(
+        Transcription.id == share_link.transcription_id
+    ).first()
+
+    if not transcription:
+        raise HTTPException(status_code=404, detail="转录不存在")
+
+    # Get segments from storage (returns empty list if not found)
+    storage_service = get_storage_service()
+    segments = storage_service.get_transcription_segments(str(transcription.id))
+
+    return segments
+
+
 @router.get("/{share_token}/download-docx")
 async def download_shared_summary_docx(
     share_token: str,
