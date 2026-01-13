@@ -4,11 +4,11 @@ Shared Transcription API Router
 Public access endpoints for shared transcriptions (no authentication required).
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks, Request
 from fastapi.responses import StreamingResponse, FileResponse
 from sqlalchemy.orm import Session
 from uuid import UUID
-from pathlib import Path
+from pathlib import Path as FilePath
 from urllib.parse import quote
 from app.api.deps import get_db
 from app.models.transcription import Transcription
@@ -19,6 +19,7 @@ from app.schemas.share import (
 )
 from app.services.storage_service import get_storage_service
 import logging
+import aiofiles
 
 logger = logging.getLogger(__name__)
 
@@ -208,6 +209,117 @@ async def get_shared_segments(
     segments = storage_service.get_transcription_segments(str(transcription.id))
 
     return segments
+
+
+async def _get_mime_type(file_path: str) -> str:
+    """Get MIME type based on file extension."""
+    ext = FilePath(file_path).suffix.lower()
+    mime_types = {
+        ".mp3": "audio/mpeg",
+        ".m4a": "audio/mp4",
+        ".wav": "audio/wav",
+        ".ogg": "audio/ogg",
+        ".webm": "audio/webm",
+    }
+    return mime_types.get(ext, "audio/mpeg")
+
+
+@router.get("/{share_token}/audio")
+async def get_shared_audio(
+    share_token: str,
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    """
+    Stream original audio file for shared transcription.
+
+    Supports HTTP Range requests for seeking in audio players.
+    Public access (no authentication required).
+    """
+    # Find share link
+    share_link = db.query(ShareLink).filter(
+        ShareLink.share_token == share_token
+    ).first()
+
+    if not share_link:
+        raise HTTPException(status_code=404, detail="分享链接不存在")
+
+    # Check expiration
+    if share_link.expires_at and share_link.expires_at < __import__('datetime').datetime.now(__import__('datetime').timezone.utc):
+        raise HTTPException(status_code=410, detail="分享链接已过期")
+
+    # Get transcription
+    transcription = db.query(Transcription).filter(
+        Transcription.id == share_link.transcription_id
+    ).first()
+
+    if not transcription:
+        raise HTTPException(status_code=404, detail="转录不存在")
+
+    # Check if file_path exists
+    if not transcription.file_path:
+        raise HTTPException(status_code=404, detail="音频文件不存在")
+
+    file_path = FilePath(transcription.file_path)
+
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="音频文件未找到")
+
+    # Get file size
+    file_size = file_path.stat().st_size
+
+    # Handle Range header
+    range_header = request.headers.get("range")
+    headers = {
+        "content-type": await _get_mime_type(str(file_path)),
+        "accept-ranges": "bytes",
+    }
+
+    if range_header:
+        # Parse Range header (format: "bytes=start-end")
+        try:
+            range_match = range_header.replace("bytes=", "").strip()
+            range_parts = range_match.split("-")
+            start = int(range_parts[0]) if range_parts[0] else 0
+            end = int(range_parts[1]) if range_parts[1] else file_size - 1
+
+            # Validate range
+            if start >= file_size or end >= file_size or start > end:
+                raise HTTPException(
+                    status_code=416,
+                    detail="Invalid range",
+                    headers={"content-range": f"bytes */{file_size}"}
+                )
+
+            # Read partial content
+            chunk_size = end - start + 1
+            async with aiofiles.open(file_path, "rb") as f:
+                await f.seek(start)
+                chunk = await f.read(chunk_size)
+
+            headers["content-range"] = f"bytes {start}-{end}/{file_size}"
+            headers["content-length"] = str(chunk_size)
+
+            return StreamingResponse(
+                iter([chunk]),
+                status_code=206,
+                headers=headers
+            )
+        except (ValueError, IndexError):
+            raise HTTPException(status_code=400, detail="Invalid range header")
+
+    # No Range header - return entire file
+    headers["content-length"] = str(file_size)
+
+    async def file_iterator():
+        async with aiofiles.open(file_path, "rb") as f:
+            while chunk := await f.read(64 * 1024):  # 64KB chunks
+                yield chunk
+
+    return StreamingResponse(
+        file_iterator(),
+        headers=headers
+    )
 
 
 @router.get("/{share_token}/download-docx")
