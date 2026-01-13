@@ -132,7 +132,7 @@ export function AudioPlayer({ audioUrl, segments, onSeek }: AudioPlayerProps) {
       data-testid="audio-player-container"
       className={cn(
         'fixed bottom-0 left-0 right-0 bg-white dark:bg-gray-800 border-t border-gray-200 dark:border-gray-700 shadow-lg transition-all duration-300 z-50',
-        isExpanded ? 'h-32' : 'h-16'
+        isExpanded ? 'h-24 sm:h-32' : 'h-16 sm:h-20'
       )}
       role="region"
       aria-label="音频播放器"
@@ -153,25 +153,25 @@ export function AudioPlayer({ audioUrl, segments, onSeek }: AudioPlayerProps) {
       )}
 
       {/* Compact controls */}
-      <div className="flex items-center justify-between px-4 py-2">
-        <div className="flex items-center gap-4 flex-1">
+      <div className="flex items-center justify-between px-3 sm:px-4 py-2">
+        <div className="flex items-center gap-2 sm:gap-4 flex-1">
           {/* Play/Pause button */}
           <button
             data-testid="play-button"
             onClick={togglePlayPause}
             aria-label={isPlaying ? '暂停' : '播放'}
             className={cn(
-              'p-2 rounded-lg transition-colors',
+              'p-2 rounded-lg transition-colors w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center',
               isPlaying ? 'bg-blue-500 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
             )}
           >
-            {isPlaying ? <Pause size={20} /> : <Play size={20} />}
+            {isPlaying ? <Pause className="w-5 h-5 sm:w-6 sm:h-6" /> : <Play className="w-5 h-5 sm:w-6 sm:h-6" />}
           </button>
 
           {/* Seek bar */}
           <div className="flex-1 flex items-center gap-2">
             <span
-              className="text-sm text-gray-600 dark:text-gray-400 w-20 text-right"
+              className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 w-16 sm:w-20 text-right"
               aria-label={`当前时间 ${formatTime(currentTime)}`}
             >
               {formatTime(currentTime)}
@@ -188,10 +188,10 @@ export function AudioPlayer({ audioUrl, segments, onSeek }: AudioPlayerProps) {
               aria-valuemax={duration}
               aria-valuenow={currentTime}
               aria-valuetext={formatTime(currentTime)}
-              className="flex-1 h-2 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer"
+              className="flex-1 h-2 sm:h-3 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer"
             />
             <span
-              className="text-sm text-gray-600 dark:text-gray-400 w-20"
+              className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 w-16 sm:w-20"
               aria-label={`总时长 ${formatTime(duration)}`}
             >
               {formatTime(duration)}
@@ -205,16 +205,16 @@ export function AudioPlayer({ audioUrl, segments, onSeek }: AudioPlayerProps) {
           onClick={() => setIsExpanded(!isExpanded)}
           aria-label={isExpanded ? '收起段落' : '展开段落'}
           aria-expanded={isExpanded}
-          className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+          className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center"
         >
-          {isExpanded ? <Minimize2 size={20} /> : <Maximize2 size={20} />}
+          {isExpanded ? <Minimize2 className="w-5 h-5 sm:w-6 sm:h-6" /> : <Maximize2 className="w-5 h-5 sm:w-6 sm:h-6" />}
         </button>
       </div>
 
       {/* Expanded view: Segments */}
       {isExpanded && (
         <div
-          className="px-4 pb-2 overflow-y-auto"
+          className="px-3 sm:px-4 pb-2 overflow-y-auto"
           style={{ maxHeight: 'calc(100% - 64px)' }}
         >
           <div
@@ -231,7 +231,7 @@ export function AudioPlayer({ audioUrl, segments, onSeek }: AudioPlayerProps) {
                 aria-label={`跳转到第 ${index + 1} 段: ${segment.text}`}
                 aria-current={currentSegmentIndex === index ? 'true' : undefined}
                 className={cn(
-                  'flex-shrink-0 px-3 py-1 rounded-lg text-sm transition-colors',
+                  'flex-shrink-0 px-3 py-1 rounded-lg text-xs sm:text-sm transition-colors',
                   currentSegmentIndex === index
                     ? 'bg-blue-100 dark:bg-blue-900 text-blue-900 dark:text-blue-100'
                     : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'

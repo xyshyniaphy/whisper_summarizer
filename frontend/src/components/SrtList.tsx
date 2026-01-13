@@ -91,7 +91,7 @@ export default function SrtList({ segments, currentTime, onSeek }: SrtListProps)
               }
             }}
             className={cn(
-              'flex gap-3 p-4 cursor-pointer transition-all duration-200',
+              'flex gap-3 p-3 sm:p-4 cursor-pointer transition-all duration-200 min-h-[48px]',
               'hover:bg-gray-100 dark:hover:bg-gray-700',
               isCurrent && 'bg-blue-50 dark:bg-blue-900/20 border-l-4 border-blue-500 dark:border-blue-400'
             )}
@@ -104,7 +104,7 @@ export default function SrtList({ segments, currentTime, onSeek }: SrtListProps)
                 'flex items-center gap-1.5 text-sm font-mono',
                 isCurrent ? 'text-blue-600 dark:text-blue-400' : 'text-gray-600 dark:text-gray-400'
               )}>
-                <Clock className="w-3.5 h-3.5" />
+                <Clock className="w-3 h-3 sm:w-4 sm:h-4" />
                 <time dateTime={`PT${Math.floor(segment.start)}S`}>
                   {formatTime(segment.start)}
                 </time>
@@ -112,14 +112,14 @@ export default function SrtList({ segments, currentTime, onSeek }: SrtListProps)
             </div>
 
             {/* Segment text */}
-            <div className="flex-1 text-sm leading-relaxed text-gray-800 dark:text-gray-200">
+            <div className="flex-1 text-sm sm:text-base leading-relaxed text-gray-800 dark:text-gray-200">
               {segment.text}
             </div>
 
             {/* Current segment indicator */}
             {isCurrent && (
               <div className="flex-shrink-0">
-                <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
+                <div className="w-2 h-2 sm:w-3 sm:h-3 bg-blue-500 rounded-full animate-pulse" />
               </div>
             )}
           </div>

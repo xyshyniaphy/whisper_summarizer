@@ -172,4 +172,87 @@ describe('SrtList Component', () => {
       // This is a compile-time check, runtime check is limited
     })
   })
+
+  describe('Responsive Design', () => {
+    it('should have minimum touch target size (48px) for segments', () => {
+      const { container } = render(
+        <SrtList segments={mockSegments} currentTime={0} onSeek={mockOnSeek} />
+      )
+
+      const segments = container.querySelectorAll('[data-segment-index]')
+      segments.forEach(segment => {
+        const styles = window.getComputedStyle(segment as Element)
+        const minHeight = styles.minHeight
+        // Should have min-h-[48px] class
+        expect(segment.className).toContain('min-h-')
+        expect(segment.className).toContain('48')
+      })
+    })
+
+    it('should have responsive padding (p-3 sm:p-4)', () => {
+      const { container } = render(
+        <SrtList segments={mockSegments} currentTime={0} onSeek={mockOnSeek} />
+      )
+
+      const segments = container.querySelectorAll('[data-segment-index]')
+      segments.forEach(segment => {
+        // Should have mobile padding p-3 and tablet+ sm:p-4
+        expect(segment.className).toContain('p-3')
+        expect(segment.className).toContain('sm:p-4')
+      })
+    })
+
+    it('should have responsive text size (text-sm sm:text-base)', () => {
+      const { container } = render(
+        <SrtList segments={mockSegments} currentTime={0} onSeek={mockOnSeek} />
+      )
+
+      const segments = container.querySelectorAll('[data-segment-index]')
+      segments.forEach(segment => {
+        // Text content is in a child div, check child div for responsive sizing
+        const textDiv = segment.querySelector('.flex-1')
+        expect(textDiv?.className).toContain('text-sm')
+        expect(textDiv?.className).toContain('sm:text-base')
+      })
+    })
+
+    it('should have responsive Clock icon size', () => {
+      const { container } = render(
+        <SrtList segments={mockSegments} currentTime={0} onSeek={mockOnSeek} />
+      )
+
+      // Clock icons should have responsive sizing
+      // Note: lucide-react icons are inline SVGs with className on the svg element
+      const clockIcons = container.querySelectorAll('[data-testid*="clock"] svg, svg[class*="lucide"]')
+      const allSvgs = container.querySelectorAll('svg')
+
+      // If we can't find clock icons specifically, check that at least some SVGs exist
+      expect(allSvgs.length).toBeGreaterThan(0)
+
+      // Check that Clock component is rendered (it should have responsive classes)
+      // The Clock icon from lucide-react should have the responsive sizing we applied
+      allSvgs.forEach(icon => {
+        // Check if this could be a Clock icon (has standard sizing classes)
+        const classes = icon.className.toString()
+        if (classes.includes('w-3') || classes.includes('w-4')) {
+          expect(classes).toContain('w-3')
+          expect(classes).toContain('h-3')
+          expect(classes).toContain('sm:w-4')
+          expect(classes).toContain('sm:h-4')
+        }
+      })
+    })
+
+    it('should have responsive pulse indicator size', () => {
+      render(<SrtList segments={mockSegments} currentTime={2} onSeek={mockOnSeek} />)
+
+      // When a segment is current, it should have pulse indicator with responsive size
+      const pulseIndicator = document.querySelector('.animate-pulse')
+      expect(pulseIndicator).toBeInTheDocument()
+      expect(pulseIndicator?.className).toContain('w-2')
+      expect(pulseIndicator?.className).toContain('h-2')
+      expect(pulseIndicator?.className).toContain('sm:w-3')
+      expect(pulseIndicator?.className).toContain('sm:h-3')
+    })
+  })
 })
