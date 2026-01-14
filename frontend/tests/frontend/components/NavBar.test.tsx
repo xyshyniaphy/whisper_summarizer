@@ -16,7 +16,7 @@ import { Provider } from 'jotai'
 import { NavBar } from '../../../src/components/NavBar'
 
 // Mock Supabase client
-vi.mock('../../../src/services/supabase', () => ({
+vi.mock('@/services/supabase', () => ({
   supabase: {
     auth: {
       getSession: vi.fn(() => Promise.resolve({ data: { session: null }, error: null })),
@@ -28,18 +28,24 @@ vi.mock('../../../src/services/supabase', () => ({
 }))
 
 // Mock useAuth
-const mockSignOut = vi.fn()
-vi.mock('../../../src/hooks/useAuth', () => ({
+const { mockSignOut, mockUser: mockNavBarUser } = vi.hoisted(() => ({
+  mockSignOut: vi.fn(),
+  mockUser: {
+    id: 'user-1',
+    email: 'test@example.com',
+    user_metadata: { full_name: 'Test User', role: 'user' }
+  }
+}))
+
+vi.mock('@/hooks/useAuth', () => ({
   useAuth: () => [
     {
-      user: {
-        id: 'user-1',
-        email: 'test@example.com',
-        user_metadata: { full_name: 'Test User', role: 'user' }
-      },
+      user: mockNavBarUser,
       session: {},
       role: 'user',
-      loading: false
+      loading: false,
+      is_active: true,
+      is_admin: false
     },
     { signOut: mockSignOut }
   ]
