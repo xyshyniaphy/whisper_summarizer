@@ -10,10 +10,10 @@
         "lint": "eslint .",
         "lint:fix": "eslint . --fix",
         "type-check": "tsc --noEmit",
-        "test": "npx vitest run",
-        "test:watch": "npx vitest",
-        "test:ui": "npx vitest --ui",
-        "test:coverage": "npx vitest --coverage"
+        "test": "bun x vitest run",
+        "test:watch": "bun x vitest",
+        "test:ui": "bun x vitest --ui",
+        "test:coverage": "bun x vitest --coverage"
     },
     "dependencies": {
         "@supabase/supabase-js": "^2.47.0",
