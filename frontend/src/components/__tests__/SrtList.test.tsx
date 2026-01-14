@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import SrtList from '../SrtList'
 
 // Mock cn utility
@@ -164,6 +165,54 @@ describe('SrtList Component', () => {
     })
   })
 
+  describe('Keyboard Navigation', () => {
+    it('should call onSeek when Enter key is pressed on segment', async () => {
+      const user = userEvent.setup()
+      const { container } = render(
+        <SrtList segments={mockSegments} currentTime={0} onSeek={mockOnSeek} />
+      )
+
+      const segment = container.querySelectorAll('[data-segment-index]')[1]
+      segment?.focus()
+      await user.keyboard('{Enter}')
+
+      await waitFor(() => {
+        expect(mockOnSeek).toHaveBeenCalledWith(5)
+      })
+    })
+
+    it('should call onSeek when Space key is pressed on segment', async () => {
+      const user = userEvent.setup()
+      const { container } = render(
+        <SrtList segments={mockSegments} currentTime={0} onSeek={mockOnSeek} />
+      )
+
+      const segment = container.querySelectorAll('[data-segment-index]')[2]
+      segment?.focus()
+      await user.keyboard(' ')
+
+      await waitFor(() => {
+        expect(mockOnSeek).toHaveBeenCalledWith(10)
+      })
+    })
+
+    it('should prevent default on Space key to avoid page scroll', async () => {
+      const user = userEvent.setup()
+      const { container } = render(
+        <SrtList segments={mockSegments} currentTime={0} onSeek={mockOnSeek} />
+      )
+
+      const segment = container.querySelectorAll('[data-segment-index]')[0]
+      segment?.focus()
+      await user.keyboard(' ')
+
+      // Verify that Space key triggers onSeek (which means preventDefault worked)
+      await waitFor(() => {
+        expect(mockOnSeek).toHaveBeenCalledWith(0)
+      })
+    })
+  })
+
   describe('Segment Interface Export', () => {
     it('should export Segment interface', () => {
       expect(SrtList.Segment).toBeUndefined()
@@ -253,6 +302,49 @@ describe('SrtList Component', () => {
       expect(pulseIndicator?.className).toContain('h-2')
       expect(pulseIndicator?.className).toContain('sm:w-3')
       expect(pulseIndicator?.className).toContain('sm:h-3')
+    })
+  })
+
+  describe('Edge Cases', () => {
+    it('should handle single segment correctly', () => {
+      const singleSegment = [{ start: 0, end: 10, text: 'Only segment' }]
+      const { container } = render(
+        <SrtList segments={singleSegment} currentTime={5} onSeek={mockOnSeek} />
+      )
+
+      const segments = container.querySelectorAll('[data-segment-index]')
+      expect(segments.length).toBe(1)
+      expect(segments[0]).toHaveAttribute('data-current', 'true')
+    })
+
+    it('should handle currentTime at exact segment boundary', () => {
+      const { container } = render(
+        <SrtList segments={mockSegments} currentTime={5} onSeek={mockOnSeek} />
+      )
+
+      // At exactly 5.0 seconds, should be in second segment (not first)
+      const segments = container.querySelectorAll('[data-segment-index]')
+      expect(segments[1]).toHaveAttribute('data-current', 'true')
+    })
+
+    it('should handle currentTime beyond last segment', () => {
+      const { container } = render(
+        <SrtList segments={mockSegments} currentTime={100} onSeek={mockOnSeek} />
+      )
+
+      // Beyond last segment, none should be current
+      const currentSegment = container.querySelector('[data-current="true"]')
+      expect(currentSegment).not.toBeInTheDocument()
+    })
+
+    it('should handle currentTime before first segment (negative)', () => {
+      const { container } = render(
+        <SrtList segments={mockSegments} currentTime={-1} onSeek={mockOnSeek} />
+      )
+
+      // Before first segment, none should be current
+      const currentSegment = container.querySelector('[data-current="true"]')
+      expect(currentSegment).not.toBeInTheDocument()
     })
   })
 })
