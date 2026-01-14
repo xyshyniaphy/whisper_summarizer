@@ -1,14 +1,19 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { api } from '../../services/api'
 
 // Mock api module before importing the component
+const mockGetSharedTranscription = vi.fn()
+const mockGetSharedSegments = vi.fn()
+const mockGetSharedAudioUrl = vi.fn((token: string) => `/api/shared/${token}/audio`)
+const mockDownloadSharedFile = vi.fn()
+const mockDownloadSharedDocx = vi.fn()
+
 vi.mock('../../services/api', () => ({
   api: {
-    getSharedTranscription: vi.fn(),
-    getSharedSegments: vi.fn(),
-    getSharedAudioUrl: vi.fn((token: string) => `/api/shared/${token}/audio`),
-    downloadSharedFile: vi.fn(),
-    downloadSharedDocx: vi.fn(),
+    getSharedTranscription: mockGetSharedTranscription,
+    getSharedSegments: mockGetSharedSegments,
+    getSharedAudioUrl: mockGetSharedAudioUrl,
+    downloadSharedFile: mockDownloadSharedFile,
+    downloadSharedDocx: mockDownloadSharedDocx,
   }
 }))
 
@@ -33,9 +38,9 @@ describe('SharedTranscription Page - Audio Player Integration', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     // Mock successful transcription data
-    ;(api.getSharedTranscription as any).mockResolvedValue(mockTranscriptionData)
+    mockGetSharedTranscription.mockResolvedValue(mockTranscriptionData)
     // Mock segments data
-    ;(api.getSharedSegments as any).mockResolvedValue(mockSegments)
+    mockGetSharedSegments.mockResolvedValue(mockSegments)
   })
 
   describe('API Integration', () => {
@@ -43,15 +48,15 @@ describe('SharedTranscription Page - Audio Player Integration', () => {
       // This test verifies the API integration logic
       const shareToken = 'test-token'
 
-      ;(api.getSharedTranscription as any).mockResolvedValue(mockTranscriptionData)
-      ;(api.getSharedSegments as any).mockResolvedValue(mockSegments)
+      mockGetSharedTranscription.mockResolvedValue(mockTranscriptionData)
+      mockGetSharedSegments.mockResolvedValue(mockSegments)
 
       // Simulate the component's data loading logic
-      await api.getSharedTranscription(shareToken)
-      const segments = await api.getSharedSegments(shareToken)
+      await mockGetSharedTranscription(shareToken)
+      const segments = await mockGetSharedSegments(shareToken)
 
-      expect(api.getSharedTranscription).toHaveBeenCalledWith(shareToken)
-      expect(api.getSharedSegments).toHaveBeenCalledWith(shareToken)
+      expect(mockGetSharedTranscription).toHaveBeenCalledWith(shareToken)
+      expect(mockGetSharedSegments).toHaveBeenCalledWith(shareToken)
       expect(segments).toEqual(mockSegments)
       expect(segments).toHaveLength(3)
     })
@@ -59,13 +64,13 @@ describe('SharedTranscription Page - Audio Player Integration', () => {
     it('should handle empty segments array', async () => {
       const shareToken = 'empty-token'
 
-      ;(api.getSharedTranscription as any).mockResolvedValue(mockTranscriptionData)
-      ;(api.getSharedSegments as any).mockResolvedValue([])
+      mockGetSharedTranscription.mockResolvedValue(mockTranscriptionData)
+      mockGetSharedSegments.mockResolvedValue([])
 
-      await api.getSharedTranscription(shareToken)
-      const segments = await api.getSharedSegments(shareToken)
+      await mockGetSharedTranscription(shareToken)
+      const segments = await mockGetSharedSegments(shareToken)
 
-      expect(api.getSharedSegments).toHaveBeenCalledWith(shareToken)
+      expect(mockGetSharedSegments).toHaveBeenCalledWith(shareToken)
       expect(segments).toEqual([])
       expect(segments).toHaveLength(0)
     })
@@ -73,18 +78,18 @@ describe('SharedTranscription Page - Audio Player Integration', () => {
     it('should handle segment loading errors gracefully', async () => {
       const shareToken = 'error-token'
 
-      ;(api.getSharedTranscription as any).mockResolvedValue(mockTranscriptionData)
-      ;(api.getSharedSegments as any).mockRejectedValue(new Error('Failed to load segments'))
+      mockGetSharedTranscription.mockResolvedValue(mockTranscriptionData)
+      mockGetSharedSegments.mockRejectedValue(new Error('Failed to load segments'))
 
-      await api.getSharedTranscription(shareToken)
+      await mockGetSharedTranscription(shareToken)
 
       // Segments call should fail but transcription should still load
-      await expect(api.getSharedSegments(shareToken)).rejects.toThrow('Failed to load segments')
+      await expect(mockGetSharedSegments(shareToken)).rejects.toThrow('Failed to load segments')
     })
 
     it('should generate correct audio URL', () => {
       const shareToken = 'test-token'
-      const audioUrl = api.getSharedAudioUrl(shareToken)
+      const audioUrl = mockGetSharedAudioUrl(shareToken)
 
       expect(audioUrl).toBe('/api/shared/test-token/audio')
       expect(typeof audioUrl).toBe('string')
@@ -94,8 +99,8 @@ describe('SharedTranscription Page - Audio Player Integration', () => {
       const token1 = 'abc123'
       const token2 = 'xyz789'
 
-      const url1 = api.getSharedAudioUrl(token1)
-      const url2 = api.getSharedAudioUrl(token2)
+      const url1 = mockGetSharedAudioUrl(token1)
+      const url2 = mockGetSharedAudioUrl(token2)
 
       expect(url1).toBe('/api/shared/abc123/audio')
       expect(url2).toBe('/api/shared/xyz789/audio')
@@ -174,15 +179,15 @@ describe('SharedTranscription Page - Audio Player Integration', () => {
       const shareToken = 'test-token'
 
       // Simulate the order of API calls in the component
-      ;(api.getSharedTranscription as any).mockResolvedValue(mockTranscriptionData)
-      ;(api.getSharedSegments as any).mockResolvedValue(mockSegments)
+      ;(mockGetSharedTranscription as any).mockResolvedValue(mockTranscriptionData)
+      ;(mockGetSharedSegments as any).mockResolvedValue(mockSegments)
 
       // First, load transcription
-      const transcription = await api.getSharedTranscription(shareToken)
+      const transcription = await mockGetSharedTranscription(shareToken)
       expect(transcription).toBeDefined()
 
       // Then, load segments
-      const segments = await api.getSharedSegments(shareToken)
+      const segments = await mockGetSharedSegments(shareToken)
       expect(segments).toBeDefined()
       expect(segments).toHaveLength(3)
     })
@@ -190,17 +195,17 @@ describe('SharedTranscription Page - Audio Player Integration', () => {
     it('should continue without segments if loading fails', async () => {
       const shareToken = 'test-token'
 
-      ;(api.getSharedTranscription as any).mockResolvedValue(mockTranscriptionData)
-      ;(api.getSharedSegments as any).mockRejectedValue(new Error('Network error'))
+      ;(mockGetSharedTranscription as any).mockResolvedValue(mockTranscriptionData)
+      ;(mockGetSharedSegments as any).mockRejectedValue(new Error('Network error'))
 
       // Transcription should load successfully
-      const transcription = await api.getSharedTranscription(shareToken)
+      const transcription = await mockGetSharedTranscription(shareToken)
       expect(transcription).toBeDefined()
       expect(transcription.id).toBe('123')
 
       // Segments fail, but should not crash the app
       try {
-        await api.getSharedSegments(shareToken)
+        await mockGetSharedSegments(shareToken)
         expect(true).toBe(false) // Should not reach here
       } catch (error) {
         expect(error).toBeDefined()
