@@ -179,6 +179,20 @@ global.IntersectionObserver = class IntersectionObserver {
   unobserve() {}
 } as any
 
+// Mock @tanstack/react-virtual for VirtualizedSrtList tests
+const mockUseVirtualizer = vi.fn(() => ({
+  getVirtualItems: () => [],
+  getTotalSize: () => 0,
+  scrollToIndex: vi.fn(),
+}))
+
+vi.mock('@tanstack/react-virtual', () => ({
+  useVirtualizer: mockUseVirtualizer,
+}))
+
+// Export for tests to use
+;(global as any).mockUseVirtualizer = mockUseVirtualizer
+
 // Mock ResizeObserver
 global.ResizeObserver = class ResizeObserver {
   constructor() {}
