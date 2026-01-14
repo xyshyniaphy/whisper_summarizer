@@ -102,6 +102,8 @@ services:
     environment:
       # Use dev environment services (running in docker-compose.dev.yml)
       FRONTEND_URL: http://whisper_frontend_dev:3000
+      # Base URL for shared player tests (nginx reverse proxy)
+      BASE_URL: http://whisper_nginx_dev
     volumes:
       - ./e2e:/app
       - ../data:/app/data

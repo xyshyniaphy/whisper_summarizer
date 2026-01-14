@@ -7,7 +7,7 @@
 
 import { test, expect } from '@playwright/test'
 
-const SHARE_TOKEN = process.env.TEST_SHARE_TOKEN || 'test-share-token'
+const SHARE_TOKEN = process.env.TEST_SHARE_TOKEN || 'test-token-123'
 const BASE_URL = process.env.BASE_URL || 'http://localhost:8130'
 
 test.describe('Shared Audio Player', () => {
@@ -310,5 +310,35 @@ test.describe('Shared Audio Player', () => {
     // Verify current segment is approximately visible in viewport
     const isVisible = await currentSegment.isVisible()
     expect(isVisible).toBe(true)
+  })
+})
+
+test.describe('Dark Mode', () => {
+  test('should display SRT player correctly in dark mode', async ({ page }) => {
+    // Enable dark mode (assuming app has a theme toggle)
+    await page.emulateMedia({ colorScheme: 'dark' })
+
+    // Navigate to shared page
+    await page.goto(`${BASE_URL}/shared/${SHARE_TOKEN}`)
+
+    // Wait for page to load
+    await page.waitForLoadState('networkidle')
+
+    // Verify audio player container has dark mode classes
+    const audioPlayer = page.locator('[data-testid="audio-player-container"]')
+    await expect(audioPlayer).toHaveClass(/dark:bg-gray-800/)
+
+    // Verify segments are visible in dark mode
+    const firstSegment = page.locator('[data-segment-index="0"]').first()
+    await expect(firstSegment).toBeVisible()
+
+    // Verify current segment highlighting works in dark mode
+    const playButton = page.locator('[data-testid="play-button"]')
+    await playButton.click()
+
+    await page.waitForTimeout(3000)
+
+    const currentSegment = page.locator('[data-current="true"]').first()
+    await expect(currentSegment).toHaveAttribute('data-current', 'true')
   })
 })
