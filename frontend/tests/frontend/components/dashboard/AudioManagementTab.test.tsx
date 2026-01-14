@@ -12,8 +12,8 @@ import React from 'react'
 
 import { AudioManagementTab } from '../../../../src/components/dashboard/AudioManagementTab'
 
-// Create mock functions at module level
-const mockListAllAudio = vi.fn(() => Promise.resolve([
+// Mock audio data
+const mockAudioList = [
   {
     id: '1',
     file_name: 'test-audio.mp3',
@@ -32,25 +32,67 @@ const mockListAllAudio = vi.fn(() => Promise.resolve([
     user_email: 'another@example.com',
     channels: []
   }
-]))
-const mockListChannels = vi.fn(() => Promise.resolve([
+]
+
+const mockChannels = [
   { id: 'ch-1', name: 'Marketing', description: 'Marketing team' },
   { id: 'ch-2', name: 'Sales', description: 'Sales team' }
-]))
-const mockGetAudioChannels = vi.fn(() => Promise.resolve([
-  { id: 'ch-1', name: 'Marketing' }
-]))
-const mockAssignAudioToChannels = vi.fn(() => Promise.resolve())
+]
 
-// Mock adminApi
-vi.mock('@/services/api', () => ({
-  adminApi: {
-    listAllAudio: () => mockListAllAudio(),
-    listChannels: () => mockListChannels(),
-    getAudioChannels: () => mockGetAudioChannels(),
-    assignAudioToChannels: () => mockAssignAudioToChannels()
+const mockAudioChannels = [
+  { id: 'ch-1', name: 'Marketing' }
+]
+
+// Helper function to set up axios mock with custom audio list
+const setupMockAudioList = (audioList: any = mockAudioList) => {
+  const mockAxiosGet = (global as any).mockAxiosGet
+  if (mockAxiosGet) {
+    mockAxiosGet.mockImplementation((url: string) => {
+      // Match /admin/audio (listAllAudio)
+      // Note: listAllAudio returns response.data.items (see api.ts line 433)
+      if (url?.includes('/admin/audio') && !url?.includes('/channels')) {
+        return Promise.resolve({ data: { items: audioList } })
+      }
+      // Match /admin/channels (listChannels)
+      if (url?.includes('/admin/channels')) {
+        return Promise.resolve({ data: mockChannels })
+      }
+      // Match /admin/audio/:id/channels (getAudioChannels)
+      if (url?.includes('/channels') && url?.includes('/audio')) {
+        return Promise.resolve({ data: mockAudioChannels })
+      }
+      // Default fallback for other requests (like /api/auth/user)
+      return Promise.resolve({ data: [] })
+    })
   }
-}))
+
+  const mockAxiosPost = (global as any).mockAxiosPost
+  if (mockAxiosPost) {
+    mockAxiosPost.mockImplementation((url: string) => {
+      // Match /admin/audio/:id/channels (assignAudioToChannels)
+      if (url?.includes('/channels') && url?.includes('/audio')) {
+        return Promise.resolve({ data: {} })
+      }
+      return Promise.resolve({ data: {} })
+    })
+  }
+}
+
+// Helper function to set up loading mock (never resolves)
+const setupLoadingMock = () => {
+  const mockAxiosGet = (global as any).mockAxiosGet
+  if (mockAxiosGet) {
+    mockAxiosGet.mockImplementation(() => new Promise(() => {}))
+  }
+}
+
+// Helper function to set up error mock
+const setupErrorMock = (errorMessage: string = 'API Error') => {
+  const mockAxiosGet = (global as any).mockAxiosGet
+  if (mockAxiosGet) {
+    mockAxiosGet.mockRejectedValue(new Error(errorMessage))
+  }
+}
 
 // Mock window.alert
 global.alert = vi.fn()
@@ -58,14 +100,14 @@ global.alert = vi.fn()
 describe('AudioManagementTab', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+
+    // Use global axios mocks from setup.ts
+    setupMockAudioList(mockAudioList)
   })
 
   describe('Rendering', () => {
     it('ローディング状態が表示される', () => {
-      mockListAllAudio.mockImplementationOnce(
-        () => new Promise(() => {}) // Never resolves
-      )
-
+      setupLoadingMock()
       render(<AudioManagementTab />)
 
       const spinner = document.querySelector('.animate-spin')
@@ -103,7 +145,8 @@ describe('AudioManagementTab', () => {
       await waitFor(() => {
         expect(screen.getByText('文件名')).toBeTruthy()
         expect(screen.getByText('所有者')).toBeTruthy()
-        expect(screen.getByText('分配频道')).toBeTruthy()
+        // "分配频道" appears in both table header and buttons, so check it exists at least once
+        expect(screen.getAllByText('分配频道').length).toBeGreaterThan(0)
         expect(screen.getByText('创建时间')).toBeTruthy()
         expect(screen.getByText('操作')).toBeTruthy()
       })
@@ -150,7 +193,9 @@ describe('AudioManagementTab', () => {
       render(<AudioManagementTab />)
 
       await waitFor(() => {
-        expect(screen.getByText('分配频道')).toBeTruthy()
+        // "分配频道" appears in both table header and buttons
+        const elements = screen.getAllByText('分配频道')
+        expect(elements.length).toBeGreaterThan(0)
       })
     })
 
@@ -160,16 +205,25 @@ describe('AudioManagementTab', () => {
       render(<AudioManagementTab />)
 
       await waitFor(() => {
-        expect(screen.getByText('分配频道')).toBeTruthy()
+        expect(screen.getByText('test-audio.mp3')).toBeTruthy()
       })
 
-      const assignButtons = screen.getAllByText('分配频道')
-      await user.click(assignButtons[0])
+      // Find the button elements (not table headers) by looking for buttons
+      const buttons = document.querySelectorAll('button')
+      const assignButton = Array.from(buttons).find(btn =>
+        btn.textContent?.includes('分配频道')
+      )
 
-      await waitFor(() => {
-        const modals = document.querySelectorAll('[role="dialog"]')
-        expect(modals.length).toBeGreaterThan(0)
-      })
+      expect(assignButton).toBeTruthy()
+
+      if (assignButton) {
+        await user.click(assignButton)
+
+        await waitFor(() => {
+          const modals = document.querySelectorAll('[role="dialog"]')
+          expect(modals.length).toBeGreaterThan(0)
+        })
+      }
     })
 
     it('チャンネル選択モーダルにチャンネルリストが表示される', async () => {
@@ -177,16 +231,34 @@ describe('AudioManagementTab', () => {
 
       render(<AudioManagementTab />)
 
+      // Wait for initial data load (channels should be loaded)
       await waitFor(() => {
-        expect(screen.getByText('分配频道')).toBeTruthy()
+        expect(screen.getByText('test-audio.mp3')).toBeTruthy()
       })
 
-      const assignButtons = screen.getAllByText('分配频道')
-      await user.click(assignButtons[0])
+      // Find the button elements (not table headers) by looking for buttons
+      const buttons = document.querySelectorAll('button')
+      const assignButton = Array.from(buttons).find(btn =>
+        btn.textContent?.includes('分配频道')
+      )
 
-      await waitFor(() => {
-        expect(screen.getByText('Marketing')).toBeTruthy()
-      })
+      expect(assignButton).toBeTruthy()
+
+      if (assignButton) {
+        await user.click(assignButton)
+
+        await waitFor(() => {
+          // First check that the modal opened
+          expect(screen.getByText('分配频道 - test-audio.mp3')).toBeTruthy()
+        }, { timeout: 3000 })
+
+        await waitFor(() => {
+          // Then check that channels are displayed in the modal
+          // Check for "Sales" which should only be in the modal (not in the audio list)
+          const salesText = screen.queryByText('Sales')
+          expect(salesText).toBeTruthy()
+        }, { timeout: 3000 })
+      }
     })
   })
 
@@ -197,16 +269,24 @@ describe('AudioManagementTab', () => {
       render(<AudioManagementTab />)
 
       await waitFor(() => {
-        expect(screen.getByText('分配频道')).toBeTruthy()
+        expect(screen.getByText('test-audio.mp3')).toBeTruthy()
       })
 
-      const assignButtons = screen.getAllByText('分配频道')
-      await user.click(assignButtons[0])
+      const buttons = document.querySelectorAll('button')
+      const assignButton = Array.from(buttons).find(btn =>
+        btn.textContent?.includes('分配频道')
+      )
 
-      await waitFor(() => {
-        const checkboxes = document.querySelectorAll('input[type="checkbox"]')
-        expect(checkboxes.length).toBeGreaterThan(0)
-      })
+      expect(assignButton).toBeTruthy()
+
+      if (assignButton) {
+        await user.click(assignButton)
+
+        await waitFor(() => {
+          const checkboxes = document.querySelectorAll('input[type="checkbox"]')
+          expect(checkboxes.length).toBeGreaterThan(0)
+        })
+      }
     })
 
     it('選択したチャンネル数が表示される', async () => {
@@ -215,15 +295,23 @@ describe('AudioManagementTab', () => {
       render(<AudioManagementTab />)
 
       await waitFor(() => {
-        expect(screen.getByText('分配频道')).toBeTruthy()
+        expect(screen.getByText('test-audio.mp3')).toBeTruthy()
       })
 
-      const assignButtons = screen.getAllByText('分配频道')
-      await user.click(assignButtons[0])
+      const buttons = document.querySelectorAll('button')
+      const assignButton = Array.from(buttons).find(btn =>
+        btn.textContent?.includes('分配频道')
+      )
 
-      await waitFor(() => {
-        expect(screen.getByText(/已选择.*个频道/)).toBeTruthy()
-      })
+      expect(assignButton).toBeTruthy()
+
+      if (assignButton) {
+        await user.click(assignButton)
+
+        await waitFor(() => {
+          expect(screen.getByText(/已选择.*个频道/)).toBeTruthy()
+        })
+      }
     })
   })
 
@@ -234,28 +322,37 @@ describe('AudioManagementTab', () => {
       render(<AudioManagementTab />)
 
       await waitFor(() => {
-        expect(screen.getByText('分配频道')).toBeTruthy()
+        expect(screen.getByText('test-audio.mp3')).toBeTruthy()
       })
 
-      const assignButtons = screen.getAllByText('分配频道')
-      await user.click(assignButtons[0])
+      const buttons = document.querySelectorAll('button')
+      const assignButton = Array.from(buttons).find(btn =>
+        btn.textContent?.includes('分配频道')
+      )
 
-      await waitFor(() => {
-        expect(screen.getByText('保存')).toBeTruthy()
-      })
+      expect(assignButton).toBeTruthy()
 
-      const saveButton = screen.getByText('保存')
-      await user.click(saveButton)
+      if (assignButton) {
+        await user.click(assignButton)
 
-      await waitFor(() => {
-        expect(mockAssignAudioToChannels).toHaveBeenCalled()
-      })
+        await waitFor(() => {
+          expect(screen.getByText('保存')).toBeTruthy()
+        })
+
+        const saveButton = screen.getByText('保存')
+        await user.click(saveButton)
+
+        await waitFor(() => {
+          const mockAxiosPost = (global as any).mockAxiosPost
+          expect(mockAxiosPost).toHaveBeenCalled()
+        })
+      }
     })
   })
 
   describe('Error Handling', () => {
     it('エラー時にエラーメッセージと再試行ボタンが表示される', async () => {
-      mockListAllAudio.mockRejectedValueOnce(new Error('API Error'))
+      setupErrorMock('API Error')
 
       render(<AudioManagementTab />)
 
@@ -267,18 +364,22 @@ describe('AudioManagementTab', () => {
 
     it('再試行ボタンでデータを再読み込みできる', async () => {
       const user = userEvent.setup()
-      mockListAllAudio
-        .mockRejectedValueOnce(new Error('API Error'))
-        .mockResolvedValueOnce([
-          {
-            id: '1',
-            file_name: 'test.mp3',
-            created_at: '2025-01-01T00:00:00Z',
-            user_id: 'user-1',
-            user_email: 'test@example.com',
-            channels: []
-          }
-        ])
+
+      // First call fails, second succeeds
+      const mockAxiosGet = (global as any).mockAxiosGet
+      if (mockAxiosGet) {
+        mockAxiosGet
+          .mockRejectedValueOnce(new Error('API Error'))
+          .mockImplementationOnce((url: string) => {
+            if (url?.includes('/admin/audio') && !url?.includes('/channels')) {
+              return Promise.resolve({ data: { items: mockAudioList } })
+            }
+            if (url?.includes('/admin/channels')) {
+              return Promise.resolve({ data: mockChannels })
+            }
+            return Promise.resolve({ data: [] })
+          })
+      }
 
       render(<AudioManagementTab />)
 
@@ -290,29 +391,52 @@ describe('AudioManagementTab', () => {
       await user.click(retryButton)
 
       await waitFor(() => {
-        expect(mockListAllAudio).toHaveBeenCalledTimes(2)
+        expect(mockAxiosGet).toHaveBeenCalledTimes(3) // Error retry + audio + channels
       })
     })
   })
 
   describe('Empty States', () => {
     it('チャンネルがない場合「暂无可用频道」と表示される', async () => {
-      mockListChannels.mockResolvedValueOnce([])
-
       const user = userEvent.setup()
+
+      // Setup empty channels list
+      const mockAxiosGet = (global as any).mockAxiosGet
+      if (mockAxiosGet) {
+        mockAxiosGet.mockImplementation((url: string) => {
+          if (url?.includes('/admin/audio') && !url?.includes('/channels')) {
+            return Promise.resolve({ data: { items: mockAudioList } })
+          }
+          if (url?.includes('/admin/channels')) {
+            return Promise.resolve({ data: [] })
+          }
+          if (url?.includes('/channels') && url?.includes('/audio')) {
+            return Promise.resolve({ data: mockAudioChannels })
+          }
+          return Promise.resolve({ data: [] })
+        })
+      }
 
       render(<AudioManagementTab />)
 
       await waitFor(() => {
-        expect(screen.getByText('分配频道')).toBeTruthy()
+        expect(screen.getByText('test-audio.mp3')).toBeTruthy()
       })
 
-      const assignButtons = screen.getAllByText('分配频道')
-      await user.click(assignButtons[0])
+      const buttons = document.querySelectorAll('button')
+      const assignButton = Array.from(buttons).find(btn =>
+        btn.textContent?.includes('分配频道')
+      )
 
-      await waitFor(() => {
-        expect(screen.getByText('暂无可用频道')).toBeTruthy()
-      })
+      expect(assignButton).toBeTruthy()
+
+      if (assignButton) {
+        await user.click(assignButton)
+
+        await waitFor(() => {
+          expect(screen.getByText('暂无可用频道')).toBeTruthy()
+        })
+      }
     })
   })
 })
