@@ -33,7 +33,7 @@ vi.mock('react-router-dom', async () => {
     ...actual,
     useNavigate: () => mockNavigate,
     useLocation: () => ({ pathname: '/', search: '', hash: '', state: null }),
-    useParams: () => ({}),
+    useParams: () => ({ id: 'test-1' }), // Provide default ID for tests
     useSearchParams: () => [
       new URLSearchParams(),
       mockSetSearchParams,
