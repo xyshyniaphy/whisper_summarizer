@@ -60,6 +60,11 @@ const mockSession = {
     email: 'test@example.com',
     is_active: true,
     is_admin: false,
+    email_confirmed_at: new Date().toISOString(),
+    user_metadata: { full_name: 'Test User', role: 'user' },
+    app_metadata: {},
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
   }
 }
 
@@ -105,7 +110,22 @@ vi.mock('@/services/supabase', () => ({
 }))
 
 // Create mock functions at module level so they can be accessed outside vi.mock
-const mockGet = vi.fn(() => Promise.resolve({ data: [] }))
+const mockGet = vi.fn((url: string) => {
+  // Mock /api/auth/user endpoint to return extended user data
+  if (url === '/api/auth/user' || url?.includes('/auth/user')) {
+    return Promise.resolve({
+      data: {
+        id: '123e4567-e89b-42d3-a456-426614174000',
+        email: 'test@example.com',
+        is_active: true,
+        is_admin: false,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }
+    })
+  }
+  return Promise.resolve({ data: [] })
+})
 const mockPost = vi.fn(() => Promise.resolve({ data: {} }))
 const mockPut = vi.fn(() => Promise.resolve({ data: {} }))
 const mockDelete = vi.fn(() => Promise.resolve({ data: {} }))
