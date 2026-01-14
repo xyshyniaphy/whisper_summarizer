@@ -37,19 +37,6 @@ vi.mock('react-router-dom', async () => {
   }
 })
 
-// Mock adminApi
-const mockListUsers = vi.fn()
-const mockListChannels = vi.fn()
-const mockListAudio = vi.fn()
-
-vi.mock('@/services/api', () => ({
-  adminApi: {
-    listUsers: mockListUsers,
-    listChannels: mockListChannels,
-    listAudio: mockListAudio
-  }
-}))
-
 function wrapper({ children }: { children: React.ReactNode }) {
   return (
     <BrowserRouter>
@@ -61,10 +48,28 @@ function wrapper({ children }: { children: React.ReactNode }) {
 describe('Dashboard', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    // Reset adminApi mocks
-    mockListUsers.mockResolvedValue([])
-    mockListChannels.mockResolvedValue([])
-    mockListAudio.mockResolvedValue([])
+
+    // Use global axios mocks from setup.ts
+    const mockAxiosGet = (global as any).mockAxiosGet
+    if (mockAxiosGet) {
+      mockAxiosGet.mockReset()
+      mockAxiosGet.mockImplementation((url: string) => {
+        // Match /admin/users (listUsers)
+        if (url?.includes('/admin/users')) {
+          return Promise.resolve({ data: [] })
+        }
+        // Match /admin/channels (listChannels)
+        if (url?.includes('/admin/channels')) {
+          return Promise.resolve({ data: [] })
+        }
+        // Match /admin/audio (listAudio)
+        if (url?.includes('/admin/audio') && !url?.includes('/channels')) {
+          return Promise.resolve({ data: { items: [] } })
+        }
+        // Default fallback for other requests (like /api/auth/user)
+        return Promise.resolve({ data: [] })
+      })
+    }
   })
 
   describe('Rendering', () => {
