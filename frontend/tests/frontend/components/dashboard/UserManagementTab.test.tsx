@@ -80,7 +80,8 @@ describe('UserManagementTab', () => {
       await waitFor(() => {
         expect(screen.getByText('总用户数')).toBeTruthy()
         expect(screen.getByText('已激活用户')).toBeTruthy()
-        expect(screen.getByText('管理员')).toBeTruthy()
+        // "管理员" may appear multiple times (in stats and table)
+        expect(screen.getAllByText('管理员').length).toBeGreaterThan(0)
       })
     })
 
@@ -119,7 +120,8 @@ describe('UserManagementTab', () => {
       render(<UserManagementTab />)
 
       await waitFor(() => {
-        expect(screen.getByText('管理员')).toBeTruthy()
+        // "管理员" may appear multiple times (in stats and table)
+        expect(screen.getAllByText('管理员').length).toBeGreaterThan(0)
       })
     })
 
@@ -199,11 +201,10 @@ describe('UserManagementTab', () => {
       render(<UserManagementTab />)
 
       await waitFor(() => {
-        const deleteButtons = document.querySelectorAll('button')
-        const hasDeleteButton = Array.from(deleteButtons).find(btn =>
-          btn.querySelector('.lucide-trash-2') || btn.innerHTML.includes('Trash2')
-        )
-        expect(hasDeleteButton).toBeTruthy()
+        // Delete buttons use variant="danger" which adds bg-red-600 class
+        const deleteButtons = document.querySelectorAll('button.bg-red-600')
+        // Should have delete buttons for each user
+        expect(deleteButtons.length).toBeGreaterThan(0)
       })
     })
 
@@ -216,19 +217,18 @@ describe('UserManagementTab', () => {
         expect(screen.getByText('admin@example.com')).toBeTruthy()
       })
 
-      // Find delete buttons (they have Trash2 icon)
-      const deleteButtons = document.querySelectorAll('button')
-      const deleteBtn = Array.from(deleteButtons).find(btn =>
-        btn.querySelector('.lucide-trash-2')
-      )
+      // Find delete button by its danger variant class (bg-red-600)
+      // Note: Both "取消管理员" (for admin users) and delete buttons use danger variant
+      // The delete button comes last in the actions column, so we'll click it
+      const deleteButtons = document.querySelectorAll('button.bg-red-600')
+      expect(deleteButtons.length).toBeGreaterThan(0)
 
-      if (deleteBtn) {
-        await user.click(deleteBtn)
+      // Click the last danger button (delete button)
+      await user.click(deleteButtons[deleteButtons.length - 1])
 
-        await waitFor(() => {
-          expect(screen.getByText('确认删除用户')).toBeTruthy()
-        })
-      }
+      await waitFor(() => {
+        expect(screen.getByText('确认删除用户')).toBeTruthy()
+      })
     })
   })
 
