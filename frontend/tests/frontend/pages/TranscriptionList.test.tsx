@@ -5,7 +5,7 @@
  * ナビゲーションをテストする。
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { BrowserRouter } from 'react-router-dom'
@@ -21,17 +21,6 @@ vi.mock('../../../src/services/supabase', () => ({
         data: { subscription: { unsubscribe: vi.fn() } }
       }))
     }
-  }
-}))
-
-// Mock API
-const mockGetTranscriptions = vi.fn()
-const mockDeleteTranscription = vi.fn()
-
-vi.mock('../../../src/services/api', () => ({
-  api: {
-    getTranscriptions: mockGetTranscriptions,
-    deleteTranscription: mockDeleteTranscription
   }
 }))
 
@@ -89,16 +78,32 @@ const mockTranscriptions = [
 
 describe('TranscriptionList', () => {
   beforeEach(() => {
-    vi.clearAllMocks()
-    // Return PaginatedResponse structure
-    mockGetTranscriptions.mockResolvedValue({
-      total: mockTranscriptions.length,
-      page: 1,
-      page_size: 10,
-      total_pages: 1,
-      data: mockTranscriptions
-    })
-    mockDeleteTranscription.mockResolvedValue(undefined)
+    // Use global axios mock from setup.ts
+    const mockAxiosGet = (global as any).mockAxiosGet
+    if (mockAxiosGet) {
+      mockAxiosGet.mockResolvedValue({
+        data: {
+          total: mockTranscriptions.length,
+          page: 1,
+          page_size: 10,
+          total_pages: 1,
+          data: mockTranscriptions
+        }
+      })
+    }
+
+    const mockAxiosDelete = (global as any).mockAxiosDelete
+    if (mockAxiosDelete) {
+      mockAxiosDelete.mockResolvedValue({ data: {} })
+    }
+  })
+
+  afterEach(() => {
+    // Reset mocks after each test
+    const mockAxiosGet = (global as any).mockAxiosGet
+    const mockAxiosDelete = (global as any).mockAxiosDelete
+    if (mockAxiosGet) mockAxiosGet.mockReset()
+    if (mockAxiosDelete) mockAxiosDelete.mockReset()
   })
 
   describe('Rendering', () => {
@@ -122,7 +127,19 @@ describe('TranscriptionList', () => {
     })
 
     it('データがない場合、「暂无数据」が表示される', async () => {
-      mockGetTranscriptions.mockResolvedValue([])
+      const mockAxiosGet = (global as any).mockAxiosGet
+      if (mockAxiosGet) {
+        mockAxiosGet.mockResolvedValue({
+          data: {
+            total: 0,
+            page: 1,
+            page_size: 10,
+            total_pages: 0,
+            data: []
+          }
+        })
+      }
+
       render(<TranscriptionList />, { wrapper })
 
       await waitFor(() => {
@@ -208,7 +225,8 @@ describe('TranscriptionList', () => {
       fireEvent.click(confirmButton)
 
       await waitFor(() => {
-        expect(mockDeleteTranscription).toHaveBeenCalled()
+        const mockAxiosDelete = (global as any).mockAxiosDelete
+        expect(mockAxiosDelete).toHaveBeenCalled()
       })
     })
 
@@ -236,7 +254,9 @@ describe('TranscriptionList', () => {
       await waitFor(() => {
         expect(screen.queryByText('删除失败项')).toBeNull()
       })
-      expect(mockDeleteTranscription).not.toHaveBeenCalled()
+
+      const mockAxiosDelete = (global as any).mockAxiosDelete
+      expect(mockAxiosDelete).not.toHaveBeenCalled()
     })
   })
 
@@ -265,11 +285,6 @@ describe('TranscriptionList', () => {
         // Return a predictable format that includes the year
         return `2024/01/01 00:00:00`
       }
-    })
-
-    afterEach(() => {
-      // Restore original method - though this won't work across describe blocks
-      // The mock will persist for the test run
     })
 
     it('作成日時が正しくフォーマットされて表示される', async () => {
@@ -301,7 +316,19 @@ describe('TranscriptionList', () => {
           retry_count: 3
         }
       ]
-      mockGetTranscriptions.mockResolvedValue(transcriptionsWithRetry)
+
+      const mockAxiosGet = (global as any).mockAxiosGet
+      if (mockAxiosGet) {
+        mockAxiosGet.mockResolvedValue({
+          data: {
+            total: 1,
+            page: 1,
+            page_size: 10,
+            total_pages: 1,
+            data: transcriptionsWithRetry
+          }
+        })
+      }
 
       render(<TranscriptionList />, { wrapper })
 
