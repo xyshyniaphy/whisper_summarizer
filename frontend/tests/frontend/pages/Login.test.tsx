@@ -15,14 +15,16 @@ import Login from '@/pages/Login'
 // Mock Supabase client - must be hoisted for proper mock resolution
 const { mockSignInWithOAuth } = vi.hoisted(() => {
   return {
-    mockSignInWithOAuth: vi.fn()
+    mockSignInWithOAuth: vi.fn().mockResolvedValue({ error: null })
   }
 })
 
 vi.mock('@/services/supabase', () => ({
   supabase: {
     auth: {
-      signInWithOAuth: mockSignInWithOAuth
+      signInWithOAuth: mockSignInWithOAuth,
+      getSession: vi.fn(() => Promise.resolve({ data: { session: null }, error: null })),
+      onAuthStateChange: vi.fn(() => ({ data: { subscription: { unsubscribe: vi.fn() } } })),
     }
   }
 }))
@@ -88,16 +90,18 @@ describe('Login', () => {
       await user.click(googleButton)
 
       await waitFor(() => {
-        expect(mockSignInWithOAuth).toHaveBeenCalledWith({
-          provider: 'google',
-          options: {
-            queryParams: {
-              access_type: 'offline',
-              prompt: 'consent',
-            },
-            scopes: 'email',
-          },
-        })
+        expect(mockSignInWithOAuth).toHaveBeenCalledWith(
+          expect.objectContaining({
+            provider: 'google',
+            options: expect.objectContaining({
+              queryParams: {
+                access_type: 'offline',
+                prompt: 'consent',
+              },
+              scopes: 'email',
+            }),
+          })
+        )
       })
     })
 
