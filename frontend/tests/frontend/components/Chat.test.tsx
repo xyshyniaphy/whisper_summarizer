@@ -9,12 +9,14 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Chat } from '../../../src/components/Chat'
 
-// Create mock functions outside the mock so they can be referenced in tests
-const mockGetChatHistory = vi.fn()
-const mockSendChatMessageStream = vi.fn()
+// Create mock functions with vi.hoisted to avoid hoisting issues
+const { mockGetChatHistory, mockSendChatMessageStream } = vi.hoisted(() => ({
+  mockGetChatHistory: vi.fn(),
+  mockSendChatMessageStream: vi.fn()
+}))
 
 // Mock the API module
-vi.mock('../../../src/services/api', () => ({
+vi.mock('@/services/api', () => ({
   api: {
     getChatHistory: mockGetChatHistory,
     sendChatMessageStream: mockSendChatMessageStream
@@ -22,7 +24,7 @@ vi.mock('../../../src/services/api', () => ({
 }))
 
 // Mock supabase
-vi.mock('../../../src/services/supabase', () => ({
+vi.mock('@/services/supabase', () => ({
   supabase: {
     auth: {
       getSession: vi.fn(() => Promise.resolve({
