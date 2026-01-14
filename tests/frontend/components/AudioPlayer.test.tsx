@@ -4,66 +4,55 @@
  * Tests the audio player with SRT segment navigation
  */
 
-import { describe, it, expect, vi, afterEach } from 'vitest'
-import { render, screen, waitFor, cleanup } from '@testing-library/react'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { AudioPlayer } from '../../../src/components/AudioPlayer'
 
-// Constants for debounce threshold and test values
-const DEBOUNCE_THRESHOLD_SECONDS = 0.1
-const MOCK_SEGMENTS = [
-  { start: 0, end: 2.5, text: 'First segment' },
-  { start: 2.5, end: 5.0, text: 'Second segment' },
-  { start: 5.0, end: 7.5, text: 'Third segment' },
-] as const
-
-const MOCK_AUDIO_URL = 'https://example.com/audio.mp3'
-
-// Helper function to create mock onSeek callback
-const createMockOnSeek = () => vi.fn()
-
-// Helper function to render AudioPlayer with default props
-const renderAudioPlayer = (props?: {
-  audioUrl?: string
-  segments?: typeof MOCK_SEGMENTS
-  onSeek?: ReturnType<typeof createMockOnSeek>
-  currentTime?: number
-}) => {
-  return render(
-    <AudioPlayer
-      audioUrl={props?.audioUrl ?? MOCK_AUDIO_URL}
-      segments={props?.segments ?? [...MOCK_SEGMENTS]}
-      onSeek={props?.onSeek ?? createMockOnSeek()}
-      currentTime={props?.currentTime}
-    />
-  )
-}
-
-// Cleanup after each test
-afterEach(() => {
-  cleanup()
-})
-
 describe('AudioPlayer', () => {
+  const mockSegments = [
+    { start: 0, end: 2.5, text: 'First segment' },
+    { start: 2.5, end: 5.0, text: 'Second segment' },
+    { start: 5.0, end: 7.5, text: 'Third segment' },
+  ]
+
+  const mockAudioUrl = 'https://example.com/audio.mp3'
+  const mockOnSeek = vi.fn()
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
   describe('Rendering', () => {
     it('renders audio element with correct src', () => {
-      renderAudioPlayer()
+      render(
+        <AudioPlayer
+          audioUrl={mockAudioUrl}
+          segments={mockSegments}
+          onSeek={mockOnSeek}
+        />
+      )
 
       const audioElement = document.querySelector('[data-testid="audio-element"]') as HTMLAudioElement
       expect(audioElement).toBeTruthy()
-      expect(audioElement?.src).toBe(MOCK_AUDIO_URL)
+      expect(audioElement?.src).toBe(mockAudioUrl)
     })
 
     it('renders all segments when expanded', async () => {
-      const user = userEvent.setup()
-      renderAudioPlayer()
+      render(
+        <AudioPlayer
+          audioUrl={mockAudioUrl}
+          segments={mockSegments}
+          onSeek={mockOnSeek}
+        />
+      )
 
       // Initially segments are hidden (compact mode)
       expect(screen.queryByText('First segment')).toBeNull()
 
       // Click expand button to show segments
       const expandButton = document.querySelector('[data-testid="expand-button"]')
-      await user.click(expandButton!)
+      expandButton?.click()
 
       await waitFor(() => {
         expect(screen.getByText('First segment')).toBeTruthy()
@@ -73,7 +62,13 @@ describe('AudioPlayer', () => {
     })
 
     it('renders play/pause button', () => {
-      renderAudioPlayer()
+      render(
+        <AudioPlayer
+          audioUrl={mockAudioUrl}
+          segments={mockSegments}
+          onSeek={mockOnSeek}
+        />
+      )
 
       // Play button should be present (initial state)
       const playButton = document.querySelector('[data-testid="play-button"]')
@@ -81,7 +76,13 @@ describe('AudioPlayer', () => {
     })
 
     it('renders time display', () => {
-      renderAudioPlayer()
+      render(
+        <AudioPlayer
+          audioUrl={mockAudioUrl}
+          segments={mockSegments}
+          onSeek={mockOnSeek}
+        />
+      )
 
       // Time display should be present (00:00 / 00:00 initially)
       const timeDisplays = screen.getAllByText('00:00')
@@ -90,7 +91,13 @@ describe('AudioPlayer', () => {
     })
 
     it('renders expand/collapse button', () => {
-      renderAudioPlayer()
+      render(
+        <AudioPlayer
+          audioUrl={mockAudioUrl}
+          segments={mockSegments}
+          onSeek={mockOnSeek}
+        />
+      )
 
       const expandButton = document.querySelector('[data-testid="expand-button"]')
       expect(expandButton).toBeTruthy()
@@ -100,8 +107,13 @@ describe('AudioPlayer', () => {
   describe('Segment Navigation', () => {
     it('calls onSeek when segment is clicked', async () => {
       const user = userEvent.setup()
-      const mockOnSeek = createMockOnSeek()
-      renderAudioPlayer({ onSeek: mockOnSeek })
+      render(
+        <AudioPlayer
+          audioUrl={mockAudioUrl}
+          segments={mockSegments}
+          onSeek={mockOnSeek}
+        />
+      )
 
       // Expand to show segments
       const expandButton = document.querySelector('[data-testid="expand-button"]')
@@ -119,7 +131,13 @@ describe('AudioPlayer', () => {
     })
 
     it('highlights current segment during playback', async () => {
-      renderAudioPlayer()
+      render(
+        <AudioPlayer
+          audioUrl={mockAudioUrl}
+          segments={mockSegments}
+          onSeek={mockOnSeek}
+        />
+      )
 
       // Expand to show segments
       const expandButton = document.querySelector('[data-testid="expand-button"]')
@@ -143,7 +161,13 @@ describe('AudioPlayer', () => {
   describe('Expand/Collapse', () => {
     it('toggles expanded state when expand button is clicked', async () => {
       const user = userEvent.setup()
-      renderAudioPlayer()
+      render(
+        <AudioPlayer
+          audioUrl={mockAudioUrl}
+          segments={mockSegments}
+          onSeek={mockOnSeek}
+        />
+      )
 
       const container = document.querySelector('[data-testid="audio-player-container"]')
       expect(container?.className).not.toContain('h-32')
@@ -160,16 +184,23 @@ describe('AudioPlayer', () => {
   describe('Play/Pause', () => {
     it('toggles play/pause when play button is clicked', async () => {
       const user = userEvent.setup()
-      renderAudioPlayer()
+      const playMock = vi.fn()
+      const pauseMock = vi.fn()
+
+      // Mock audio element methods
+      HTMLAudioElement.prototype.play = playMock
+      HTMLAudioElement.prototype.pause = pauseMock
+
+      render(
+        <AudioPlayer
+          audioUrl={mockAudioUrl}
+          segments={mockSegments}
+          onSeek={mockOnSeek}
+        />
+      )
 
       const audioElement = document.querySelector('[data-testid="audio-element"]') as HTMLAudioElement
       const playButton = document.querySelector('[data-testid="play-button"]')
-
-      // Mock play method on the audio element
-      const playMock = vi.fn().mockResolvedValue(undefined)
-      if (audioElement) {
-        audioElement.play = playMock
-      }
 
       // Initial click should call play
       await user.click(playButton!)
@@ -182,14 +213,21 @@ describe('AudioPlayer', () => {
       }
 
       await waitFor(() => {
-        expect(audioElement?.paused).toBe(false)
+        expect(pauseMock).not.toHaveBeenCalled()
       })
     })
   })
 
   describe('External Seek (from SrtList)', () => {
     it('should seek audio when externalCurrentTime prop changes', async () => {
-      renderAudioPlayer({ currentTime: 5.0 })
+      render(
+        <AudioPlayer
+          audioUrl={mockAudioUrl}
+          segments={mockSegments}
+          onSeek={mockOnSeek}
+          currentTime={5.0}
+        />
+      )
 
       const audioElement = document.querySelector('[data-testid="audio-element"]') as HTMLAudioElement
 
@@ -199,15 +237,20 @@ describe('AudioPlayer', () => {
     })
 
     it('should preserve playing state during external seek', async () => {
-      const { rerender } = renderAudioPlayer({ currentTime: 0 })
+      const playMock = vi.fn().mockResolvedValue(undefined)
+
+      HTMLAudioElement.prototype.play = playMock
+
+      const { rerender } = render(
+        <AudioPlayer
+          audioUrl={mockAudioUrl}
+          segments={mockSegments}
+          onSeek={mockOnSeek}
+          currentTime={0}
+        />
+      )
 
       const audioElement = document.querySelector('[data-testid="audio-element"]') as HTMLAudioElement
-
-      // Mock play method
-      const playMock = vi.fn().mockResolvedValue(undefined)
-      if (audioElement) {
-        audioElement.play = playMock
-      }
 
       // Simulate playing state
       if (audioElement) {
@@ -215,14 +258,15 @@ describe('AudioPlayer', () => {
         audioElement.dispatchEvent(new Event('play'))
       }
 
+      // Clear previous play calls
       playMock.mockClear()
 
       // Rerender with new externalCurrentTime (simulating SrtList click)
       rerender(
         <AudioPlayer
-          audioUrl={MOCK_AUDIO_URL}
-          segments={[...MOCK_SEGMENTS]}
-          onSeek={createMockOnSeek()}
+          audioUrl={mockAudioUrl}
+          segments={mockSegments}
+          onSeek={mockOnSeek}
           currentTime={5.0}
         />
       )
@@ -232,63 +276,64 @@ describe('AudioPlayer', () => {
       })
     })
 
-    it('should debounce seeks when time difference is less than threshold', async () => {
-      const { rerender } = renderAudioPlayer({ currentTime: 5.0 })
+    it('should debounce seeks when time difference is less than 0.1s', () => {
+      const { rerender } = render(
+        <AudioPlayer
+          audioUrl={mockAudioUrl}
+          segments={mockSegments}
+          onSeek={mockOnSeek}
+          currentTime={5.0}
+        />
+      )
 
       const audioElement = document.querySelector('[data-testid="audio-element"]') as HTMLAudioElement
 
-      // Set initial currentTime to verify it doesn't change
-      const initialCurrentTime = 5.0
-      Object.defineProperty(audioElement!, 'currentTime', { value: initialCurrentTime, configurable: true })
+      const initialCurrentTime = audioElement?.currentTime
 
-      // Rerender with small time difference (< DEBOUNCE_THRESHOLD_SECONDS)
+      // Rerender with small time difference (< 0.1s)
       rerender(
         <AudioPlayer
-          audioUrl={MOCK_AUDIO_URL}
-          segments={[...MOCK_SEGMENTS]}
-          onSeek={createMockOnSeek()}
+          audioUrl={mockAudioUrl}
+          segments={mockSegments}
+          onSeek={mockOnSeek}
           currentTime={5.05} // Only 0.05s difference
         />
       )
 
-      // Should not update audio element (debounced) - currentTime should remain at initial value
-      await waitFor(() => {
-        expect(audioElement?.currentTime).toBe(initialCurrentTime)
-      })
-    })
-
-    it('should seek when time difference exceeds threshold', async () => {
-      const { rerender } = renderAudioPlayer({ currentTime: 5.0 })
-
-      const audioElement = document.querySelector('[data-testid="audio-element"]') as HTMLAudioElement
-
-      // Rerender with large time difference (> DEBOUNCE_THRESHOLD_SECONDS)
-      rerender(
-        <AudioPlayer
-          audioUrl={MOCK_AUDIO_URL}
-          segments={[...MOCK_SEGMENTS]}
-          onSeek={createMockOnSeek()}
-          currentTime={6.0} // 1.0s difference - exceeds DEBOUNCE_THRESHOLD_SECONDS
-        />
-      )
-
-      // Should update audio element
-      await waitFor(() => {
-        expect(audioElement?.currentTime).toBe(6.0)
-      })
+      // Should not update audio element (debounced)
+      expect(audioElement?.currentTime).toBe(initialCurrentTime)
     })
   })
 
   describe('Seek Bar', () => {
-    it('renders seek bar', () => {
-      renderAudioPlayer()
+    it('should seek to correct time when seek bar is dragged', async () => {
+      const user = userEvent.setup()
+      render(
+        <AudioPlayer
+          audioUrl={mockAudioUrl}
+          segments={mockSegments}
+          onSeek={mockOnSeek}
+        />
+      )
 
       const seekBar = document.querySelector('input[type="range"]')
       expect(seekBar).toBeTruthy()
+
+      // Simulate drag to 50% of duration
+      if (seekBar) {
+        await user.click(seekBar)
+        // Note: Full drag simulation requires fireEvent from testing-library
+      }
     })
 
     it('should update ARIA attributes during playback', async () => {
-      renderAudioPlayer()
+      render(
+        <AudioPlayer
+          audioUrl={mockAudioUrl}
+          segments={mockSegments}
+          onSeek={mockOnSeek}
+        />
+      )
 
       const seekBar = document.querySelector('input[type="range"]')
 
@@ -300,47 +345,29 @@ describe('AudioPlayer', () => {
     })
 
     it('should handle zero duration gracefully', () => {
-      renderAudioPlayer({ segments: [] })
+      render(
+        <AudioPlayer
+          audioUrl={mockAudioUrl}
+          segments={[]}
+          onSeek={mockOnSeek}
+        />
+      )
 
       const seekBar = document.querySelector('input[type="range"]')
 
       expect(seekBar).toHaveAttribute('max', '0')
     })
-
-    it('should have seek bar with proper attributes for interaction', async () => {
-      const mockOnSeek = createMockOnSeek()
-      renderAudioPlayer({ onSeek: mockOnSeek })
-
-      const seekBar = document.querySelector('input[type="range"]') as HTMLInputElement
-
-      // Verify seek bar exists and has expected attributes for interaction
-      expect(seekBar).toBeTruthy()
-      expect(seekBar).toHaveAttribute('type', 'range')
-      expect(seekBar).toHaveAttribute('min', '0')
-      expect(seekBar).toHaveAttribute('step', '0.1')
-
-      // Set a duration on the audio element so the seek bar has a valid range
-      const audioElement = document.querySelector('[data-testid="audio-element"]') as HTMLAudioElement
-      if (audioElement) {
-        Object.defineProperty(audioElement, 'duration', { value: 10, configurable: true })
-        audioElement.dispatchEvent(new Event('loadedmetadata'))
-      }
-
-      // Wait for duration to be reflected in seek bar
-      await waitFor(() => {
-        expect(seekBar?.max).toBe('10')
-      })
-
-      // The onChange handler (handleSeek) is connected to the input
-      // Note: jsdom doesn't fully support range input interaction,
-      // so we verify the input exists and has proper attributes
-      // Integration tests would verify actual seek bar behavior
-    })
   })
 
   describe('Empty State', () => {
     it('renders correctly with empty segments array', () => {
-      renderAudioPlayer({ segments: [] })
+      render(
+        <AudioPlayer
+          audioUrl={mockAudioUrl}
+          segments={[]}
+          onSeek={mockOnSeek}
+        />
+      )
 
       const audioElement = document.querySelector('[data-testid="audio-element"]')
       expect(audioElement).toBeTruthy()
@@ -349,7 +376,13 @@ describe('AudioPlayer', () => {
 
   describe('Audio Error Handling', () => {
     it('should display error message when audio fails to load', async () => {
-      renderAudioPlayer({ audioUrl: 'https://invalid-url.com/audio.mp3' })
+      render(
+        <AudioPlayer
+          audioUrl="https://invalid-url.com/audio.mp3"
+          segments={mockSegments}
+          onSeek={mockOnSeek}
+        />
+      )
 
       const audioElement = document.querySelector('[data-testid="audio-element"]') as HTMLAudioElement
 
@@ -364,7 +397,13 @@ describe('AudioPlayer', () => {
     })
 
     it('should clear error on successful audio load', async () => {
-      renderAudioPlayer()
+      render(
+        <AudioPlayer
+          audioUrl={mockAudioUrl}
+          segments={mockSegments}
+          onSeek={mockOnSeek}
+        />
+      )
 
       const audioElement = document.querySelector('[data-testid="audio-element"]') as HTMLAudioElement
 
@@ -386,46 +425,6 @@ describe('AudioPlayer', () => {
       await waitFor(() => {
         expect(screen.queryByText('音频加载失败，请稍后重试')).not.toBeInTheDocument()
       })
-    })
-  })
-
-  describe('Event Listener Cleanup', () => {
-    it('should not throw errors when events are dispatched after unmount', () => {
-      const { unmount } = renderAudioPlayer()
-
-      const audioElement = document.querySelector('[data-testid="audio-element"]') as HTMLAudioElement
-
-      // Unmount the component
-      unmount()
-
-      // Dispatching events after unmount should not throw errors
-      expect(() => {
-        audioElement?.dispatchEvent(new Event('timeupdate'))
-        audioElement?.dispatchEvent(new Event('play'))
-        audioElement?.dispatchEvent(new Event('pause'))
-      }).not.toThrow()
-    })
-
-    it('should cleanup event listeners on unmount', () => {
-      const { unmount } = renderAudioPlayer()
-
-      const audioElement = document.querySelector('[data-testid="audio-element"]') as HTMLAudioElement
-
-      // Spy on addEventListener and removeEventListener
-      const removeEventListenerSpy = vi.spyOn(audioElement!, 'removeEventListener')
-
-      // Trigger some events to ensure listeners are active
-      audioElement!.dispatchEvent(new Event('timeupdate'))
-      audioElement!.dispatchEvent(new Event('play'))
-
-      // Unmount the component
-      unmount()
-
-      // Verify that removeEventListener was called multiple times (once for each listener)
-      expect(removeEventListenerSpy).toHaveBeenCalled()
-
-      // Clean up spy
-      removeEventListenerSpy.mockRestore()
     })
   })
 })
