@@ -14,6 +14,16 @@ test.describe('Shared Audio Player', () => {
   test.beforeEach(async ({ page }) => {
     // Navigate to shared transcription page
     await page.goto(`${BASE_URL}/shared/${SHARE_TOKEN}`)
+
+    // Track console errors for tests
+    await page.evaluate(() => {
+      ;(window as any).consoleErrors = []
+    })
+    page.on('console', msg => {
+      if (msg.type() === 'error') {
+        ;(window as any).consoleErrors.push(msg.text())
+      }
+    })
   })
 
   test('should load shared transcription and display audio player', async ({ page }) => {
@@ -124,5 +134,181 @@ test.describe('Shared Audio Player', () => {
       const heightValue = parseFloat(segmentHeight)
       expect(heightValue).toBeGreaterThanOrEqual(48)
     }
+  })
+
+  test('should seek to segment start time when clicked and continue playing', async ({ page }) => {
+    // Wait for segments to load
+    await page.waitForSelector('[data-segment-index]')
+
+    // Start playback
+    const playButton = page.locator('[data-testid="play-button"]')
+    await playButton.click()
+
+    // Wait for playback to start
+    await page.waitForTimeout(1000)
+
+    // Click on third segment (index 2)
+    const segment = page.locator('[data-segment-index="2"]').first()
+    await segment.click()
+
+    // Wait for seek to complete
+    await page.waitForTimeout(500)
+
+    // Verify audio currentTime is approximately at segment start time
+    const audioElement = page.locator('[data-testid="audio-element"]')
+    const currentTime = await audioElement.evaluate((el: HTMLAudioElement) => el.currentTime)
+
+    // Segment 2 should be around 10+ seconds
+    expect(currentTime).toBeGreaterThan(9)
+
+    // Verify audio is still playing after seek
+    const isPlaying = await audioElement.evaluate((el: HTMLAudioElement) => !el.paused)
+    expect(isPlaying).toBe(true)
+  })
+
+  test('should seek when seek bar is dragged', async ({ page }) => {
+    // Wait for audio to load
+    await page.waitForSelector('[data-testid="audio-element"]')
+
+    const audioElement = page.locator('[data-testid="audio-element"]')
+    const seekBar = page.locator('input[type="range"]')
+
+    // Get initial max value (duration)
+    const max = await seekBar.getAttribute('max')
+
+    // Click at 50% of seek bar
+    await seekBar.click({
+      position: { x: 0.5, y: 0 } // Click at middle horizontally
+    })
+
+    // Wait for seek to complete
+    await page.waitForTimeout(500)
+
+    // Verify currentTime is approximately at middle
+    const currentTime = await audioElement.evaluate((el: HTMLAudioElement) => el.currentTime)
+
+    if (max) {
+      const expectedTime = parseFloat(max) * 0.5
+      expect(currentTime).toBeCloseTo(expectedTime, 0) // Within 1 second tolerance
+    }
+  })
+
+  test('should handle multiple rapid segment clicks without errors', async ({ page }) => {
+    // Wait for segments to load
+    await page.waitForSelector('[data-segment-index]')
+
+    // Rapidly click multiple segments
+    for (let i = 0; i < 5; i++) {
+      const segment = page.locator(`[data-segment-index="${i}"]`).first()
+      await segment.click()
+      await page.waitForTimeout(50) // Small delay between clicks
+    }
+
+    // Verify no console errors
+    const logs = await page.evaluate(() => {
+      return (window as any).consoleErrors || []
+    })
+    expect(logs.length).toBe(0)
+
+    // Verify audio currentTime is at last clicked segment
+    const audioElement = page.locator('[data-testid="audio-element"]')
+    const currentTime = await audioElement.evaluate((el: HTMLAudioElement) => el.currentTime)
+    expect(currentTime).toBeGreaterThan(0)
+  })
+
+  test('should seek when Enter key is pressed on focused segment', async ({ page }) => {
+    // Wait for segments to load
+    await page.waitForSelector('[data-segment-index]')
+
+    const audioElement = page.locator('[data-testid="audio-element"]')
+
+    // Get initial time
+    const initialTime = await audioElement.evaluate((el: HTMLAudioElement) => el.currentTime)
+    expect(initialTime).toBe(0)
+
+    // Focus second segment and press Enter
+    const segment = page.locator('[data-segment-index="1"]').first()
+    await segment.focus()
+    await page.keyboard.press('Enter')
+
+    // Wait for seek to complete
+    await page.waitForTimeout(500)
+
+    // Verify currentTime changed
+    const currentTime = await audioElement.evaluate((el: HTMLAudioElement) => el.currentTime)
+    expect(currentTime).toBeGreaterThan(1)
+  })
+
+  test('should handle segment clicks on mobile viewport', async ({ page }) => {
+    // Set mobile viewport
+    await page.setViewportSize({ width: 375, height: 667 })
+
+    // Wait for segments to load
+    await page.waitForSelector('[data-segment-index]')
+
+    // Tap on second segment (touch event)
+    const segment = page.locator('[data-segment-index="1"]').first()
+    await segment.tap()
+
+    // Wait for seek to complete
+    await page.waitForTimeout(500)
+
+    // Verify audio seeked
+    const audioElement = page.locator('[data-testid="audio-element"]')
+    const currentTime = await audioElement.evaluate((el: HTMLAudioElement) => el.currentTime)
+    expect(currentTime).toBeGreaterThan(1)
+  })
+
+  test('should render long transcription efficiently with virtual scrolling', async ({ page }) => {
+    // Navigate to shared page with long transcription
+    await page.goto(`${BASE_URL}/shared/${SHARE_TOKEN}`)
+
+    // Wait for segments to load
+    await page.waitForSelector('[data-segment-index]')
+
+    // Count total rendered segment elements
+    const renderedSegments = await page.locator('[data-segment-index]').count()
+
+    // Verify virtualization: should render ~20-30 items even if transcription is longer
+    // (VirtualizedSrtList with overscan=5 renders ~visible + 5 above + 5 below)
+    expect(renderedSegments).toBeLessThan(50)
+
+    // Verify scroll performance - scroll to bottom
+    await page.evaluate(() => {
+      const list = document.querySelector('[role="list"]')
+      if (list) {
+        list.scrollTop = list.scrollHeight
+      }
+    })
+
+    // Wait a moment for virtual items to render
+    await page.waitForTimeout(500)
+
+    // Verify still ~20-30 items rendered (not all segments)
+    const renderedSegmentsAfterScroll = await page.locator('[data-segment-index]').count()
+    expect(renderedSegmentsAfterScroll).toBeLessThan(50)
+  })
+
+  test('should auto-scroll to current segment during playback', async ({ page }) => {
+    // Wait for audio and segments to load
+    await page.waitForSelector('[data-testid="audio-element"]')
+    await page.waitForSelector('[data-segment-index]')
+
+    // Start playback from beginning
+    const playButton = page.locator('[data-testid="play-button"]')
+    await playButton.click()
+
+    // Wait for 5 seconds of playback
+    await page.waitForTimeout(5000)
+
+    // Check if a segment with data-current="true" is visible in viewport
+    const currentSegment = page.locator('[data-current="true"]').first()
+
+    // Verify current segment exists
+    await expect(currentSegment).toHaveAttribute('data-current', 'true')
+
+    // Verify current segment is approximately visible in viewport
+    const isVisible = await currentSegment.isVisible()
+    expect(isVisible).toBe(true)
   })
 })
