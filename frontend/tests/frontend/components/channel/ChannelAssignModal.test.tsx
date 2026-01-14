@@ -13,23 +13,16 @@ import React from 'react'
 
 import { ChannelAssignModal } from '../../../../src/components/channel/ChannelAssignModal'
 
-// Create mock functions at module level
-const mockListChannels = vi.fn(() => Promise.resolve([
-  { id: '1', name: 'Marketing', description: 'Marketing team' },
-  { id: '2', name: 'Sales', description: 'Sales team' },
-  { id: '3', name: 'Engineering', description: 'Engineering team' }
-]))
-
-// Mock adminApi
-vi.mock('../../../../src/services/api', () => ({
-  adminApi: {
-    listChannels: () => mockListChannels()
-  }
-}))
-
 const wrapper = ({ children }: { children: React.ReactNode }) => (
   <Provider>{children}</Provider>
 )
+
+// Mock channels data
+const mockChannels = [
+  { id: '1', name: 'Marketing', description: 'Marketing team' },
+  { id: '2', name: 'Sales', description: 'Sales team' },
+  { id: '3', name: 'Engineering', description: 'Engineering team' }
+]
 
 const mockOnConfirm = vi.fn(() => Promise.resolve())
 const mockOnClose = vi.fn()
@@ -46,6 +39,25 @@ const defaultProps = {
 describe('ChannelAssignModal', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+
+    // Use global axios mocks from setup.ts
+    const mockAxiosGet = (global as any).mockAxiosGet
+    if (mockAxiosGet) {
+      mockAxiosGet.mockReset()
+      mockAxiosGet.mockImplementation((url: string) => {
+        // Match /admin/channels (listChannels)
+        if (url?.includes('/admin/channels')) {
+          return Promise.resolve({ data: mockChannels })
+        }
+        return Promise.resolve({ data: [] })
+      })
+    }
+
+    const mockAxiosPost = (global as any).mockAxiosPost
+    if (mockAxiosPost) {
+      mockAxiosPost.mockReset()
+      mockAxiosPost.mockResolvedValue({ data: {} })
+    }
   })
 
   describe('Rendering', () => {
@@ -241,7 +253,17 @@ describe('ChannelAssignModal', () => {
     })
 
     it('保存中はスピナーが表示される', async () => {
-      render(<ChannelAssignModal {...defaultProps} loading={true} />, { wrapper })
+      const user = userEvent.setup()
+      const mockConfirm = vi.fn(() => new Promise(() => {})) // Never resolves to stay in saving state
+
+      render(<ChannelAssignModal {...defaultProps} onConfirm={mockConfirm} />, { wrapper })
+
+      await waitFor(() => {
+        expect(screen.getByText('保存')).toBeTruthy()
+      })
+
+      const saveButton = screen.getByText('保存')
+      await user.click(saveButton)
 
       await waitFor(() => {
         expect(screen.getByText('保存中...')).toBeTruthy()
@@ -271,9 +293,12 @@ describe('ChannelAssignModal', () => {
 
   describe('Loading State', () => {
     it('チャンネル読み込み中はローディングメッセージが表示される', async () => {
-      mockListChannels.mockImplementationOnce(
-        () => new Promise(resolve => setTimeout(() => resolve([]), 100))
-      )
+      const mockAxiosGet = (global as any).mockAxiosGet
+      if (mockAxiosGet) {
+        mockAxiosGet.mockImplementationOnce(
+          () => new Promise(resolve => setTimeout(() => resolve({ data: [] }), 100))
+        )
+      }
 
       render(<ChannelAssignModal {...defaultProps} />, { wrapper })
 
@@ -291,7 +316,10 @@ describe('ChannelAssignModal', () => {
 
   describe('Edge Cases', () => {
     it('チャンネルリストが空の場合はメッセージが表示される', async () => {
-      mockListChannels.mockResolvedValueOnce([])
+      const mockAxiosGet = (global as any).mockAxiosGet
+      if (mockAxiosGet) {
+        mockAxiosGet.mockResolvedValueOnce({ data: [] })
+      }
 
       render(<ChannelAssignModal {...defaultProps} />, { wrapper })
 
