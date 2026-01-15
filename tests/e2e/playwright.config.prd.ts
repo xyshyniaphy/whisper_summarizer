@@ -4,7 +4,13 @@ import { defineConfig, devices } from '@playwright/test'
  * Playwright E2Eテスト設定 - Production
  *
  * Production serverに対するE2Eテストを実行する。
- * SOCKS5 proxy経由で接続し、localhost auth bypassを利用する。
+ * SSH local port forwardingでCloudflareをバイパスし、localhost auth bypassを利用する。
+ *
+ * 接続フロー:
+ * 1. SSH tunnel: localhost:8130 → server:localhost:3080 (nginx)
+ * 2. テストは http://localhost:8130 にアクセス
+ * 3. サーバーは 127.0.0.1 からのリクエストとして認識
+ * 4. localhost auth bypass がトリガーされ、テストユーザーでログイン
  */
 export default defineConfig({
   testDir: './tests',
@@ -21,10 +27,7 @@ export default defineConfig({
   outputDir: '/app/data/screenshots/failures',
 
   use: {
-    baseURL: process.env.FRONTEND_URL || 'https://w.198066.xyz',
-    proxy: {
-      server: process.env.PROXY_SERVER || 'socks5://localhost:3480',
-    },
+    baseURL: process.env.FRONTEND_URL || 'http://localhost:8130',
     actionTimeout: 10000,
     navigationTimeout: 15000,
     trace: 'on-first-retry',
@@ -33,7 +36,7 @@ export default defineConfig({
     storageState: {
       origins: [
         {
-          origin: process.env.FRONTEND_URL || 'https://w.198066.xyz',
+          origin: process.env.FRONTEND_URL || 'http://localhost:8130',
           localStorage: [
             { name: 'e2e-test-mode', value: 'true' },
           ],

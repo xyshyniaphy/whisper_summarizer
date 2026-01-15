@@ -1,10 +1,10 @@
 # Docker Compose for E2E Testing Against Production Server
 #
 # This setup runs E2E tests in a Docker container that:
-# 1. Uses SSH tunnel to connect to production server
-# 2. Routes browser traffic through SOCKS5 proxy (localhost:3480)
-# 3. Triggers localhost auth bypass on production server
-# 4. Tests against https://w.198066.xyz
+# 1. Uses SSH local port forwarding to bypass Cloudflare
+# 2. Forwards localhost:8130 → server:localhost:3080 (nginx)
+# 3. Server sees requests from 127.0.0.1 → triggers localhost auth bypass
+# 4. Tests against http://localhost:8130 (direct server access)
 
 services:
   e2e-test:
@@ -13,12 +13,10 @@ services:
       dockerfile: Dockerfile
     container_name: whisper_e2e_prd_test
     environment:
-      FRONTEND_URL: "${FRONTEND_URL:-https://w.198066.xyz}"
+      FRONTEND_URL: "${FRONTEND_URL:-http://localhost:8130}"
       PRODUCTION_SERVER: "${PRODUCTION_SERVER:-root@192.3.249.169}"
       SSH_KEY_PATH: "${SSH_KEY_PATH:-/root/.ssh/id_ed25519}"
       TEST_ENVIRONMENT: production
-      SUPABASE_URL: ${SUPABASE_URL}
-      SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
     volumes:
       - ./e2e:/app
       - ../data:/app/data
@@ -29,9 +27,5 @@ services:
       - /app/node_modules
     working_dir: /app
     command: /bin/sh -c "tail -f /dev/null"
-    networks:
-      - e2e_prd_network
-
-networks:
-  e2e_prd_network:
-    driver: bridge
+    # Use host network to access SSH tunnel on localhost:8130
+    network_mode: host

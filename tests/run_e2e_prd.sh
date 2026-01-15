@@ -8,21 +8,28 @@ BLUE='\033[0;34m'
 NC='\033[0m'
 
 PRODUCTION_SERVER="${PRODUCTION_SERVER:-root@192.3.249.169}"
-FRONTEND_URL="${FRONTEND_URL:-https://w.198066.xyz}"
-PROXY_PORT="${PROXY_PORT:-3480}"
+LOCAL_PORT="${LOCAL_PORT:-8130}"
+NGINX_PORT="${NGINX_PORT:-3080}"
 SSH_KEY="${SSH_KEY:-$HOME/.ssh/id_ed25519}"
+FRONTEND_URL="${FRONTEND_URL:-http://localhost:${LOCAL_PORT}}"
 
 show_help() {
-    echo -e "${BLUE}Production E2E Test Runner${NC}"
+    echo -e "${BLUE}Production E2E Test Runner (Direct SSH - Cloudflare Bypass)${NC}"
     echo ""
     echo "Usage: ./run_e2e_prd.sh [options] [test_pattern]"
     echo ""
     echo "Options:"
     echo "  -h, --help           Show this help message"
     echo "  -k, --grep PATTERN   Run tests matching pattern"
-    echo "  -p, --proxy PORT     SOCKS5 proxy port (default: 3480)"
+    echo "  -l, --local-port PORT Local port for SSH forward (default: 8130)"
+    echo "  -n, --nginx-port PORT Nginx port on server (default: 3080)"
     echo "  -s, --server SERVER  SSH server (default: root@192.3.249.169)"
-    echo "  -u, --url URL        Frontend URL (default: https://w.198066.xyz)"
+    echo "  -u, --url URL        Frontend URL (default: http://localhost:\${LOCAL_PORT})"
+    echo ""
+    echo "This script uses SSH local port forwarding to bypass Cloudflare:"
+    echo "  - Creates tunnel: localhost:${LOCAL_PORT} → server:localhost:${NGINX_PORT}"
+    echo "  - Tests access http://localhost:${LOCAL_PORT} directly"
+    echo "  - Server sees requests from 127.0.0.1 → auth bypass triggered"
     echo ""
 }
 
@@ -31,7 +38,8 @@ while [[ $# -gt 0 ]]; do
     case $1 in
         -h|--help) show_help; exit 0 ;;
         -k|--grep) TEST_PATTERN="$2"; shift 2 ;;
-        -p|--proxy) PROXY_PORT="$2"; shift 2 ;;
+        -l|--local-port) LOCAL_PORT="$2"; shift 2 ;;
+        -n|--nginx-port) NGINX_PORT="$2"; shift 2 ;;
         -s|--server) PRODUCTION_SERVER="$2"; shift 2 ;;
         -u|--url) FRONTEND_URL="$2"; shift 2 ;;
         *) TEST_PATTERN="$1"; shift ;;
@@ -51,15 +59,15 @@ fi
 echo -e "${BLUE}=== Production E2E Test Runner ===${NC}"
 echo "Frontend URL: ${FRONTEND_URL}"
 echo "Production Server: ${PRODUCTION_SERVER}"
-echo "Proxy Port: ${PROXY_PORT}"
+echo "SSH Port Forward: localhost:${LOCAL_PORT} → server:localhost:${NGINX_PORT}"
 echo "Test Pattern: ${TEST_PATTERN:-all tests}"
 echo ""
 
-echo -e "${YELLOW}Starting SSH tunnel...${NC}"
-ssh -i "$SSH_KEY" -D "$PROXY_PORT" -N -f -M -S /tmp/ssh-tunnel-e2e.sock \
+echo -e "${YELLOW}Starting SSH tunnel (local port forward)...${NC}"
+ssh -i "$SSH_KEY" -L "${LOCAL_PORT}:localhost:${NGINX_PORT}" -N -f -M -S /tmp/ssh-tunnel-e2e.sock \
     -o ExitOnForwardFailure=yes -o ServerAliveInterval=30 -o ServerAliveCountMax=3 \
     "$PRODUCTION_SERVER"
-echo -e "${GREEN}✓ SSH tunnel started (localhost:${PROXY_PORT})${NC}"
+echo -e "${GREEN}✓ SSH tunnel started (localhost:${LOCAL_PORT} → server:localhost:${NGINX_PORT})${NC}"
 
 cleanup() {
     echo -e "${YELLOW}Stopping SSH tunnel...${NC}"
@@ -71,15 +79,13 @@ trap cleanup EXIT
 
 echo -e "${BLUE}Running E2E tests...${NC}"
 export FRONTEND_URL="$FRONTEND_URL"
-export PROXY_SERVER="socks5://localhost:${PROXY_PORT}"
 export PRODUCTION_SERVER="$PRODUCTION_SERVER"
 
 TEST_CMD="bun run test"
 [ -n "$TEST_PATTERN" ] && TEST_CMD="$TEST_CMD -- --grep \"$TEST_PATTERN\""
 
-docker compose -f tests/docker-compose.e2e.prd.yml run --rm --network host \
+docker compose -f tests/docker-compose.e2e.prd.yml run --rm \
     -e FRONTEND_URL="$FRONTEND_URL" \
-    -e PROXY_SERVER="socks5://localhost:${PROXY_PORT}" \
     -e PRODUCTION_SERVER="$PRODUCTION_SERVER" \
     e2e-test sh -c "$TEST_CMD"
 

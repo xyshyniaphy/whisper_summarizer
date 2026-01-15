@@ -1,13 +1,15 @@
 ---
 name: test_prd
-description: Automated remote testing and debugging for production servers. SSH connects to remote server using id_ed25519 key, runs tests via docker exec, and applies intelligent fix-verify loop with UltraThink integration, Docker build/push, and Git commit/push.
+description: Automated backend API testing and debugging for production servers. SSH connects to remote server using id_ed25519 key, runs pytest tests via docker exec on the server, and applies intelligent fix-verify loop with UltraThink integration, Docker build/push, and Git commit/push. For browser-based E2E testing, use the E2E proxy infrastructure instead.
 ---
 
-# test_prd - Production Server Testing Skill
+# test_prd - Production Server Backend API Testing Skill
 
 ## Purpose
 
-Automates end-to-end testing and debugging workflow for remote production servers:
+Automates backend API testing and debugging workflow for remote production servers via SSH + docker exec:
+
+**Scope**: This skill runs **backend pytest tests** directly on the production server container. For browser-based end-to-end testing with Playwright, see the **E2E Testing** section below.
 
 1. Reads server configuration from `prd_server_info`
 2. Starts local test container (`tests/docker-compose.test.prd.yml`)
@@ -41,6 +43,70 @@ Use this skill when you need to:
 
 # Use custom config file
 /test_prd --config /path/to/prd_server_info
+```
+
+## Backend API Testing vs E2E Browser Testing
+
+This skill (**test_prd**) is for **backend API testing only**. It runs pytest tests directly on the production server container via SSH + docker exec.
+
+### When to use test_prd (Backend API Tests)
+- Testing FastAPI endpoints (`/api/transcriptions`, `/api/admin/*`, etc.)
+- Verifying database queries and ORM operations
+- Checking authentication and authorization logic
+- Validating business logic in services
+- Debugging server-side code issues
+
+### When to use E2E Browser Tests
+- Testing user workflows (login, upload, chat, playback)
+- Verifying UI interactions and navigation
+- Testing real user scenarios with browser automation
+- Validating frontend-backend integration
+- Checking authentication flows (OAuth, session management)
+
+### E2E Browser Testing Infrastructure
+
+For browser-based end-to-end testing, the project now has a **proxy-based E2E testing infrastructure**:
+
+```bash
+# Development E2E tests (against localhost)
+./run_test.sh e2e-dev              # Run all E2E tests
+./run_test.sh e2e-dev auth         # Run specific test pattern
+
+# Production E2E tests (via SSH tunnel + SOCKS5 proxy)
+./run_test.sh e2e-prd              # Run all E2E tests against production
+./run_test.sh e2e-prd -k auth      # Run specific test pattern
+```
+
+**How Production E2E Works**:
+- SSH tunnel creates SOCKS5 proxy (`ssh -D 3480`)
+- Playwright routes browser traffic through proxy
+- Requests appear from `127.0.0.1` on production server
+- Triggers localhost auth bypass → returns test user
+- No credentials hardcoded in tests
+
+**Documentation**: See `docs/e2e-testing-guide.md` for comprehensive E2E testing documentation.
+
+### Comparison
+
+| Aspect | test_prd (Backend) | E2E Browser Tests |
+|--------|-------------------|-------------------|
+| **Framework** | pytest | Playwright |
+| **Execution** | docker exec on server | Browser via SSH tunnel |
+| **Scope** | API endpoints, services | User workflows, UI |
+| **Speed** | Fast (direct API calls) | Slower (browser automation) |
+| **Auth Bypass** | localhost detection | SOCKS5 proxy routing |
+| **Test Location** | `tests/integration/` | `tests/e2e/` |
+
+### Combined Workflow
+
+For comprehensive testing, use both approaches:
+
+```bash
+# 1. Run backend API tests first (fast, catches server-side issues)
+/test_prd
+
+# 2. Then run E2E browser tests (slower, catches integration issues)
+./run_test.sh e2e-prd
 ```
 
 ## Input Parameters
@@ -307,6 +373,15 @@ jobs:
 ## Related Commands
 
 ```bash
+# Backend API testing (this skill)
+/test_prd                               # Full test cycle with fixes
+/test_prd --test-only                   # Tests only, no fixes
+
+# E2E browser testing (Playwright)
+./run_test.sh e2e-dev                   # Development E2E tests
+./run_test.sh e2e-prd                   # Production E2E tests (via SSH tunnel)
+./run_test.sh e2e-prd -k auth           # Run specific E2E test pattern
+
 # View production logs
 ./logs_prd.sh
 

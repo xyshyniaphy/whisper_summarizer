@@ -618,6 +618,11 @@ For sticky audio player, SRT navigation, auto-highlighting, and responsive desig
 
 **See:** `docs/e2e-testing-guide.md` for comprehensive E2E testing documentation
 
+**Backend API Testing vs E2E Browser Testing:**
+- **E2E Browser Tests** (above): Playwright browser automation testing user workflows
+- **Backend API Tests** (`/test_prd`): pytest tests running directly on server container via SSH + docker exec
+- Use E2E for UI/workflows, use `/test_prd` for API endpoints and services
+
 **Testing Patterns:**
 For Playwright testing patterns, file upload testing, auth token handling, and common patterns, use the **`/whisper-e2e`** skill:
 

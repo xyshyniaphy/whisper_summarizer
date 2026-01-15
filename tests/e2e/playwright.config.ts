@@ -34,7 +34,8 @@ export default defineConfig({
     // ベースURL (Docker Compose内のサービス名またはホストのアドレス)
     baseURL: process.env.FRONTEND_URL || 'http://frontend-test:3000',
 
-    // Optional SOCKS5 proxy (for production testing)
+    // Optional SOCKS5 proxy (legacy, not used for production anymore)
+    // Production now uses SSH local port forwarding instead
     ...(process.env.PROXY_SERVER ? {
       proxy: {
         server: process.env.PROXY_SERVER,
