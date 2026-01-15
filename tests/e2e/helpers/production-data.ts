@@ -71,9 +71,10 @@ export async function setupProductionTranscription(page: Page): Promise<string> 
   return transcriptionId
 }
 
-export async function cleanupProductionTranscription(page: Page): Promise<void> {
+export async function cleanupProductionTranscription(page?: Page): Promise<void> {
   // Note: We're using existing completed transcriptions, so no cleanup needed
   // Just remove the state file
+  // page parameter is optional (not used, kept for backward compatibility)
   if (!(await fileExists(STATE_FILE))) {
     console.log('[E2E Cleanup] No state file, skipping cleanup')
     return

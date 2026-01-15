@@ -15,10 +15,17 @@ import { test, expect } from '@playwright/test'
 import { setupProductionTranscription, cleanupProductionTranscription } from '../helpers/production-data'
 
 test.describe('Transcription Detail', () => {
-  let transcriptionId: string
+  let transcriptionId: string | undefined
 
   test.beforeEach(async ({ page }) => {
-    // Set e2e-test-mode flag (for frontend compatibility)
+    // Setup production test data (singleton pattern - only fetches once)
+    transcriptionId = await setupProductionTranscription(page)
+
+    // Validate transcriptionId is initialized
+    if (!transcriptionId) {
+      throw new Error('transcriptionId not initialized - setup failed')
+    }
+
     await page.goto('/login')
     await page.evaluate(() => {
       localStorage.setItem('e2e-test-mode', 'true')
@@ -31,17 +38,12 @@ test.describe('Transcription Detail', () => {
   })
 
   test.afterAll(async () => {
-    // Note: Can't use page fixture in afterAll
-    // Cleanup is handled by the production-data helper's singleton pattern
-    // and can be run manually via: rm /tmp/e2e-test-transcription.json
+    // Note: Cleanup is no-op since we use existing transcriptions
+    // The helper's singleton pattern prevents re-fetching
+    await cleanupProductionTranscription()
   })
 
   test('転写詳細ページが正常にレンダリングされる', async ({ page }) => {
-    // Setup production test data (only runs once due to singleton pattern)
-    // Increase timeout for production data fetch
-    test.slow()
-    transcriptionId = await setupProductionTranscription(page)
-
     // 転写詳細ページに遷移
     await page.goto(`/transcriptions/${transcriptionId}`)
 
@@ -196,7 +198,8 @@ test.describe('Transcription Detail', () => {
   })
 
   test('ローディング状態が表示される', async ({ page }) => {
-    // 遅延レスポンスをモック
+    // Note: This test mocks API response delay to test loading state
+    // We use mock here because production transcriptions load too quickly to test loading UI
     await page.route(`**/api/transcriptions/${transcriptionId}`, async route => {
       if (route.request().method() === 'GET') {
         await new Promise(resolve => setTimeout(resolve, 1000))
@@ -213,7 +216,8 @@ test.describe('Transcription Detail', () => {
   })
 
   test('エラー時にエラーメッセージが表示される', async ({ page }) => {
-    // エラーレスポンスをモック
+    // Note: This test mocks API error response to test error handling
+    // We use mock here because we can't easily trigger real 404 errors with production data
     await page.route(`**/api/transcriptions/${transcriptionId}`, async route => {
       if (route.request().method() === 'GET') {
         await route.fulfill({
@@ -234,6 +238,8 @@ test.describe('Transcription Detail', () => {
 })
 
 /**
- * Note: Mock routes removed - using real API calls with production data
- * Server-side auth bypass handles authentication without Google OAuth
+ * Production Data Notes:
+ * - Uses real API calls with production data (setupProductionTranscription helper)
+ * - Server-side auth bypass handles authentication without Google OAuth
+ * - Mock routes kept for loading/error tests (edge cases that are hard to trigger with real data)
  */
