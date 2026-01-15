@@ -1,0 +1,37 @@
+# Docker Compose for E2E Testing Against Production Server
+#
+# This setup runs E2E tests in a Docker container that:
+# 1. Uses SSH tunnel to connect to production server
+# 2. Routes browser traffic through SOCKS5 proxy (localhost:3480)
+# 3. Triggers localhost auth bypass on production server
+# 4. Tests against https://w.198066.xyz
+
+services:
+  e2e-test:
+    build:
+      context: ./e2e
+      dockerfile: Dockerfile
+    container_name: whisper_e2e_prd_test
+    environment:
+      FRONTEND_URL: "${FRONTEND_URL:-https://w.198066.xyz}"
+      PRODUCTION_SERVER: "${PRODUCTION_SERVER:-root@192.3.249.169}"
+      SSH_KEY_PATH: "${SSH_KEY_PATH:-/root/.ssh/id_ed25519}"
+      TEST_ENVIRONMENT: production
+      SUPABASE_URL: ${SUPABASE_URL}
+      SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
+    volumes:
+      - ./e2e:/app
+      - ../data:/app/data
+      - ../testdata:/app/testdata
+      - ~/.ssh/id_ed25519:/root/.ssh/id_ed25519:ro
+      - ~/.ssh/id_ed25519.pub:/root/.ssh/id_ed25519.pub:ro
+      - ~/.ssh/known_hosts:/root/.ssh/known_hosts:ro
+      - /app/node_modules
+    working_dir: /app
+    command: /bin/sh -c "tail -f /dev/null"
+    networks:
+      - e2e_prd_network
+
+networks:
+  e2e_prd_network:
+    driver: bridge
