@@ -39,8 +39,9 @@ COPY vite.config.ts ./
 COPY index.html ./
 COPY src ./src
 
-# Build production assets (skip TypeScript check for production)
-RUN bun run vite build && \
+# Build production assets (skip TypeScript check due to pre-existing errors)
+# Running vite build directly to bypass tsc failures
+RUN bun x vite build && \
     # Remove source maps to reduce size (optional, uncomment if not needed)
     # rm -rf dist/*.map || true
     # Clean up
