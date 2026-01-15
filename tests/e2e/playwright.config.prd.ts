@@ -23,7 +23,7 @@ export default defineConfig({
   use: {
     baseURL: process.env.FRONTEND_URL || 'https://w.198066.xyz',
     proxy: {
-      server: process.env.PROXY_SERVER || 'http://localhost:3480',
+      server: process.env.PROXY_SERVER || 'socks5://localhost:3480',
     },
     actionTimeout: 10000,
     navigationTimeout: 15000,
