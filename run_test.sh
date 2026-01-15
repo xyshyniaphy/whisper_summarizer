@@ -20,7 +20,9 @@ show_help() {
     echo "  build            テストイメージをビルド"
     echo "  backend          バックエンドテストのみ実行"
     echo "  frontend         フロントエンドテストのみ実行"
-    echo "  e2e              E2Eテストのみ実行"
+    echo "  e2e              E2Eテストのみ実行 (開発環境)"
+    echo "  e2e-dev          E2Eテストを開発環境で実行"
+    echo "  e2e-prd          E2Eテストを本番環境で実行 (SSHトンネル経由)"
     echo "  all              すべてのテストを実行（デフォルト）"
     echo "  clean            テストコンテナとボリュームをクリーンアップ"
     echo "  help             このヘルプメッセージを表示"
@@ -132,6 +134,12 @@ main() {
             ;;
         e2e)
             run_e2e_tests
+            ;;
+        e2e-dev)
+            bash tests/run_e2e_dev.sh "${2:-}"
+            ;;
+        e2e-prd)
+            bash tests/run_e2e_prd.sh "${@:2}"
             ;;
         all)
             run_all_tests
