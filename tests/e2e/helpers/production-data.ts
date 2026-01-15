@@ -1,7 +1,7 @@
 // tests/e2e/helpers/production-data.ts
 import { Page } from '@playwright/test'
 import path from 'path'
-import fs from 'fs'
+import fs from 'fs/promises'
 
 const STATE_FILE = '/tmp/e2e-test-transcription.json'
 const AUDIO_FILE = path.join(process.cwd(), 'testdata/2_min.m4a')
@@ -12,12 +12,33 @@ interface TranscriptionState {
   stage: string
 }
 
+interface UploadResponse {
+  id: string
+  status: string
+}
+
+interface TranscriptionResponse {
+  stage: string
+  error_message?: string
+}
+
 export async function setupProductionTranscription(page: Page): Promise<string> {
   // Check if already setup (singleton pattern)
-  if (fs.existsSync(STATE_FILE)) {
-    const state = JSON.parse(fs.readFileSync(STATE_FILE, 'utf-8')) as TranscriptionState
-    console.log(`[E2E Setup] Using existing transcription: ${state.id}`)
-    return state.id
+  if (await fileExists(STATE_FILE)) {
+    try {
+      const stateContent = await fs.readFile(STATE_FILE, 'utf-8')
+      const state = JSON.parse(stateContent) as TranscriptionState
+
+      // Validate state content
+      if (!state?.id) {
+        throw new Error('Invalid state file: missing id')
+      }
+
+      console.log(`[E2E Setup] Using existing transcription: ${state.id}`)
+      return state.id
+    } catch (error) {
+      throw new Error(`Failed to read state file: ${error instanceof Error ? error.message : 'Unknown error'}`)
+    }
   }
 
   console.log('[E2E Setup] Uploading 2_min.m4a to production...')
@@ -25,9 +46,14 @@ export async function setupProductionTranscription(page: Page): Promise<string> 
   // Get auth token
   const token = await getAuthToken(page)
 
+  // Check audio file exists
+  if (!(await fileExists(AUDIO_FILE))) {
+    throw new Error(`Audio file not found: ${AUDIO_FILE}`)
+  }
+
   // Upload audio file
   const formData = new FormData()
-  const fileBuffer = await fs.promises.readFile(AUDIO_FILE)
+  const fileBuffer = await fs.readFile(AUDIO_FILE)
   formData.append('file', new Blob([fileBuffer]), '2_min.m4a')
 
   const uploadResponse = await page.request.post('/api/audio/upload', {
@@ -39,7 +65,7 @@ export async function setupProductionTranscription(page: Page): Promise<string> 
     throw new Error(`Upload failed: ${uploadResponse.status()}`)
   }
 
-  const uploadData = await uploadResponse.json() as any
+  const uploadData = await uploadResponse.json() as UploadResponse
   const transcriptionId = uploadData.id
   console.log(`[E2E Setup] Uploaded transcription ID: ${transcriptionId}`)
 
@@ -53,45 +79,68 @@ export async function setupProductionTranscription(page: Page): Promise<string> 
     file_name: '2_min.m4a',
     stage: 'completed'
   }
-  fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2))
+  await fs.writeFile(STATE_FILE, JSON.stringify(state, null, 2))
 
   console.log('[E2E Setup] Transcription complete!')
   return transcriptionId
 }
 
 export async function cleanupProductionTranscription(page: Page): Promise<void> {
-  if (!fs.existsSync(STATE_FILE)) {
+  if (!(await fileExists(STATE_FILE))) {
     console.log('[E2E Cleanup] No state file, skipping cleanup')
     return
   }
 
-  const state = JSON.parse(fs.readFileSync(STATE_FILE, 'utf-8')) as TranscriptionState
-  console.log(`[E2E Cleanup] Deleting transcription: ${state.id}`)
+  try {
+    const stateContent = await fs.readFile(STATE_FILE, 'utf-8')
+    const state = JSON.parse(stateContent) as TranscriptionState
 
-  const token = await getAuthToken(page)
+    // Validate state content
+    if (!state?.id) {
+      console.error('[E2E Cleanup] Invalid state file: missing id')
+      await fs.unlink(STATE_FILE)
+      return
+    }
 
-  const deleteResponse = await page.request.delete(`/api/transcriptions/${state.id}`, {
-    headers: { 'Authorization': `Bearer ${token}` }
-  })
+    console.log(`[E2E Cleanup] Deleting transcription: ${state.id}`)
 
-  if (deleteResponse.status() === 204 || deleteResponse.status() === 200) {
-    console.log('[E2E Cleanup] Transcription deleted successfully')
-  } else {
-    console.error(`[E2E Cleanup] Delete failed: ${deleteResponse.status()}`)
+    const token = await getAuthToken(page)
+
+    const deleteResponse = await page.request.delete(`/api/transcriptions/${state.id}`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    })
+
+    if (deleteResponse.status() === 204 || deleteResponse.status() === 200) {
+      console.log('[E2E Cleanup] Transcription deleted successfully')
+    } else {
+      console.error(`[E2E Cleanup] Delete failed: ${deleteResponse.status()}`)
+    }
+  } catch (error) {
+    console.error(`[E2E Cleanup] Error: ${error instanceof Error ? error.message : 'Unknown error'}`)
+  } finally {
+    // Always remove state file
+    try {
+      await fs.unlink(STATE_FILE)
+    } catch {
+      // Ignore unlink errors
+    }
   }
-
-  // Remove state file
-  fs.unlinkSync(STATE_FILE)
 }
 
 async function getAuthToken(page: Page): Promise<string> {
-  return await page.evaluate(() => {
+  const token = await page.evaluate(() => {
     const keys = Object.keys(localStorage)
     const authKey = keys.find(k => k.startsWith('sb-') && k.includes('-auth-token'))
     if (!authKey) throw new Error('No auth token found')
     const tokenData = JSON.parse(localStorage.getItem(authKey)!)
     return tokenData?.currentSession?.access_token || tokenData?.access_token || ''
   })
+
+  if (!token) {
+    throw new Error('Auth token is empty')
+  }
+
+  return token
 }
 
 async function pollForCompletion(page: Page, token: string, transcriptionId: string): Promise<void> {
@@ -104,7 +153,7 @@ async function pollForCompletion(page: Page, token: string, transcriptionId: str
     })
 
     if (response.status() === 200) {
-      const data = await response.json() as any
+      const data = await response.json() as TranscriptionResponse
       process.stdout.write(`.`)  // Progress dot
 
       if (data.stage === 'completed') {
@@ -122,4 +171,13 @@ async function pollForCompletion(page: Page, token: string, transcriptionId: str
   }
 
   throw new Error('Transcription timeout: exceeded 10 minutes')
+}
+
+async function fileExists(filePath: string): Promise<boolean> {
+  try {
+    await fs.access(filePath)
+    return true
+  } catch {
+    return false
+  }
 }
