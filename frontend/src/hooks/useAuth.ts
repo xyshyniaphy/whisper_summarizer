@@ -17,25 +17,14 @@ import {
   type ExtendedUser,
 } from '../atoms/auth'
 import { api } from '../services/api'
+import { isE2ETestMode } from '../utils/e2e'
 
 interface AuthActions {
   signInWithGoogle: () => Promise<{ error: AuthError | null }>
   signOut: () => Promise<{ error: AuthError | null }>
 }
 
-// E2Eテストモードチェック
-const isE2ETestMode = () => {
-  // ビルド時の環境変数をチェック
-  if (import.meta.env.VITE_E2E_TEST_MODE === 'true') {
-    return true
-  }
-  // 実行時のlocalStorageをチェック（Playwrightなどから設定可能）
-  try {
-    return localStorage.getItem('e2e-test-mode') === 'true'
-  } catch {
-    return false
-  }
-}
+// E2E test mode check now uses centralized utility from '../utils/e2e'
 
 // Unit test mode check (for Vitest unit tests)
 // Detect if we're in a test environment by checking for Vitest globals
@@ -179,21 +168,15 @@ export function useAuth(): [
 
   // E2E test mode initialization (runs before browser paint)
   useLayoutEffect(() => {
-    // Check if E2E test mode is enabled via localStorage
-    const isE2EMode = typeof window !== 'undefined' && localStorage.getItem('e2e-test-mode') === 'true'
+    // Check if E2E test mode is enabled via utility (includes localhost safety check)
+    const isE2EMode = isE2ETestMode()
 
     if (isE2EMode && !e2eInitializedRef.current) {
-      const isProduction = window.location.hostname === 'w.198066.xyz'
-
       const testUser: ExtendedUser = {
-        id: isProduction
-          ? 'e2e-prod-user-id'  // Unique ID for production E2E testing
-          : 'fc47855d-6973-4931-b6fd-bd28515bec0d',  // Dev E2E user ID
+        id: 'e2e-prod-user-id',  // Unique ID for production E2E testing
         aud: 'authenticated',
         role: 'authenticated',
-        email: isProduction
-          ? 'lmr@lmr.com'  // Hardcoded production E2E test user
-          : 'test@example.com',
+        email: 'lmr@lmr.com',  // Hardcoded production E2E test user
         email_confirmed_at: new Date().toISOString(),
         phone: '',
         updated_at: new Date().toISOString(),
