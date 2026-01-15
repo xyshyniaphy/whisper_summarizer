@@ -1,5 +1,6 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth } from './hooks/useAuth'
+import { isE2ETestMode } from './utils/e2e'
 import { NavBar } from './components/NavBar'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
@@ -30,6 +31,12 @@ function ProtectedRoute({ children, requireAdmin = false }: { children: React.Re
                 <div className="text-gray-600 dark:text-gray-400">Loading...</div>
             </div>
         )
+    }
+
+    // E2E test mode bypass: skip auth check when running E2E tests
+    // Only activates on localhost with e2e-test-mode flag (defense-in-depth)
+    if (isE2ETestMode()) {
+        return <ProtectedLayout>{children}</ProtectedLayout>
     }
 
     if (!user) {
