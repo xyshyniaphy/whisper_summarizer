@@ -259,5 +259,60 @@ test.describe('Chat Interface', () => {
     // ローディングスピナーが表示されることを確認
     await expect(page.locator('[data-testid="chat-loading"]')).toBeVisible()
   })
+
+  test('送信ボタンは空テキストでクリックできない', async ({ page }) => {
+    await page.goto(`/transcriptions/${transcriptionId!}`)
+
+    const input = page.locator(MESSAGE_INPUT_SELECTOR)
+    const sendButton = page.locator('button:has-text("发送")')
+
+    // Initially should be disabled or empty
+    await expect(input).toBeVisible()
+    await expect(sendButton).toBeVisible()
+
+    // Don't type anything, button should be disabled
+    await expect(sendButton).toBeDisabled()
+  })
+
+  test('二重クリックでメッセージが重複送信されない', async ({ page }) => {
+    await page.goto(`/transcriptions/${transcriptionId!}`)
+
+    const input = page.locator(MESSAGE_INPUT_SELECTOR)
+    const sendButton = page.locator('button:has-text("发送")')
+
+    await input.fill('テストメッセージ')
+
+    // Double-click the send button rapidly
+    await sendButton.click()
+    await sendButton.click()
+
+    // Wait a moment
+    await page.waitForTimeout(1000)
+
+    // Should only see one message in the list
+    const messages = page.locator(`text=テストメッセージ`)
+    const count = await messages.count()
+    expect(count).toBe(1)
+  })
+
+  test('送信中に送信ボタンをクリックしても無視される', async ({ page }) => {
+    await page.goto(`/transcriptions/${transcriptionId!}`)
+
+    const input = page.locator(MESSAGE_INPUT_SELECTOR)
+    const sendButton = page.locator('button:has-text("发送")')
+
+    await input.fill('遅いレスポンステスト')
+
+    // Send first message
+    await sendButton.click()
+
+    // Immediately try to click again while sending
+    await page.waitForTimeout(100)
+    await sendButton.click()
+
+    // Should still only be one message
+    const messages = await page.locator(`text=遅いレスポンステスト`).count()
+    expect(messages).toBe(1)
+  })
 })
 
