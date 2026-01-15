@@ -10,16 +10,31 @@ import { renderHook, waitFor, act } from '@testing-library/react'
 import { Provider } from 'jotai'
 import { useAuth } from '../../../src/hooks/useAuth'
 
-// Mock localStorage
-const localStorageMock = {
-  getItem: vi.fn(() => null),
-  setItem: vi.fn(),
-  clear: vi.fn(),
-  removeItem: vi.fn(),
-  length: 0,
-  key: vi.fn()
-}
-global.localStorage = localStorageMock as Storage
+// Mock localStorage - needs to be defined before tests
+const localStorageMock = (() => {
+  let store: Record<string, string> = {}
+  return {
+    getItem: vi.fn((key: string) => store[key] || null),
+    setItem: vi.fn((key: string, value: string) => {
+      store[key] = value.toString()
+    }),
+    clear: vi.fn(() => {
+      store = {}
+    }),
+    removeItem: vi.fn((key: string) => {
+      delete store[key]
+    }),
+    length: 0,
+    key: vi.fn((index: number) => Object.keys(store)[index] || null),
+  }
+})()
+
+// Setup global localStorage
+Object.defineProperty(global, 'localStorage', {
+  value: localStorageMock,
+  writable: true,
+  configurable: true,
+})
 
 const wrapper = ({ children }: { children: React.ReactNode }) => (
   <Provider>{children}</Provider>
@@ -28,6 +43,8 @@ const wrapper = ({ children }: { children: React.ReactNode }) => (
 describe('useAuth', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    // Clear localStorage store
+    localStorageMock.clear()
     // Reset environment variable
     process.env.VITE_E2E_TEST_MODE = 'false'
   })
@@ -118,6 +135,91 @@ describe('useAuth', () => {
       await waitFor(() => {
         // Test passes if no errors are thrown during initialization
         expect(true).toBe(true)
+      })
+    })
+
+    describe('Production E2E Mode', () => {
+      const originalLocation = window.location
+
+      afterEach(() => {
+        // Restore original location
+        Object.defineProperty(window, 'location', {
+          value: originalLocation,
+          writable: true,
+          configurable: true,
+        })
+        // Clear localStorage flag
+        vi.mocked(localStorageMock.getItem).mockReturnValue(null)
+      })
+
+      it('本番環境(w.198066.xyz)でlmr@lmr.comユーザーが使用されること', async () => {
+        // Mock production hostname
+        Object.defineProperty(window, 'location', {
+          value: { hostname: 'w.198066.xyz' },
+          writable: true,
+          configurable: true,
+        })
+
+        // Set E2E test mode via localStorage
+        localStorageMock.getItem.mockReturnValue('true')
+
+        const { result } = renderHook(() => useAuth(), { wrapper })
+
+        await waitFor(() => {
+          const [state] = result.current
+          expect(state.user).toBeDefined()
+          expect(state.user?.email).toBe('lmr@lmr.com')
+          expect(state.user?.id).toBe('e2e-prod-user-id')
+          expect(state.is_admin).toBe(true)
+          expect(state.is_active).toBe(true)
+          expect(state.loading).toBe(false)
+        })
+      })
+
+      it('開発環境でtest@example.comユーザーが使用されること', async () => {
+        // Mock development hostname
+        Object.defineProperty(window, 'location', {
+          value: { hostname: 'localhost' },
+          writable: true,
+          configurable: true,
+        })
+
+        // Set E2E test mode via localStorage
+        localStorageMock.getItem.mockReturnValue('true')
+
+        const { result } = renderHook(() => useAuth(), { wrapper })
+
+        await waitFor(() => {
+          const [state] = result.current
+          expect(state.user).toBeDefined()
+          expect(state.user?.email).toBe('test@example.com')
+          expect(state.user?.id).toBe('fc47855d-6973-4931-b6fd-bd28515bec0d')
+          expect(state.is_admin).toBe(true)
+          expect(state.is_active).toBe(true)
+          expect(state.loading).toBe(false)
+        })
+      })
+
+      it('E2EモードでauthActionsが利用可能であること', async () => {
+        // Mock production hostname
+        Object.defineProperty(window, 'location', {
+          value: { hostname: 'w.198066.xyz' },
+          writable: true,
+          configurable: true,
+        })
+
+        // Set E2E test mode via localStorage
+        localStorageMock.getItem.mockReturnValue('true')
+
+        const { result } = renderHook(() => useAuth(), { wrapper })
+
+        await waitFor(() => {
+          const [, actions] = result.current
+          expect(actions.signInWithGoogle).toBeDefined()
+          expect(actions.signOut).toBeDefined()
+          expect(typeof actions.signInWithGoogle).toBe('function')
+          expect(typeof actions.signOut).toBe('function')
+        })
       })
     })
   })

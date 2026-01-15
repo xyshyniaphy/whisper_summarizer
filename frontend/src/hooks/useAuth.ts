@@ -4,7 +4,7 @@
  * Google OAuthのみをサポートしています。
  */
 
-import { useEffect, useCallback } from 'react'
+import { useEffect, useLayoutEffect, useCallback, useRef } from 'react'
 import { User, Session, AuthError } from '@supabase/supabase-js'
 import { useAtom } from 'jotai'
 import { supabase } from '../services/supabase'
@@ -119,7 +119,112 @@ export function useAuth(): [
   const [isActive, setIsActive] = useAtom(isActiveAtom)
   const [loading, setLoading] = useAtom(loadingAtom)
 
+  // Track if E2E initialization has already happened
+  const e2eInitializedRef = useRef(false)
+
+  // Auth actions
+  const signInWithGoogle = useCallback(async () => {
+    if (isE2ETestMode()) {
+      setUser(mockUser as ExtendedUser)
+      setRole('user')
+      setIsActive(true)
+      return { error: null }
+    }
+
+    if (!supabase) {
+      return { error: { name: 'SupabaseError', message: 'Supabase client not initialized' } as AuthError }
+    }
+
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: `${import.meta.env.VITE_PUBLIC_URL || window.location.origin}/dashboard`,
+        queryParams: {
+          access_type: 'offline',
+          prompt: 'consent',
+        },
+        scopes: 'email',
+      },
+    })
+
+    return { error }
+  }, [])
+
+  const signOut = useCallback(async () => {
+    if (isE2ETestMode()) {
+      setUser(null)
+      setSession(null)
+      setRole(null)
+      setIsActive(false)
+      return { error: null }
+    }
+
+    if (!supabase) {
+      setUser(null)
+      setSession(null)
+      setRole(null)
+      setIsActive(false)
+      return { error: null }
+    }
+
+    const { error } = await supabase.auth.signOut()
+    setUser(null)
+    setSession(null)
+    setRole(null)
+    setIsActive(false)
+    return { error }
+  }, [setUser, setSession, setRole, setIsActive])
+
+  const authActions: AuthActions = { signInWithGoogle, signOut }
+
+  // E2E test mode initialization (runs before browser paint)
+  useLayoutEffect(() => {
+    // Check if E2E test mode is enabled via localStorage
+    const isE2EMode = typeof window !== 'undefined' && localStorage.getItem('e2e-test-mode') === 'true'
+
+    if (isE2EMode && !e2eInitializedRef.current) {
+      const isProduction = window.location.hostname === 'w.198066.xyz'
+
+      const testUser: ExtendedUser = {
+        id: isProduction
+          ? 'e2e-prod-user-id'  // Unique ID for production E2E testing
+          : 'fc47855d-6973-4931-b6fd-bd28515bec0d',  // Dev E2E user ID
+        aud: 'authenticated',
+        role: 'authenticated',
+        email: isProduction
+          ? 'lmr@lmr.com'  // Hardcoded production E2E test user
+          : 'test@example.com',
+        email_confirmed_at: new Date().toISOString(),
+        phone: '',
+        updated_at: new Date().toISOString(),
+        created_at: new Date().toISOString(),
+        user_metadata: {
+          role: 'admin',
+          provider: 'google',
+          auth_bypass: true,
+          e2e_mode: true,
+        },
+        app_metadata: {},
+        is_active: true,
+        is_admin: true,
+      }
+
+      // Initialize atoms with test user (only once)
+      setUser(testUser)
+      setSession({} as Session)
+      setRole('admin')
+      setIsActive(true)
+      setLoading(false)
+      e2eInitializedRef.current = true
+    }
+  }, [setUser, setSession, setRole, setIsActive, setLoading])
+
   useEffect(() => {
+    // Skip if E2E mode was already initialized
+    if (e2eInitializedRef.current) {
+      return
+    }
+
     // E2EテストモードまたはUnitテストモードの場合は自動ログインしない（auth呼び出しをモックするだけ）
     if (isE2ETestMode() || isUnitTestMode()) {
       setLoading(false)
@@ -256,62 +361,8 @@ export function useAuth(): [
     return () => subscription.unsubscribe()
   }, [setUser, setSession, setRole, setIsActive, setLoading])
 
-  // Google OAuthサインイン
-  const signInWithGoogle = useCallback(async () => {
-    if (isE2ETestMode()) {
-      setUser(mockUser as ExtendedUser)
-      setRole('user')
-      setIsActive(true)
-      return { error: null }
-    }
-
-    if (!supabase) {
-      return { error: { name: 'SupabaseError', message: 'Supabase client not initialized' } as AuthError }
-    }
-
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: `${import.meta.env.VITE_PUBLIC_URL || window.location.origin}/dashboard`,
-        queryParams: {
-          access_type: 'offline',
-          prompt: 'consent',
-        },
-        scopes: 'email',
-      },
-    })
-
-    return { error }
-  }, [])
-
-  // サインアウト
-  const signOut = useCallback(async () => {
-    if (isE2ETestMode()) {
-      setUser(null)
-      setSession(null)
-      setRole(null)
-      setIsActive(false)
-      return { error: null }
-    }
-
-    if (!supabase) {
-      setUser(null)
-      setSession(null)
-      setRole(null)
-      setIsActive(false)
-      return { error: null }
-    }
-
-    const { error } = await supabase.auth.signOut()
-    setUser(null)
-    setSession(null)
-    setRole(null)
-    setIsActive(false)
-    return { error }
-  }, [setUser, setSession, setRole, setIsActive])
-
   return [
     { user, session, loading, role, is_active: isActive, is_admin: role === 'admin' },
-    { signInWithGoogle, signOut },
+    authActions,
   ]
 }
