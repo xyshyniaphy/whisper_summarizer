@@ -593,16 +593,41 @@ For sticky audio player, SRT navigation, auto-highlighting, and responsive desig
 
 ## E2E Testing
 
+**Development E2E:**
+```bash
+./run_test.sh e2e-dev              # Run all E2E tests against dev
+./run_test.sh e2e-dev auth         # Run specific test pattern
+```
+
+**Production E2E:**
+```bash
+./run_test.sh e2e-prd              # Run all E2E tests against production
+./run_test.sh e2e-prd -k auth      # Run specific test pattern
+```
+
+**How Production E2E Works:**
+- SSH tunnel creates SOCKS5 proxy (`ssh -D 3480`)
+- Playwright routes traffic through proxy
+- Requests appear from `127.0.0.1` on production server
+- Triggers localhost auth bypass → returns `lmr@lmr.com` test user
+
+**Prerequisites for Production E2E:**
+- SSH key: `~/.ssh/id_ed25519`
+- Production access: `root@192.3.249.169`
+- URL: `https://w.198066.xyz`
+
+**See:** `docs/e2e-testing-guide.md` for comprehensive E2E testing documentation
+
+**Testing Patterns:**
 For Playwright testing patterns, file upload testing, auth token handling, and common patterns, use the **`/whisper-e2e`** skill:
 
 ```bash
 /whisper-e2e
 ```
 
-**Quick Reference**:
+**Quick Reference:**
 - **File Upload**: NEVER click buttons - use direct API calls with auth tokens
 - **Auth**: `getAuthToken()` helper from localStorage
-- **Commands**: `./run_test.sh e2e` (requires dev env running)
 - **Helpers**: `uploadFileViaAPI()`, `waitForTranscription()`
 
 ## Important Notes
