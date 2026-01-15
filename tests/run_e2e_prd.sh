@@ -70,12 +70,21 @@ ssh -i "$SSH_KEY" -L "${LOCAL_PORT}:localhost:${NGINX_PORT}" -N -f -M -S /tmp/ss
 echo -e "${GREEN}✓ SSH tunnel started (localhost:${LOCAL_PORT} → server:localhost:${NGINX_PORT})${NC}"
 
 cleanup() {
-    echo -e "${YELLOW}Stopping SSH tunnel...${NC}"
+    echo -e "${YELLOW}Cleaning up...${NC}"
+
+    # Stop SSH tunnel
     ssh -S /tmp/ssh-tunnel-e2e.sock -O exit dummy 2>/dev/null || true
     rm -f /tmp/ssh-tunnel-e2e.sock
     echo -e "${GREEN}✓ SSH tunnel stopped${NC}"
+
+    # Cleanup test transcription state file
+    if [ -f "/tmp/e2e-test-transcription.json" ]; then
+        echo -e "${YELLOW}Cleaning up test transcription state...${NC}"
+        rm -f /tmp/e2e-test-transcription.json
+        echo -e "${GREEN}✓ Test transcription state removed${NC}"
+    fi
 }
-trap cleanup EXIT
+trap cleanup EXIT INT TERM
 
 echo -e "${BLUE}Running E2E tests...${NC}"
 export FRONTEND_URL="$FRONTEND_URL"
