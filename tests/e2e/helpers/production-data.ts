@@ -4,7 +4,7 @@ import path from 'path'
 import fs from 'fs'
 
 const STATE_FILE = '/tmp/e2e-test-transcription.json'
-const AUDIO_FILE = path.join(process.cwd(), '../../testdata/2_min.m4a')
+const AUDIO_FILE = path.join(process.cwd(), 'testdata/2_min.m4a')
 
 interface TranscriptionState {
   id: string
@@ -116,6 +116,9 @@ async function pollForCompletion(page: Page, token: string, transcriptionId: str
         throw new Error(`Transcription failed: ${data.error_message || 'Unknown error'}`)
       }
     }
+
+    // Wait before next poll
+    await new Promise(resolve => setTimeout(resolve, interval))
   }
 
   throw new Error('Transcription timeout: exceeded 10 minutes')
