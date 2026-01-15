@@ -34,6 +34,13 @@ export default defineConfig({
     // ベースURL (Docker Compose内のサービス名またはホストのアドレス)
     baseURL: process.env.FRONTEND_URL || 'http://frontend-test:3000',
 
+    // Optional SOCKS5 proxy (for production testing)
+    ...(process.env.PROXY_SERVER ? {
+      proxy: {
+        server: process.env.PROXY_SERVER,
+      },
+    } : {}),
+
     // アクションタイムアウト (click, fill etc.)
     actionTimeout: 10000,
     // ナビゲーションタイムアウト
