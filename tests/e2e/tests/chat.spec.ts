@@ -24,7 +24,13 @@ test.describe('Chat Interface', () => {
     // Set e2e-test-mode flag (for frontend compatibility)
     await page.goto('/login')
     await page.evaluate(() => {
-      localStorage.setItem('e2e-test-mode', 'true')
+      // Safety check: this only works when accessing via localhost
+      if (window.location.hostname === 'localhost' ||
+          window.location.hostname === '127.0.0.1') {
+        localStorage.setItem('e2e-test-mode', 'true')
+      } else {
+        console.warn('[E2E] Cannot enable test mode on non-localhost hostname')
+      }
     })
     await page.reload()
 
