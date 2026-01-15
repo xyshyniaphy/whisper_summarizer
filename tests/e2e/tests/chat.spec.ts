@@ -8,11 +8,19 @@
 import { test, expect } from '@playwright/test'
 import { setupProductionTranscription, cleanupProductionTranscription } from '../helpers/production-data'
 
+// Constant for message input selector (standardized across all tests)
+const MESSAGE_INPUT_SELECTOR = 'textarea[placeholder*="入消息"]'
+
 test.describe('Chat Interface', () => {
   // Shared transcription ID across tests (set by first test)
   let transcriptionId: string | undefined
 
   test.beforeEach(async ({ page }) => {
+    // Validate transcriptionId is initialized (prevents flakiness if first test is skipped)
+    if (!transcriptionId) {
+      throw new Error('transcriptionId not initialized - run first test to setup production data')
+    }
+
     // Set e2e-test-mode flag (for frontend compatibility)
     await page.goto('/login')
     await page.evaluate(() => {
@@ -61,7 +69,13 @@ test.describe('Chat Interface', () => {
     // チャットインターフェースが表示されることを確認
     // Note: Chat interface might not be on all pages, check if it exists
     const chatInterface = page.locator('[data-testid="chat-interface"], .chat-interface, [class*="chat"]')
-    const isVisible = await chatInterface.isVisible().catch(() => false)
+    let isVisible: boolean
+    try {
+      isVisible = await chatInterface.isVisible({ timeout: 5000 })
+    } catch (error) {
+      // Only catch timeout/element not found errors
+      isVisible = false
+    }
     console.log('Chat interface visible:', isVisible)
 
     if (isVisible) {
@@ -76,7 +90,7 @@ test.describe('Chat Interface', () => {
     await page.goto(`/transcriptions/${transcriptionId!}`)
 
     // メッセージ入力ボックスが表示されることを確認
-    const input = page.locator('textarea[placeholder*="输入消息"]')
+    const input = page.locator(MESSAGE_INPUT_SELECTOR)
     await expect(input).toBeVisible()
   })
 
@@ -84,7 +98,7 @@ test.describe('Chat Interface', () => {
     await page.goto(`/transcriptions/${transcriptionId!}`)
 
     // メッセージを入力
-    const input = page.locator('textarea[placeholder*="输入消息"]')
+    const input = page.locator(MESSAGE_INPUT_SELECTOR)
     await input.fill('この転写について説明してください')
 
     // 送信ボタンをクリック
@@ -98,7 +112,7 @@ test.describe('Chat Interface', () => {
     await page.goto(`/transcriptions/${transcriptionId!}`)
 
     // メッセージを入力して送信
-    const input = page.locator('textarea[placeholder*="入消息"]')
+    const input = page.locator(MESSAGE_INPUT_SELECTOR)
     await input.fill('テストメッセージ')
     await page.click('button:has-text("发送")')
 
@@ -110,7 +124,7 @@ test.describe('Chat Interface', () => {
     await page.goto(`/transcriptions/${transcriptionId!}`)
 
     // メッセージを送信
-    const input = page.locator('textarea[placeholder*="入消息"]')
+    const input = page.locator(MESSAGE_INPUT_SELECTOR)
     await input.fill('この転写の要点は何ですか？')
     await page.click('button:has-text("发送")')
 
@@ -122,7 +136,7 @@ test.describe('Chat Interface', () => {
     await page.goto(`/transcriptions/${transcriptionId!}`)
 
     // メッセージを送信
-    const input = page.locator('textarea[placeholder*="入消息"]')
+    const input = page.locator(MESSAGE_INPUT_SELECTOR)
     await input.fill('最初のメッセージ')
     await page.click('button:has-text("发送")')
 
@@ -137,7 +151,7 @@ test.describe('Chat Interface', () => {
     await page.goto(`/transcriptions/${transcriptionId!}`)
 
     // メッセージを送信
-    const input = page.locator('textarea[placeholder*="入消息"]')
+    const input = page.locator(MESSAGE_INPUT_SELECTOR)
     await input.fill('クリアされるメッセージ')
     await page.click('button:has-text("发送")')
     await expect(page.locator('text=クリアされるメッセージ')).toBeVisible()
@@ -170,7 +184,7 @@ test.describe('Chat Interface', () => {
     })
 
     // メッセージを送信
-    const input = page.locator('textarea[placeholder*="入消息"]')
+    const input = page.locator(MESSAGE_INPUT_SELECTOR)
     await input.fill('ストリーミングテスト')
     await page.click('button:has-text("发送")')
 
@@ -185,7 +199,7 @@ test.describe('Chat Interface', () => {
 
     // 最初の転写でチャット
     await page.goto(`/transcriptions/${transcriptionId!}`)
-    const input1 = page.locator('textarea[placeholder*="入消息"]')
+    const input1 = page.locator(MESSAGE_INPUT_SELECTOR)
     await input1.fill('最初のメッセージ')
     await page.click('button:has-text("发送")')
 
@@ -211,7 +225,7 @@ test.describe('Chat Interface', () => {
     await page.goto(`/transcriptions/${transcriptionId!}`)
 
     // メッセージを送信（正常ケース）
-    const input = page.locator('textarea[placeholder*="入消息"]')
+    const input = page.locator(MESSAGE_INPUT_SELECTOR)
     await input.fill('エラーテスト')
     await page.click('button:has-text("发送")')
 
@@ -223,7 +237,7 @@ test.describe('Chat Interface', () => {
     await page.goto(`/transcriptions/${transcriptionId!}`)
 
     // メッセージを入力
-    const input = page.locator('textarea[placeholder*="入消息"]')
+    const input = page.locator(MESSAGE_INPUT_SELECTOR)
     await input.fill('テストメッセージ')
 
     // 送信ボタンをクリック
@@ -238,7 +252,7 @@ test.describe('Chat Interface', () => {
     await page.goto(`/transcriptions/${transcriptionId!}`)
 
     // メッセージを送信
-    const input = page.locator('textarea[placeholder*="入消息"]')
+    const input = page.locator(MESSAGE_INPUT_SELECTOR)
     await input.fill('ローディングテスト')
     await page.click('button:has-text("发送")')
 
