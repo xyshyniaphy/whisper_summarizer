@@ -77,7 +77,7 @@ export PRODUCTION_SERVER="$PRODUCTION_SERVER"
 TEST_CMD="bun run test"
 [ -n "$TEST_PATTERN" ] && TEST_CMD="$TEST_CMD -- --grep \"$TEST_PATTERN\""
 
-docker compose -f tests/docker-compose.e2e.prd.yml run --rm \
+docker compose -f tests/docker-compose.e2e.prd.yml run --rm --network host \
     -e FRONTEND_URL="$FRONTEND_URL" \
     -e PROXY_SERVER="socks5://localhost:${PROXY_PORT}" \
     -e PRODUCTION_SERVER="$PRODUCTION_SERVER" \
