@@ -47,7 +47,14 @@ def is_localhost_request(request: Request) -> bool:
     1. X-Forwarded-For header (Cloudflare, nginx proxy)
     2. X-Real-IP header (nginx)
     3. CF-Connecting-IP header (Cloudflare)
-    4. client.host (direct connection)
+    4. client.host (direct connection, SSH tunnels)
+
+    SSH Tunnel Support:
+        When using SSH tunnel with SOCKS5 proxy (e.g., ssh -D 3480),
+        traffic emerges from the destination server as 127.0.0.1,
+        triggering the client.host check below. This enables E2E
+        testing against production servers without exposing the
+        auth bypass to external requests.
 
     Args:
         request: FastAPI Request object
@@ -63,6 +70,11 @@ def is_localhost_request(request: Request) -> bool:
 
         >>> # Via nginx proxy
         >>> request.headers = {"x-real-ip": "127.0.0.1"}
+        >>> is_localhost_request(request)
+        True
+
+        >>> # Via SSH tunnel (SOCKS5 proxy)
+        >>> request.client.host = "127.0.0.1"
         >>> is_localhost_request(request)
         True
 
