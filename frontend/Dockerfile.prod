@@ -63,6 +63,8 @@ COPY nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=builder /app/dist /usr/share/nginx/html
 
 # Copy entrypoint script for runtime configuration
+# Remove existing entrypoint symlink first, then copy our custom one
+RUN rm -f /docker-entrypoint.sh
 COPY entrypoint.sh /docker-entrypoint.sh
 RUN chmod +x /docker-entrypoint.sh
 

@@ -17,6 +17,7 @@ services:
       PRODUCTION_SERVER: "${PRODUCTION_SERVER:-root@192.3.249.169}"
       SSH_KEY_PATH: "${SSH_KEY_PATH:-/root/.ssh/id_ed25519}"
       TEST_ENVIRONMENT: production
+      SUPABASE_SERVICE_ROLE_KEY: "${SUPABASE_SERVICE_ROLE_KEY:-sb_secret_tyVEUssAuqX_Ndte6R2GQg_z2kjnLvN}"
     volumes:
       - ./e2e:/app
       - ../data:/app/data

@@ -5,8 +5,15 @@
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Whisper Summarizer</title>
-    <!-- Runtime configuration (generated at container startup) -->
-    <script src="/config.js"></script>
+    <!-- Runtime configuration (injected at container startup from environment variables) -->
+    <script>
+    window.config = {
+      VITE_SUPABASE_URL: '${VITE_SUPABASE_URL}',
+      VITE_SUPABASE_ANON_KEY: '${VITE_SUPABASE_ANON_KEY}',
+      VITE_BACKEND_URL: '${VITE_BACKEND_URL:-/api}'
+    };
+    console.log('[config] Runtime configuration loaded');
+    </script>
   </head>
   <body>
     <div id="root"></div>

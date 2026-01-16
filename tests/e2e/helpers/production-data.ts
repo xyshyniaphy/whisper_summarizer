@@ -45,6 +45,7 @@ export async function setupProductionTranscription(page: Page): Promise<string> 
 
   // Use an existing completed transcription instead of uploading new one
   // (Production server doesn't have a runner running, so new uploads won't be processed)
+  // Server-side localhost auth bypass will handle authentication (requests come via SSH tunnel)
   const response = await page.request.get('/api/transcriptions?stage=completed&page=1&page_size=1')
 
   if (response.status() !== 200) {
