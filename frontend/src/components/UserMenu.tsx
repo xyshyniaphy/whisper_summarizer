@@ -52,6 +52,7 @@ export function UserMenu({ className = '' }: UserMenuProps) {
         className="flex items-center gap-2 px-3 py-2 rounded-lg text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800 transition-colors"
         aria-label="用户菜单"
         aria-expanded={isOpen}
+        data-testid="user-menu"
       >
         <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white text-sm font-medium">
           {initials}
@@ -62,7 +63,9 @@ export function UserMenu({ className = '' }: UserMenuProps) {
       </button>
 
       {isOpen && (
-        <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-50">
+        <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-50"
+          data-testid="user-menu-dropdown"
+        >
           <div className="px-4 py-3 border-b border-gray-200 dark:border-gray-700">
             <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
               {displayName}
