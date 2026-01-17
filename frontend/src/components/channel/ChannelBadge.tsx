@@ -1,5 +1,3 @@
-import { Badge } from '../ui/Badge'
-
 export interface Channel {
   id: string
   name: string
@@ -34,6 +32,7 @@ export function ChannelBadge({
     return (
       <span
         className={`inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 ${className}`}
+        data-testid="channel-badge"
       >
         个人
       </span>
@@ -47,6 +46,7 @@ export function ChannelBadge({
         onClick={onClick}
         className={`inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-colors ${onClick ? 'cursor-pointer' : ''} ${className}`}
         title={channels[0].description || channels[0].name}
+        data-testid="channel-badge"
       >
         {channels[0].name}
       </button>
@@ -56,7 +56,7 @@ export function ChannelBadge({
   // Multiple channels
   if (channels.length <= maxDisplay) {
     return (
-      <div className={`inline-flex items-center gap-1 flex-wrap ${className}`}>
+      <div className={`inline-flex items-center gap-1 flex-wrap ${className}`} data-testid="channel-badge">
         {channels.map((channel) => (
           <button
             key={channel.id}
@@ -77,6 +77,7 @@ export function ChannelBadge({
       onClick={onClick}
       className={`inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 hover:bg-purple-200 dark:hover:bg-purple-900/50 transition-colors ${onClick ? 'cursor-pointer' : ''} ${className}`}
       title={channels.map(c => c.name).join(', ')}
+      data-testid="channel-badge"
     >
       {channels.length} 个频道
     </button>
