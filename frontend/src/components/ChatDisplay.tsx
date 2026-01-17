@@ -66,7 +66,7 @@ export function ChatDisplay({
 
     // Messages display
     return (
-        <div className={`space-y-4 max-h-[400px] overflow-y-auto ${className}`}>
+        <div className={`space-y-4 max-h-[400px] overflow-y-auto ${className}`} data-testid="chat-interface">
             {messages.map((message) => (
                 <div
                     key={message.id}
@@ -80,6 +80,7 @@ export function ChatDisplay({
                                 ? 'bg-blue-500 text-white'
                                 : 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-gray-100 border border-gray-200 dark:border-gray-700'
                         }`}
+                        data-testid={message.role === 'assistant' ? 'ai-message' : undefined}
                     >
                         {message.role === 'assistant' ? (
                             <div className="prose prose-sm dark:prose-invert max-w-none">
