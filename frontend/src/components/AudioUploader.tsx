@@ -93,6 +93,7 @@ export function AudioUploader({}: AudioUploaderProps) {
                         }
                         ${loading ? 'pointer-events-none opacity-50' : ''}
                     `}
+                    data-testid="drop-zone"
                 >
                     <input
                         type="file"
@@ -121,7 +122,7 @@ export function AudioUploader({}: AudioUploaderProps) {
                         </div>
 
                         {loading && (
-                            <div className="absolute inset-0 flex items-center justify-center bg-white/80 dark:bg-gray-900/80 rounded-lg">
+                            <div className="absolute inset-0 flex items-center justify-center bg-white/80 dark:bg-gray-900/80 rounded-lg" data-testid="upload-progress">
                                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600" />
                             </div>
                         )}
