@@ -3,7 +3,7 @@
  *
  * Requires BOTH conditions for security:
  * 1. localStorage flag 'e2e-test-mode' === 'true'
- * 2. Accessing via localhost (not production domain)
+ * 2. Accessing via localhost or Docker internal hostname (not production domain)
  *
  * This ensures production users (accessing via w.198066.xyz) cannot bypass
  * authentication even if they set the localStorage flag.
@@ -19,11 +19,14 @@ export function isE2ETestMode(): boolean {
     return false
   }
 
-  // Check hostname is localhost (safety check for production)
+  // Check hostname is localhost or Docker internal (safety check for production)
   const hostname = window.location.hostname
   const isLocalhost = hostname === 'localhost' ||
                       hostname === '127.0.0.1' ||
-                      hostname === '::1'
+                      hostname === '::1' ||
+                      // Docker internal hostnames for E2E testing
+                      hostname === 'whisper_frontend_dev' ||
+                      hostname === 'frontend-test'
 
   return isLocalhost
 }

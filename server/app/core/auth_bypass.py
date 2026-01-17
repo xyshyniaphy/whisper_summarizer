@@ -44,10 +44,11 @@ def is_localhost_request(request: Request) -> bool:
     Detect if request originates from localhost.
 
     Checks multiple sources for reliability:
-    1. X-Forwarded-For header (Cloudflare, nginx proxy)
-    2. X-Real-IP header (nginx)
-    3. CF-Connecting-IP header (Cloudflare)
-    4. client.host (direct connection, SSH tunnels)
+    1. X-E2E-Test-Mode header (E2E testing in Docker)
+    2. X-Forwarded-For header (Cloudflare, nginx proxy)
+    3. X-Real-IP header (nginx)
+    4. CF-Connecting-IP header (Cloudflare)
+    5. client.host (direct connection, SSH tunnels)
 
     SSH Tunnel Support:
         When using SSH tunnel with SOCKS5 proxy (e.g., ssh -D 3480),
@@ -55,6 +56,12 @@ def is_localhost_request(request: Request) -> bool:
         triggering the client.host check below. This enables E2E
         testing against production servers without exposing the
         auth bypass to external requests.
+
+    E2E Docker Support:
+        When running E2E tests in Docker, requests come from Docker
+        network IPs (e.g., 172.18.0.x) which are not recognized as
+        localhost. The frontend sends X-E2E-Test-Mode header to
+        signal that the request is from an E2E test.
 
     Args:
         request: FastAPI Request object
@@ -78,11 +85,22 @@ def is_localhost_request(request: Request) -> bool:
         >>> is_localhost_request(request)
         True
 
+        >>> # E2E test in Docker
+        >>> request.headers = {"x-e2e-test-mode": "true"}
+        >>> is_localhost_request(request)
+        True
+
         >>> # External request
         >>> request.headers = {"x-forwarded-for": "203.0.113.1"}
         >>> is_localhost_request(request)
         False
     """
+    # Check X-E2E-Test-Mode header (for Docker E2E testing)
+    e2e_mode = request.headers.get("x-e2e-test-mode")
+    if e2e_mode == "true":
+        logger.debug("[AuthBypass] E2E test mode detected via X-E2E-Test-Mode header")
+        return True
+
     # Check X-Forwarded-For (may contain multiple IPs, take first/original)
     forwarded_for = request.headers.get("x-forwarded-for")
     if forwarded_for:

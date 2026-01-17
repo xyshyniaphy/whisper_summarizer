@@ -29,6 +29,11 @@ const getAccessTokenFromStorage = (): string | null => {
 // Request interceptor to add auth token
 apiClient.interceptors.request.use(
   async (config) => {
+    // Add E2E test mode header for Docker E2E testing
+    if (typeof window !== 'undefined' && localStorage.getItem('e2e-test-mode') === 'true') {
+      config.headers['X-E2E-Test-Mode'] = 'true';
+    }
+
     // Get current session from Supabase with timeout fallback
     let accessToken: string | null = null;
 
