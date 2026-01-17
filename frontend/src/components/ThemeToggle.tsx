@@ -20,6 +20,7 @@ export function ThemeToggle() {
       className="p-2 rounded-lg text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800 transition-colors"
       aria-label={theme === 'light' ? '切换到深色模式' : '切换到浅色模式'}
       title={theme === 'light' ? '深色模式' : '浅色模式'}
+      data-testid="theme-toggle"
     >
       {theme === 'light' ? (
         <Moon className="w-5 h-5" />
