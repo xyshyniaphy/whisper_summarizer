@@ -159,7 +159,7 @@ export function UserManagementTab() {
 
       {/* Users table */}
       <div className="overflow-x-auto">
-        <table className="w-full">
+        <table className="w-full" data-testid="user-list">
           <thead>
             <tr className="border-b dark:border-gray-700">
               <th className="text-left py-3 px-4 font-semibold text-gray-700 dark:text-gray-300">邮箱</th>
@@ -209,6 +209,7 @@ export function UserManagementTab() {
                         onClick={() => handleActivateUser(user.id)}
                         disabled={actionLoading === user.id}
                         className="flex items-center gap-1"
+                        data-testid="activate-user-button"
                       >
                         {actionLoading === user.id ? (
                           <Loader2 className="w-3 h-3 animate-spin" />
@@ -224,6 +225,7 @@ export function UserManagementTab() {
                       onClick={() => handleToggleAdmin(user.id, user.is_admin)}
                       disabled={actionLoading === user.id}
                       className="flex items-center gap-1"
+                      data-testid="toggle-admin-button"
                     >
                       {actionLoading === user.id ? (
                         <Loader2 className="w-3 h-3 animate-spin" />

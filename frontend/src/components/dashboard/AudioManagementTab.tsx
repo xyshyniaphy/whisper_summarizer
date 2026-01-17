@@ -171,7 +171,7 @@ export function AudioManagementTab() {
 
       {/* Audio table */}
       <div className="overflow-x-auto">
-        <table className="w-full">
+        <table className="w-full" data-testid="audio-list">
           <thead>
             <tr className="border-b dark:border-gray-700">
               <th className="text-left py-3 px-4 font-semibold text-gray-700 dark:text-gray-300">文件名</th>
@@ -219,6 +219,7 @@ export function AudioManagementTab() {
                       onClick={() => handleAssignChannels(audio.id, audio.file_name, audio.channels.map(c => c.id))}
                       disabled={actionLoading === audio.id}
                       className="flex items-center gap-1"
+                      data-testid="assign-channel-button"
                     >
                       {actionLoading === audio.id ? (
                         <Loader2 className="w-3 h-3 animate-spin" />

@@ -306,7 +306,7 @@ export function ChannelManagementTab() {
 
       {/* Channels table */}
       <div className="overflow-x-auto">
-        <table className="w-full">
+        <table className="w-full" data-testid="channel-list">
           <thead>
             <tr className="border-b dark:border-gray-700">
               <th className="text-left py-3 px-4 font-semibold text-gray-700 dark:text-gray-300">频道名称</th>
@@ -362,6 +362,7 @@ export function ChannelManagementTab() {
                       variant="danger"
                       onClick={() => handleDeleteClick(channel.id, channel.name)}
                       disabled={actionLoading === channel.id}
+                      data-testid="delete-channel-button"
                     >
                       {actionLoading === channel.id ? (
                         <Loader2 className="w-3 h-3 animate-spin" />
