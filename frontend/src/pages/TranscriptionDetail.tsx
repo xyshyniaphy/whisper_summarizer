@@ -399,7 +399,7 @@ export function TranscriptionDetail() {
                         )
                     }
                 >
-                    <pre className="whitespace-pre-wrap font-sans text-sm">
+                    <pre className="whitespace-pre-wrap font-sans text-sm" data-testid="transcription-text">
                         {displayText}
                     </pre>
                 </CollapsibleSection>
@@ -434,7 +434,7 @@ export function TranscriptionDetail() {
                     }
                 >
                     {summary ? (
-                        <div className="prose prose-sm dark:prose-invert max-w-none">
+                        <div className="prose prose-sm dark:prose-invert max-w-none" data-testid="summary-text">
                             <ReactMarkdown
                                 remarkPlugins={[remarkGfm]}
                                 components={{
