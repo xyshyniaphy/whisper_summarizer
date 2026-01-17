@@ -25,8 +25,8 @@ test.describe('Theme Toggle', () => {
     // APIルートのモック設定
     await setupMockRoutes(page)
 
-    // E2EテストモードでGoogle OAuthログインをモック
-    await page.click('button:has-text("使用 Google 继续")')
+    // E2E mode: user is already logged in via bypass, just navigate to transcriptions
+    await page.goto('/transcriptions')
     await expect(page).toHaveURL(/\/transcriptions/)
   })
 

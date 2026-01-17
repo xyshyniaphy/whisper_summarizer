@@ -58,6 +58,22 @@ const mockUser: User = {
   app_metadata: {},
 }
 
+/**
+ * Create a mock Session object for E2E testing
+ * Matches Supabase Session structure with all required fields
+ */
+const createMockSession = (user: User): Session => {
+  const now = Math.floor(Date.now() / 1000)
+  return {
+    access_token: `e2e-mock-jwt-${user.id}-${now}`,
+    token_type: 'bearer',
+    expires_in: 3600,
+    expires_at: now + 3600,
+    refresh_token: `e2e-mock-refresh-${user.id}`,
+    user: user,
+  }
+}
+
 // Fetch extended user data from backend (includes is_active, is_admin)
 const fetchUserData = async (user: User | null): Promise<ExtendedUser | null> => {
   console.log('[fetchUserData] Starting with user:', user?.email || 'no user')
@@ -186,15 +202,23 @@ export function useAuth(): [
           provider: 'google',
           auth_bypass: true,
           e2e_mode: true,
+          full_name: 'E2E Test User',
+          email_verified: true,
         },
-        app_metadata: {},
+        app_metadata: {
+          provider: 'google',
+          providers: ['google'],
+        },
         is_active: true,
         is_admin: true,
       }
 
+      // Create proper mock session object
+      const mockSession = createMockSession(testUser)
+
       // Initialize atoms with test user (only once)
       setUser(testUser)
-      setSession({} as Session)
+      setSession(mockSession)
       setRole('admin')
       setIsActive(true)
       setLoading(false)
