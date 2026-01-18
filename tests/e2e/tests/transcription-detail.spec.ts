@@ -4,28 +4,29 @@
  * Tests for transcription detail page with Jotai state management.
  * Tests real Jotai atoms for detail page state, summary, edit mode.
  *
- * Production Data Approach:
- * - Uses existing completed transcriptions from production server
- * - No file uploads or processing needed
+ * Seeded Test Data Approach:
+ * - Uses setupTestTranscription helper to upload test audio and wait for completion
+ * - Self-contained test data (no dependency on production server)
  * - Server-side auth bypass (no Google OAuth)
  * - Real API calls (no mocks)
  */
 
 import { test, expect } from '@playwright/test'
-import { setupProductionTranscription, cleanupProductionTranscription } from '../helpers/production-data'
+import { getOrCreateSharedTranscription } from '../helpers/test-data'
 
 test.describe('Transcription Detail', () => {
   let transcriptionId: string | undefined
 
   test.beforeEach(async ({ page }) => {
-    // Setup production test data (singleton pattern - only fetches once)
-    transcriptionId = await setupProductionTranscription(page)
+    // Setup test transcription (uses shared singleton to avoid re-uploading)
+    // The first test will upload, subsequent tests reuse the same transcription
+    transcriptionId = await getOrCreateSharedTranscription(page)
+    console.log(`[Test] Using transcription: ${transcriptionId}`)
 
     // Validate transcriptionId is initialized
     if (!transcriptionId) {
       throw new Error('transcriptionId not initialized - setup failed')
     }
-
     await page.goto('/login')
     await page.evaluate(() => {
       // Safety check: this only works when accessing via localhost
@@ -41,12 +42,6 @@ test.describe('Transcription Detail', () => {
     // Note: Server-side auth bypass handles authentication automatically
     // No need to click OAuth button or navigate here
     // Tests will navigate directly to their target pages
-  })
-
-  test.afterAll(async () => {
-    // Note: Cleanup is no-op since we use existing transcriptions
-    // The helper's singleton pattern prevents re-fetching
-    await cleanupProductionTranscription()
   })
 
   test('転写詳細ページが正常にレンダリングされる', async ({ page }) => {
@@ -244,8 +239,9 @@ test.describe('Transcription Detail', () => {
 })
 
 /**
- * Production Data Notes:
- * - Uses real API calls with production data (setupProductionTranscription helper)
+ * Seeded Test Data Notes:
+ * - Uses setupTestTranscription helper to upload test audio and wait for completion
  * - Server-side auth bypass handles authentication without Google OAuth
  * - Mock routes kept for loading/error tests (edge cases that are hard to trigger with real data)
+ * - All tests use the same transcription ID created in beforeAll
  */
