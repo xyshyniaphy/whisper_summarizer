@@ -162,6 +162,7 @@ async def complete_job(
     from datetime import datetime, timezone
     from app.db.base_class import Base
     import uuid
+    import os
     from app.services.storage_service import get_storage_service
 
     try:
@@ -199,7 +200,6 @@ async def complete_job(
     if result.summary:
         try:
             from app.models.summary import Summary
-            import os
 
             # Check if summary already exists
             existing_summary = db.query(Summary).filter(
