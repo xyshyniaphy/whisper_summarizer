@@ -4,44 +4,29 @@
  * Tests for transcription list with Jotai channel filter state management.
  * Tests real Jotai atoms: channelFilterAtom, transcriptionsAtom, etc.
  *
- * Uses production test data for realistic testing scenarios.
+ * Uses seeded test data for isolated testing.
  */
 
 import { test, expect } from '@playwright/test'
-import { setupProductionTranscription, cleanupProductionTranscription } from '../helpers/production-data'
+import { setupTestTranscription } from '../helpers/test-data'
 
 test.describe('Transcription List', () => {
   let transcriptionId: string | undefined
 
   test.beforeEach(async ({ page }) => {
-    // Setup production test data (singleton pattern - only fetches once)
-    transcriptionId = await setupProductionTranscription(page)
+    // Seed test transcription (uses test-audio.mp3 fixture)
+    // This uploads real audio and waits for processing completion
+    // Note: May timeout due to server bug (transcriptions stuck in "processing")
+    transcriptionId = await setupTestTranscription(page)
 
     // Validate transcriptionId is initialized
     if (!transcriptionId) {
-      throw new Error('transcriptionId not initialized - run first test to setup production data')
+      throw new Error('transcriptionId not initialized - test data setup failed')
     }
 
-    // E2Eテストモードフラグを設定
-    await page.goto('/login')
-    await page.evaluate(() => {
-      // Safety check: this only works when accessing via localhost
-      if (window.location.hostname === 'localhost' ||
-          window.location.hostname === '127.0.0.1') {
-        localStorage.setItem('e2e-test-mode', 'true')
-      } else {
-        console.warn('[E2E] Cannot enable test mode on non-localhost hostname')
-      }
-    })
-    await page.reload()
-
-    // Note: Server-side auth bypass handles authentication automatically
+    // Note: setupTestTranscription automatically adds X-E2E-Test-Mode header
+    // Server-side auth bypass handles authentication automatically
     // Tests will navigate to /transcriptions as needed
-  })
-
-  test.afterAll(async () => {
-    // Cleanup (no-op for existing transcriptions)
-    await cleanupProductionTranscription()
   })
 
   test('転写一覧が正常にレンダリングされる', async ({ page }) => {
@@ -77,8 +62,8 @@ test.describe('Transcription List', () => {
     // 「全部内容」を選択
     await page.selectOption('select[aria-label="频道筛选:"]', 'all')
 
-    // すべての転写が表示されることを確認（real data from API）
-    await expect(page.locator(`text=audio1074124412.conved_20_min.m4a`)).toBeVisible()
+    // すべての転写が表示されることを確認（seeded test data）
+    await expect(page.locator(`text=test-audio.mp3`)).toBeVisible()
   })
 
   test('チャンネルフィルター - 個人内容をフィルタリング', async ({ page }) => {
@@ -87,8 +72,8 @@ test.describe('Transcription List', () => {
     // 「个人内容」を選択
     await page.selectOption('select[aria-label="频道筛选:"]', 'personal')
 
-    // 個人転写のみが表示されることを確認（production data is personal）
-    await expect(page.locator(`text=audio1074124412.conved_20_min.m4a`)).toBeVisible()
+    // 個人転写のみが表示されることを確認（seeded test data is personal）
+    await expect(page.locator(`text=test-audio.mp3`)).toBeVisible()
   })
 
   test('フィルター状態がページ遷移間で保持される', async ({ page }) => {
@@ -98,7 +83,7 @@ test.describe('Transcription List', () => {
     await page.selectOption('select[aria-label="频道筛选:"]', 'personal')
 
     // 転写詳細ページに遷移
-    await page.click(`text=audio1074124412.conved_20_min.m4a`)
+    await page.click(`text=test-audio.mp3`)
     await expect(page).toHaveURL(new RegExp(`/transcriptions/${transcriptionId}`))
 
     // 一覧ページに戻る
@@ -128,9 +113,9 @@ test.describe('Transcription List', () => {
     await page.goto('/transcriptions')
 
     // 転写をクリック
-    await page.click(`text=audio1074124412.conved_20_min.m4a`)
+    await page.click(`text=test-audio.mp3`)
 
-    // 詳細ページに遷移したことを確認（real transcriptionId）
+    // 詳細ページに遷移したことを確認（seeded transcriptionId）
     await expect(page).toHaveURL(new RegExp(`/transcriptions/${transcriptionId}`))
   })
 
@@ -231,10 +216,10 @@ test.describe('Transcription List', () => {
   })
 
   test('検索機能が動作する', async ({ page }) => {
-    // 検索ボックスに入力（real production data search）
-    await page.fill('input[placeholder="搜索转录..."]', '210min')
+    // 検索ボックスに入力（seeded test data search）
+    await page.fill('input[placeholder="搜索转录..."]', 'test-audio')
 
-    // 検索結果がフィルタリングされることを確認（real data）
-    await expect(page.locator('text=audio1074124412.conved_20_min.m4a')).toBeVisible()
+    // 検索結果がフィルタリングされることを確認（seeded data）
+    await expect(page.locator('text=test-audio.mp3')).toBeVisible()
   })
 })
