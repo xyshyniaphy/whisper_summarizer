@@ -43,7 +43,7 @@ test.describe('Dashboard', () => {
     await page.click('button:has-text("用户管理")')
 
     // ユーザー管理タブがアクティブになることを確認
-    await expect(page.locator('text=用户管理')).toBeVisible()
+    await expect(page.locator('button').filter({ hasText: '用户管理' })).toBeVisible()
 
     // ユーザーリストが表示されることを確認
     await expect(page.locator('[data-testid="user-list"]')).toBeVisible()
@@ -54,7 +54,7 @@ test.describe('Dashboard', () => {
     await page.click('button:has-text("频道管理")')
 
     // 频道管理タブがアクティブになることを確認
-    await expect(page.locator('text=频道管理')).toBeVisible()
+    await expect(page.locator('button').filter({ hasText: '频道管理' })).toBeVisible()
 
     // 频道リストが表示されることを確認
     await expect(page.locator('[data-testid="channel-list"]')).toBeVisible()
@@ -65,7 +65,7 @@ test.describe('Dashboard', () => {
     await page.click('button:has-text("音频管理")')
 
     // 音频管理タブがアクティブになることを確認
-    await expect(page.locator('text=音频管理')).toBeVisible()
+    await expect(page.locator('button').filter({ hasText: '音频管理' })).toBeVisible()
 
     // 音频リストが表示されることを確認
     await expect(page.locator('[data-testid="audio-list"]')).toBeVisible()
@@ -189,7 +189,7 @@ test.describe('Dashboard', () => {
     await page.goto('/dashboard')
 
     // ユーザー管理タブがまだアクティブであることを確認
-    await expect(page.locator('text=用户管理')).toBeVisible()
+    await expect(page.locator('button').filter({ hasText: '用户管理' })).toBeVisible()
   })
 
   test('APIエラー時にエラーメッセージが表示される', async ({ page }) => {

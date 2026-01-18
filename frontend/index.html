@@ -5,14 +5,25 @@
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Whisper Summarizer</title>
-    <!-- Runtime configuration (injected at container startup from environment variables) -->
+    <!-- Runtime configuration (injected at container startup from environment variables in production) -->
+    <!-- In development, Vite's import.meta.env is used instead -->
     <script>
-    window.config = {
-      VITE_SUPABASE_URL: '${VITE_SUPABASE_URL}',
-      VITE_SUPABASE_ANON_KEY: '${VITE_SUPABASE_ANON_KEY}',
-      VITE_BACKEND_URL: '${VITE_BACKEND_URL:-/api}'
-    };
-    console.log('[config] Runtime configuration loaded');
+    // Only set window.config if the env vars have been substituted (production)
+    // If still contains placeholder patterns, skip it (development uses import.meta.env)
+    (function() {
+      const supabaseUrl = '${VITE_SUPABASE_URL}';
+      // Check if placeholder was substituted (starts with http:// or https://)
+      if (supabaseUrl && (supabaseUrl.startsWith('http://') || supabaseUrl.startsWith('https://'))) {
+        window.config = {
+          VITE_SUPABASE_URL: supabaseUrl,
+          VITE_SUPABASE_ANON_KEY: '${VITE_SUPABASE_ANON_KEY}',
+          VITE_BACKEND_URL: '${VITE_BACKEND_URL:-/api}'
+        };
+        console.log('[config] Runtime configuration loaded (production mode)');
+      } else {
+        console.log('[config] Using Vite development mode (import.meta.env)');
+      }
+    })();
     </script>
   </head>
   <body>

@@ -30,14 +30,22 @@ const getAccessTokenFromStorage = (): string | null => {
 apiClient.interceptors.request.use(
   async (config) => {
     // Add E2E test mode header for Docker E2E testing
-    if (typeof window !== 'undefined' && localStorage.getItem('e2e-test-mode') === 'true') {
+    const e2eFlag = typeof window !== 'undefined' ? localStorage.getItem('e2e-test-mode') : null
+    console.log('[E2E DEBUG] API interceptor: localStorage e2e-test-mode flag =', e2eFlag)
+
+    if (typeof window !== 'undefined' && e2eFlag === 'true') {
       config.headers['X-E2E-Test-Mode'] = 'true';
+      console.log('[E2E DEBUG] API interceptor: Added X-E2E-Test-Mode header to request:', config.url)
+      // In E2E mode, skip Bearer token - server auth bypass works with X-E2E-Test-Mode header only
+      console.log('[E2E DEBUG] API interceptor: E2E mode enabled, skipping Bearer token (server uses auth bypass)')
+      return config
     }
 
     // Get current session from Supabase with timeout fallback
     let accessToken: string | null = null;
 
     try {
+      console.log('[E2E DEBUG] API interceptor: Attempting to get session from Supabase')
       // Add a timeout fallback in case supabase.auth.getSession() hangs
       const sessionPromise = supabase.auth.getSession();
       const timeoutPromise = new Promise((_, reject) =>
@@ -46,19 +54,25 @@ apiClient.interceptors.request.use(
 
       const result = await Promise.race([sessionPromise, timeoutPromise]) as any;
       accessToken = result.data?.session?.access_token || null;
+      console.log('[E2E DEBUG] API interceptor: Got access_token from Supabase:', accessToken ? `${accessToken.substring(0, 20)}...` : 'null')
     } catch (e) {
       // If getSession fails or times out, fall back to localStorage
       console.warn('[API interceptor] getSession failed, using localStorage fallback:', (e as Error).message);
       accessToken = getAccessTokenFromStorage();
+      console.log('[E2E DEBUG] API interceptor: Got access_token from localStorage fallback:', accessToken ? `${accessToken.substring(0, 20)}...` : 'null')
     }
 
     // Fallback to localStorage if getSession returned null
     if (!accessToken) {
       accessToken = getAccessTokenFromStorage();
+      console.log('[E2E DEBUG] API interceptor: getSession returned null, using localStorage fallback:', accessToken ? `${accessToken.substring(0, 20)}...` : 'null')
     }
 
     if (accessToken) {
       config.headers.Authorization = `Bearer ${accessToken}`;
+      console.log('[E2E DEBUG] API interceptor: Added Authorization header with Bearer token')
+    } else {
+      console.warn('[E2E DEBUG] API interceptor: No access_token available, request will be unauthenticated')
     }
 
     return config;
@@ -214,15 +228,26 @@ export const api = {
   ): Promise<void> => {
     console.log('[API] Starting stream chat:', { transcriptionId, content });
 
-    // Get current session from Supabase
-    const { data: { session } } = await supabase.auth.getSession();
+    // Check E2E mode first
+    const e2eFlag = typeof window !== 'undefined' ? localStorage.getItem('e2e-test-mode') : null
+
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+
+    // In E2E mode, use X-E2E-Test-Mode header instead of Bearer token
+    if (e2eFlag === 'true') {
+      headers['X-E2E-Test-Mode'] = 'true';
+      console.log('[API] E2E mode: Using X-E2E-Test-Mode header for streaming chat');
+    } else {
+      // Get current session from Supabase for normal mode
+      const { data: { session } } = await supabase.auth.getSession();
+      headers['Authorization'] = `Bearer ${session?.access_token || ''}`;
+    }
 
     const response = await fetch(`${API_URL}/transcriptions/${transcriptionId}/chat/stream`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${session?.access_token || ''}`,
-      },
+      headers,
       body: JSON.stringify({ content }),
     });
 

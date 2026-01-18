@@ -95,37 +95,64 @@ def is_localhost_request(request: Request) -> bool:
         >>> is_localhost_request(request)
         False
     """
+    # Log all relevant headers for debugging
+    logger.info(f"[AuthBypass] Checking request: path={request.url.path}, method={request.method}")
+    logger.info(f"[AuthBypass] X-E2E-Test-Mode header: {request.headers.get('x-e2e-test-mode', 'NOT SET')}")
+    logger.info(f"[AuthBypass] X-Forwarded-For: {request.headers.get('x-forwarded-for', 'NOT SET')}")
+    logger.info(f"[AuthBypass] X-Real-IP: {request.headers.get('x-real-ip', 'NOT SET')}")
+    logger.info(f"[AuthBypass] CF-Connecting-IP: {request.headers.get('cf-connecting-ip', 'NOT SET')}")
+    logger.info(f"[AuthBypass] client.host: {request.client.host if hasattr(request.client, 'host') else 'N/A'}")
+
     # Check X-E2E-Test-Mode header (for Docker E2E testing)
     e2e_mode = request.headers.get("x-e2e-test-mode")
+    logger.info(f"[AuthBypass] Checking X-E2E-Test-Mode header: value='{e2e_mode}', expected='true'")
     if e2e_mode == "true":
-        logger.debug("[AuthBypass] E2E test mode detected via X-E2E-Test-Mode header")
+        logger.info("[AuthBypass] ✓ E2E test mode detected via X-E2E-Test-Mode header - BYPASSING AUTH")
         return True
+    else:
+        logger.info(f"[AuthBypass] ✗ X-E2E-Test-Mode header is '{e2e_mode}', not 'true' - continuing checks")
 
     # Check X-Forwarded-For (may contain multiple IPs, take first/original)
     forwarded_for = request.headers.get("x-forwarded-for")
     if forwarded_for:
         client_ip = forwarded_for.split(",")[0].strip()
+        logger.info(f"[AuthBypass] Checking X-Forwarded-For: {client_ip} in {LOCALHOST_IPS}")
         if client_ip in LOCALHOST_IPS:
-            logger.debug(f"[AuthBypass] Localhost detected via X-Forwarded-For: {client_ip}")
+            logger.info(f"[AuthBypass] ✓ Localhost detected via X-Forwarded-For: {client_ip} - BYPASSING AUTH")
             return True
+        else:
+            logger.info(f"[AuthBypass] ✗ X-Forwarded-For IP {client_ip} not in localhost list")
 
     # Check X-Real-IP (nginx specific)
     real_ip = request.headers.get("x-real-ip")
-    if real_ip and real_ip in LOCALHOST_IPS:
-        logger.debug(f"[AuthBypass] Localhost detected via X-Real-IP: {real_ip}")
-        return True
+    if real_ip:
+        logger.info(f"[AuthBypass] Checking X-Real-IP: {real_ip} in {LOCALHOST_IPS}")
+        if real_ip in LOCALHOST_IPS:
+            logger.info(f"[AuthBypass] ✓ Localhost detected via X-Real-IP: {real_ip} - BYPASSING AUTH")
+            return True
+        else:
+            logger.info(f"[AuthBypass] ✗ X-Real-IP {real_ip} not in localhost list")
 
     # Check CF-Connecting-IP (Cloudflare specific)
     cf_ip = request.headers.get("cf-connecting-ip")
-    if cf_ip and cf_ip in LOCALHOST_IPS:
-        logger.debug(f"[AuthBypass] Localhost detected via CF-Connecting-IP: {cf_ip}")
-        return True
+    if cf_ip:
+        logger.info(f"[AuthBypass] Checking CF-Connecting-IP: {cf_ip} in {LOCALHOST_IPS}")
+        if cf_ip in LOCALHOST_IPS:
+            logger.info(f"[AuthBypass] ✓ Localhost detected via CF-Connecting-IP: {cf_ip} - BYPASSING AUTH")
+            return True
+        else:
+            logger.info(f"[AuthBypass] ✗ CF-Connecting-IP {cf_ip} not in localhost list")
 
     # Check direct connection
-    if hasattr(request.client, 'host') and request.client.host in LOCALHOST_IPS:
-        logger.debug(f"[AuthBypass] Localhost detected via client.host: {request.client.host}")
-        return True
+    if hasattr(request.client, 'host'):
+        logger.info(f"[AuthBypass] Checking client.host: {request.client.host} in {LOCALHOST_IPS}")
+        if request.client.host in LOCALHOST_IPS:
+            logger.info(f"[AuthBypass] ✓ Localhost detected via client.host: {request.client.host} - BYPASSING AUTH")
+            return True
+        else:
+            logger.info(f"[AuthBypass] ✗ client.host {request.client.host} not in localhost list")
 
+    logger.warning("[AuthBypass] ✗ ALL CHECKS FAILED - AUTH BYPASS NOT GRANTED")
     return False
 
 

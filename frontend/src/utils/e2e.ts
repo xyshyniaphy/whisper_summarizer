@@ -10,24 +10,32 @@
  */
 export function isE2ETestMode(): boolean {
   if (typeof window === 'undefined') {
+    console.log('[E2E DEBUG] isE2ETestMode: window is undefined')
     return false
   }
 
   // Check localStorage flag
   const flag = localStorage.getItem('e2e-test-mode')
+  console.log('[E2E DEBUG] isE2ETestMode: localStorage flag =', flag)
+
   if (flag !== 'true') {
+    console.log('[E2E DEBUG] isE2ETestMode: flag is not "true", returning false')
     return false
   }
 
   // Check hostname is localhost or Docker internal (safety check for production)
   const hostname = window.location.hostname
+  console.log('[E2E DEBUG] isE2ETestMode: hostname =', hostname)
+
   const isLocalhost = hostname === 'localhost' ||
                       hostname === '127.0.0.1' ||
                       hostname === '::1' ||
                       // Docker internal hostnames for E2E testing
                       hostname === 'whisper_frontend_dev' ||
+                      hostname === 'whisper_nginx_dev' ||
                       hostname === 'frontend-test'
 
+  console.log('[E2E DEBUG] isE2ETestMode: isLocalhost =', isLocalhost, ', returning', isLocalhost)
   return isLocalhost
 }
 

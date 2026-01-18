@@ -186,10 +186,13 @@ export function useAuth(): [
   useLayoutEffect(() => {
     // Check if E2E test mode is enabled via utility (includes localhost safety check)
     const isE2EMode = isE2ETestMode()
+    console.log('[E2E DEBUG] useAuth useLayoutEffect: isE2EMode =', isE2EMode)
 
     if (isE2EMode && !e2eInitializedRef.current) {
+      console.log('[E2E DEBUG] useAuth: Initializing E2E bypass with test user')
+
       const testUser: ExtendedUser = {
-        id: 'e2e-prod-user-id',  // Unique ID for production E2E testing
+        id: 'fc47855d-6973-4931-b6fd-bd28515bec0d',  // Valid UUID matching DEFAULT_TEST_USER_ID
         aud: 'authenticated',
         role: 'authenticated',
         email: 'lmr@lmr.com',  // Hardcoded production E2E test user
@@ -215,6 +218,7 @@ export function useAuth(): [
 
       // Create proper mock session object
       const mockSession = createMockSession(testUser)
+      console.log('[E2E DEBUG] useAuth: mockSession created, access_token =', mockSession.access_token)
 
       // Initialize atoms with test user (only once)
       setUser(testUser)
@@ -223,6 +227,15 @@ export function useAuth(): [
       setIsActive(true)
       setLoading(false)
       e2eInitializedRef.current = true
+
+      console.log('[E2E DEBUG] useAuth: E2E bypass initialized, user =', testUser.email)
+    } else {
+      if (!isE2EMode) {
+        console.log('[E2E DEBUG] useAuth: E2E mode not enabled')
+      }
+      if (e2eInitializedRef.current) {
+        console.log('[E2E DEBUG] useAuth: E2E already initialized, skipping')
+      }
     }
   }, [setUser, setSession, setRole, setIsActive, setLoading])
 
