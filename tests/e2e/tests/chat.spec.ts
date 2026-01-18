@@ -6,20 +6,16 @@
  */
 
 import { test, expect } from '@playwright/test'
-import { setupProductionTranscription, cleanupProductionTranscription } from '../helpers/production-data'
+import { setupTestTranscription } from '../helpers/test-data'
 
 // Constant for message input selector (standardized across all tests)
 const MESSAGE_INPUT_SELECTOR = 'textarea[placeholder*="入消息"]'
 
 test.describe('Chat Interface', () => {
-  // Shared transcription ID across tests (set by first test)
-  let transcriptionId: string | undefined
-
   test.beforeEach(async ({ page }) => {
-    // Validate transcriptionId is initialized (prevents flakiness if first test is skipped)
-    if (!transcriptionId) {
-      throw new Error('transcriptionId not initialized - run first test to setup production data')
-    }
+    // Setup test transcription for each test
+    // Note: Using beforeEach (not beforeAll) because Playwright doesn't support page fixture in beforeAll
+    globalThis.chatTranscriptionId = await setupTestTranscription(page)
 
     // Set e2e-test-mode flag (for frontend compatibility)
     await page.goto('/login')
@@ -39,30 +35,10 @@ test.describe('Chat Interface', () => {
     // Tests will navigate directly to their target pages
   })
 
-  test.afterEach(async ({ page }) => {
-    // Cleanup after last test only
-    // Note: Playwright doesn't provide a built-in way to detect last test
-    // Cleanup will happen manually or in a separate cleanup step
-  })
-
-  test.afterAll(async () => {
-    // Note: Can't use page fixture in afterAll
-    // Cleanup is handled by the production-data helper's singleton pattern
-    // and can be run manually via: rm /tmp/e2e-test-transcription.json
-  })
-
   test('チャットインターフェースが表示される', async ({ page }) => {
-    // Setup production test data (only runs once due to singleton pattern)
-    // Increase timeout for transcription processing (10 minutes for 2_min.m4a)
-    test.setTimeout(10 * 60 * 1000)
-
-    if (!transcriptionId) {
-      transcriptionId = await setupProductionTranscription(page)
-    }
-
     // 転写詳細ページに遷移 - use real transcription ID
-    console.log('Navigating to:', `/transcriptions/${transcriptionId!}`)
-    await page.goto(`/transcriptions/${transcriptionId!}`, { waitUntil: 'networkidle' })
+    console.log('Navigating to:', `/transcriptions/${globalThis.chatTranscriptionId}`)
+    await page.goto(`/transcriptions/${globalThis.chatTranscriptionId}`, { waitUntil: 'networkidle' })
 
     // Debug: Check page URL and title
     console.log('After navigation - URL:', page.url())
@@ -93,7 +69,7 @@ test.describe('Chat Interface', () => {
   })
 
   test('メッセージ入力ボックスが表示される', async ({ page }) => {
-    await page.goto(`/transcriptions/${transcriptionId!}`)
+    await page.goto(`/transcriptions/${globalThis.chatTranscriptionId}`)
 
     // メッセージ入力ボックスが表示されることを確認
     const input = page.locator(MESSAGE_INPUT_SELECTOR)
@@ -101,7 +77,7 @@ test.describe('Chat Interface', () => {
   })
 
   test('メッセージを送信できる', async ({ page }) => {
-    await page.goto(`/transcriptions/${transcriptionId!}`)
+    await page.goto(`/transcriptions/${globalThis.chatTranscriptionId}`)
 
     // メッセージを入力
     const input = page.locator(MESSAGE_INPUT_SELECTOR)
@@ -115,7 +91,7 @@ test.describe('Chat Interface', () => {
   })
 
   test('送信したメッセージが表示される', async ({ page }) => {
-    await page.goto(`/transcriptions/${transcriptionId!}`)
+    await page.goto(`/transcriptions/${globalThis.chatTranscriptionId}`)
 
     // メッセージを入力して送信
     const input = page.locator(MESSAGE_INPUT_SELECTOR)
@@ -127,7 +103,7 @@ test.describe('Chat Interface', () => {
   })
 
   test('AIの返信が表示される', async ({ page }) => {
-    await page.goto(`/transcriptions/${transcriptionId!}`)
+    await page.goto(`/transcriptions/${globalThis.chatTranscriptionId}`)
 
     // メッセージを送信
     const input = page.locator(MESSAGE_INPUT_SELECTOR)
@@ -139,7 +115,7 @@ test.describe('Chat Interface', () => {
   })
 
   test('チャット履歴が保持される', async ({ page }) => {
-    await page.goto(`/transcriptions/${transcriptionId!}`)
+    await page.goto(`/transcriptions/${globalThis.chatTranscriptionId}`)
 
     // メッセージを送信
     const input = page.locator(MESSAGE_INPUT_SELECTOR)
@@ -154,7 +130,7 @@ test.describe('Chat Interface', () => {
   })
 
   test('チャットをクリアできる', async ({ page }) => {
-    await page.goto(`/transcriptions/${transcriptionId!}`)
+    await page.goto(`/transcriptions/${globalThis.chatTranscriptionId}`)
 
     // メッセージを送信
     const input = page.locator(MESSAGE_INPUT_SELECTOR)
@@ -173,7 +149,7 @@ test.describe('Chat Interface', () => {
   })
 
   test('メッセージストリーミングが機能する', async ({ page }) => {
-    await page.goto(`/transcriptions/${transcriptionId!}`)
+    await page.goto(`/transcriptions/${globalThis.chatTranscriptionId}`)
 
     // ストリーミングレスポンスをモック
     await page.route('**/api/chat/**', async route => {
@@ -204,7 +180,7 @@ test.describe('Chat Interface', () => {
     // This test now verifies chat history persistence within the same transcription
 
     // 最初の転写でチャット
-    await page.goto(`/transcriptions/${transcriptionId!}`)
+    await page.goto(`/transcriptions/${globalThis.chatTranscriptionId}`)
     const input1 = page.locator(MESSAGE_INPUT_SELECTOR)
     await input1.fill('最初のメッセージ')
     await page.click('button:has-text("发送")')
@@ -228,7 +204,7 @@ test.describe('Chat Interface', () => {
     // 2. Temporarily break the backend (not recommended)
     // 3. Test with invalid data (e.g., extremely long messages)
 
-    await page.goto(`/transcriptions/${transcriptionId!}`)
+    await page.goto(`/transcriptions/${globalThis.chatTranscriptionId}`)
 
     // メッセージを送信（正常ケース）
     const input = page.locator(MESSAGE_INPUT_SELECTOR)
@@ -240,7 +216,7 @@ test.describe('Chat Interface', () => {
   })
 
   test('送信中は送信ボタンが無効になる', async ({ page }) => {
-    await page.goto(`/transcriptions/${transcriptionId!}`)
+    await page.goto(`/transcriptions/${globalThis.chatTranscriptionId}`)
 
     // メッセージを入力
     const input = page.locator(MESSAGE_INPUT_SELECTOR)
@@ -255,7 +231,7 @@ test.describe('Chat Interface', () => {
   })
 
   test('ローディング中はスピナーが表示される', async ({ page }) => {
-    await page.goto(`/transcriptions/${transcriptionId!}`)
+    await page.goto(`/transcriptions/${globalThis.chatTranscriptionId}`)
 
     // メッセージを送信
     const input = page.locator(MESSAGE_INPUT_SELECTOR)
@@ -267,7 +243,7 @@ test.describe('Chat Interface', () => {
   })
 
   test('送信ボタンは空テキストでクリックできない', async ({ page }) => {
-    await page.goto(`/transcriptions/${transcriptionId!}`)
+    await page.goto(`/transcriptions/${globalThis.chatTranscriptionId}`)
 
     const input = page.locator(MESSAGE_INPUT_SELECTOR)
     const sendButton = page.locator('button:has-text("发送")')
@@ -281,7 +257,7 @@ test.describe('Chat Interface', () => {
   })
 
   test('二重クリックでメッセージが重複送信されない', async ({ page }) => {
-    await page.goto(`/transcriptions/${transcriptionId!}`)
+    await page.goto(`/transcriptions/${globalThis.chatTranscriptionId}`)
 
     const input = page.locator(MESSAGE_INPUT_SELECTOR)
     const sendButton = page.locator('button:has-text("发送")')
@@ -302,7 +278,7 @@ test.describe('Chat Interface', () => {
   })
 
   test('送信中に送信ボタンをクリックしても無視される', async ({ page }) => {
-    await page.goto(`/transcriptions/${transcriptionId!}`)
+    await page.goto(`/transcriptions/${globalThis.chatTranscriptionId}`)
 
     const input = page.locator(MESSAGE_INPUT_SELECTOR)
     const sendButton = page.locator('button:has-text("发送")')

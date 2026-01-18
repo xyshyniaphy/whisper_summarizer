@@ -22,8 +22,11 @@ export async function setupTestTranscription(
   const audioPath = path.join(__dirname, '../fixtures/test-audio.mp3');
   const audioBuffer = fs.readFileSync(audioPath);
 
+  // Get baseURL from page context (matches playwright.config.ts baseURL)
+  const baseURL = process.env.BASE_URL || 'http://whisper_nginx_dev';
+
   // Upload the file
-  const uploadResponse = await page.request.post('/api/audio/upload', {
+  const uploadResponse = await page.request.post(`${baseURL}/api/audio/upload`, {
     headers: {
       'X-E2E-Test-Mode': 'true',
       // Don't set Content-Type, let Playwright handle it for multipart/form-data
@@ -51,7 +54,7 @@ export async function setupTestTranscription(
   const pollInterval = 5000; // Check every 5 seconds
 
   while (Date.now() - startTime < timeout) {
-    const checkResponse = await page.request.get(`/api/transcriptions/${transcriptionId}`, {
+    const checkResponse = await page.request.get(`${baseURL}/api/transcriptions/${transcriptionId}`, {
       headers: { 'X-E2E-Test-Mode': 'true' }
     });
 
