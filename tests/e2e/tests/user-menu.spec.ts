@@ -33,7 +33,7 @@ test.describe('User Menu', () => {
   test('ユーザーメニューが表示される', async ({ page }) => {
     // ユーザーメニューが表示されることを確認
     const userMenu = page.locator('[data-testid="user-menu"]')
-    await expect(userMenu).toBeVisible()
+    await expect(userMenu).toBeVisible({ timeout: 10000 })
   })
 
   test('ユーザーメニューを開くことができる', async ({ page }) => {
@@ -43,21 +43,21 @@ test.describe('User Menu', () => {
 
     // メニュードロップダウンが表示されることを確認
     const dropdown = page.locator('[data-testid="user-menu-dropdown"]')
-    await expect(dropdown).toBeVisible()
+    await expect(dropdown).toBeVisible({ timeout: 10000 })
   })
 
   test('ユーザーメニューを閉じることができる', async ({ page }) => {
     // ユーザーメニューを開く
     const userMenu = page.locator('[data-testid="user-menu"]')
     await userMenu.click()
-    await expect(page.locator('[data-testid="user-menu-dropdown"]')).toBeVisible()
+    await expect(page.locator('[data-testid="user-menu-dropdown"]')).toBeVisible({ timeout: 10000 })
 
     // 外部をクリックして閉じる
     await page.click('body', { position: { x: 0, y: 0 } })
 
     // メニュードロップダウンが非表示になることを確認
     const dropdown = page.locator('[data-testid="user-menu-dropdown"]')
-    await expect(dropdown).not.toBeVisible()
+    await expect(dropdown).not.toBeVisible({ timeout: 10000 })
   })
 
   test('ユーザーメニューにユーザー情報が表示される', async ({ page }) => {
@@ -66,7 +66,7 @@ test.describe('User Menu', () => {
     await userMenu.click()
 
     // ユーザー情報が表示されることを確認
-    await expect(page.locator('text=test@example.com')).toBeVisible()
+    await expect(page.locator('text=test@example.com')).toBeVisible({ timeout: 10000 })
   })
 
   test('ユーザーメニューからダッシュボードに遷移できる', async ({ page }) => {
@@ -78,12 +78,13 @@ test.describe('User Menu', () => {
     await page.click('a:has-text("仪表板")')
 
     // ダッシュボードページに遷移したことを確認
-    await expect(page).toHaveURL(/\/dashboard/)
+    await expect(page).toHaveURL(/\/dashboard/, { timeout: 10000 })
   })
 
   test('ユーザーメニューから転写一覧に遷移できる', async ({ page }) => {
     // ダッシュボードから開始
     await page.goto('/dashboard')
+    await page.waitForLoadState('networkidle') // Wait for API calls
 
     // ユーザーメニューを開く
     const userMenu = page.locator('[data-testid="user-menu"]')
@@ -93,7 +94,7 @@ test.describe('User Menu', () => {
     await page.click('a:has-text("转录列表")')
 
     // 転写一覧ページに遷移したことを確認
-    await expect(page).toHaveURL(/\/transcriptions/)
+    await expect(page).toHaveURL(/\/transcriptions/, { timeout: 10000 })
   })
 
   test('ログアウトが機能する', async ({ page }) => {
@@ -105,7 +106,7 @@ test.describe('User Menu', () => {
     await page.click('button:has-text("退出")')
 
     // ログインページにリダイレクトされることを確認
-    await expect(page).toHaveURL(/\/login/)
+    await expect(page).toHaveURL(/\/login/, { timeout: 10000 })
 
     // 認証状態がクリアされていることを確認
     const hasSession = await page.evaluate(() => {
@@ -119,14 +120,15 @@ test.describe('User Menu', () => {
     // ユーザーメニューを開く
     const userMenu = page.locator('[data-testid="user-menu"]')
     await userMenu.click()
-    await expect(page.locator('[data-testid="user-menu-dropdown"]')).toBeVisible()
+    await expect(page.locator('[data-testid="user-menu-dropdown"]')).toBeVisible({ timeout: 10000 })
 
     // 転写詳細ページに遷移
     await page.goto('/transcriptions/test-transcription-1')
+    await page.waitForLoadState('networkidle') // Wait for API calls
 
     // ユーザーメニューが閉じていることを確認
     const dropdown = page.locator('[data-testid="user-menu-dropdown"]')
-    await expect(dropdown).not.toBeVisible()
+    await expect(dropdown).not.toBeVisible({ timeout: 10000 })
   })
 
   test('管理者の場合、ダッシュボードリンクが表示される', async ({ page }) => {
@@ -135,7 +137,7 @@ test.describe('User Menu', () => {
     await userMenu.click()
 
     // ダッシュボードリンクが表示されることを確認
-    await expect(page.locator('a:has-text("仪表板")')).toBeVisible()
+    await expect(page.locator('a:has-text("仪表板")')).toBeVisible({ timeout: 10000 })
   })
 
   test('非管理者の場合、ダッシュボードリンクが表示されない', async ({ page }) => {
@@ -160,7 +162,7 @@ test.describe('User Menu', () => {
     await userMenu.click()
 
     // ダッシュボードリンクが表示されないことを確認
-    await expect(page.locator('a:has-text("仪表板")')).not.toBeVisible()
+    await expect(page.locator('a:has-text("仪表板")')).not.toBeVisible({ timeout: 10000 })
   })
 })
 

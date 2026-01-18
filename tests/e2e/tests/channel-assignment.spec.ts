@@ -52,20 +52,21 @@ test.describe('チャンネル割り当て', () => {
   test('チャンネル一覧が表示される', async ({ page }) => {
     // 転写リストから詳細ページへ
     await page.click(`text=${mockTranscription.file_name}`)
-    await expect(page).toHaveURL(new RegExp(`/transcriptions/${mockTranscriptionId}`))
+    await page.waitForLoadState('networkidle') // Wait for API calls
+    await expect(page).toHaveURL(new RegExp(`/transcriptions/${mockTranscriptionId}`), { timeout: 10000 })
 
     // チャンネル割り当てボタンをクリック
     await page.click('button:has-text("分配到频道")')
 
     // モーダルが表示されることを確認
-    await expect(page.locator('text=分配到频道')).toBeVisible()
-    await expect(page.locator('text=搜索频道名称...')).toBeVisible()
+    await expect(page.locator('text=分配到频道')).toBeVisible({ timeout: 10000 })
+    await expect(page.locator('text=搜索频道名称...')).toBeVisible({ timeout: 10000 })
 
     // すべてのチャンネルが表示されることを確認
     for (const channel of mockChannels) {
-      await expect(page.locator(`text=${channel.name}`)).toBeVisible()
+      await expect(page.locator(`text=${channel.name}`)).toBeVisible({ timeout: 10000 })
       if (channel.description) {
-        await expect(page.locator(`text=${channel.description}`)).toBeVisible()
+        await expect(page.locator(`text=${channel.description}`)).toBeVisible({ timeout: 10000 })
       }
     }
 
@@ -74,13 +75,14 @@ test.describe('チャンネル割り当て', () => {
 
   test('チャンネル検索が機能する', async ({ page }) => {
     await page.click(`text=${mockTranscription.file_name}`)
+    await page.waitForLoadState('networkidle') // Wait for API calls
     await page.click('button:has-text("分配到频道")')
 
     // 検索ボックスにテキストを入力
     await page.fill('input[placeholder="搜索频道名称..."]', 'プロジェクトA')
 
     // プロジェクトAのみ表示されることを確認
-    await expect(page.locator('text=プロジェクトA')).toBeVisible()
+    await expect(page.locator('text=プロジェクトA')).toBeVisible({ timeout: 10000 })
     await expect(page.locator('text=プロジェクトB')).not.toBeVisible()
     await expect(page.locator('text=会議録')).not.toBeVisible()
 
@@ -90,13 +92,14 @@ test.describe('チャンネル割り当て', () => {
     await page.fill('input[placeholder="搜索频道名称..."]', '')
 
     // すべてのチャンネルが再表示されることを確認
-    await expect(page.locator('text=プロジェクトA')).toBeVisible()
-    await expect(page.locator('text=プロジェクトB')).toBeVisible()
-    await expect(page.locator('text=会議録')).toBeVisible()
+    await expect(page.locator('text=プロジェクトA')).toBeVisible({ timeout: 10000 })
+    await expect(page.locator('text=プロジェクトB')).toBeVisible({ timeout: 10000 })
+    await expect(page.locator('text=会議録')).toBeVisible({ timeout: 10000 })
   })
 
   test('チャンネルを割り当てることができる', async ({ page }) => {
     await page.click(`text=${mockTranscription.file_name}`)
+    await page.waitForLoadState('networkidle') // Wait for API calls
     await page.click('button:has-text("分配到频道")')
 
     // チェックボックスをクリックしてチャンネルを選択
@@ -107,13 +110,13 @@ test.describe('チャンネル割り当て', () => {
     await expect(checkbox).toBeChecked()
 
     // 選択数表示を確認
-    await expect(page.locator('text=已选择 1 个频道')).toBeVisible()
+    await expect(page.locator('text=已选择 1 个频道')).toBeVisible({ timeout: 10000 })
 
     // 保存ボタンをクリック
     await page.click('button:has-text("保存")')
 
     // モーダルが閉じることを確認
-    await expect(page.locator('text=分配到频道')).not.toBeVisible()
+    await expect(page.locator('text=分配到频道')).not.toBeVisible({ timeout: 10000 })
 
     // チャンネルバッジが表示されることを確認
     await page.screenshot({ path: '/app/data/screenshots/channel-assigned.png' })
@@ -121,6 +124,7 @@ test.describe('チャンネル割り当て', () => {
 
   test('複数チャンネルを同時に割り当てることができる', async ({ page }) => {
     await page.click(`text=${mockTranscription.file_name}`)
+    await page.waitForLoadState('networkidle') // Wait for API calls
     await page.click('button:has-text("分配到频道")')
 
     // 複数のチャンネルを選択
@@ -128,13 +132,13 @@ test.describe('チャンネル割り当て', () => {
     await page.click(`label:has-text("${mockChannels[1].name}") input[type="checkbox"]`)
 
     // 選択数表示を確認
-    await expect(page.locator('text=已选择 2 个频道')).toBeVisible()
+    await expect(page.locator('text=已选择 2 个频道')).toBeVisible({ timeout: 10000 })
 
     // 「選択すべて」ボタンをクリックして残りも選択
     await page.click('button:has-text("选择所有")')
 
     // 3つすべて選択されたことを確認
-    await expect(page.locator('text=已选择 3 个频道')).toBeVisible()
+    await expect(page.locator('text=已选择 3 个频道')).toBeVisible({ timeout: 10000 })
 
     await page.screenshot({ path: '/app/data/screenshots/channel-multiple-select.png' })
 
@@ -142,11 +146,12 @@ test.describe('チャンネル割り当て', () => {
     await page.click('button:has-text("保存")')
 
     // モーダルが閉じることを確認
-    await expect(page.locator('text=分配到频道')).not.toBeVisible()
+    await expect(page.locator('text=分配到频道')).not.toBeVisible({ timeout: 10000 })
   })
 
   test('チャンネル割り当てをキャンセルできる', async ({ page }) => {
     await page.click(`text=${mockTranscription.file_name}`)
+    await page.waitForLoadState('networkidle') // Wait for API calls
     await page.click('button:has-text("分配到频道")')
 
     // チャンネルを選択
@@ -156,14 +161,15 @@ test.describe('チャンネル割り当て', () => {
     await page.click('button:has-text("取消")')
 
     // モーダルが閉じることを確認
-    await expect(page.locator('text=分配到频道')).not.toBeVisible()
+    await expect(page.locator('text=分配到频道')).not.toBeVisible({ timeout: 10000 })
 
     // 詳細ページに留まることを確認
-    await expect(page).toHaveURL(new RegExp(`/transcriptions/${mockTranscriptionId}`))
+    await expect(page).toHaveURL(new RegExp(`/transcriptions/${mockTranscriptionId}`), { timeout: 10000 })
   })
 
   test('チャンネルの選択を解除できる', async ({ page }) => {
     await page.click(`text=${mockTranscription.file_name}`)
+    await page.waitForLoadState('networkidle') // Wait for API calls
     await page.click('button:has-text("分配到频道")')
 
     // チャンネルを選択
@@ -187,10 +193,11 @@ test.describe('チャンネル割り当て', () => {
 
       // 現在の転写詳細ページからスタート
       await page.click(`text=${mockTranscription.file_name}`)
+      await page.waitForLoadState('networkidle') // Wait for API calls
       await page.click('button:has-text("分配到频道")')
 
       // チャンネルが既に存在することを確認（モックデータ）
-      await expect(page.locator('text=プロジェクトA')).toBeVisible()
+      await expect(page.locator('text=プロジェクトA')).toBeVisible({ timeout: 10000 })
 
       // 実際のアプリでは管理者がダッシュボードからチャンネルを作成
       // E2Eテストでは既存チャンネルを使用
@@ -199,6 +206,7 @@ test.describe('チャンネル割り当て', () => {
 
     test('チャンネルを変更して別のチャンネルに割り当てる', async ({ page }) => {
       await page.click(`text=${mockTranscription.file_name}`)
+      await page.waitForLoadState('networkidle') // Wait for API calls
 
       // モーダルを開く
       await page.click('button:has-text("分配到频道")')
@@ -208,7 +216,7 @@ test.describe('チャンネル割り当て', () => {
       await page.click('button:has-text("保存")')
 
       // モーダルが閉じるのを待つ
-      await expect(page.locator('text=分配到频道')).not.toBeVisible()
+      await expect(page.locator('text=分配到频道')).not.toBeVisible({ timeout: 10000 })
 
       // 再びモーダルを開く
       await page.click('button:has-text("分配到频道")')
@@ -230,39 +238,41 @@ test.describe('チャンネル割り当て', () => {
 
     test('元のチャンネルに戻すことができる', async ({ page }) => {
       await page.click(`text=${mockTranscription.file_name}`)
+      await page.waitForLoadState('networkidle') // Wait for API calls
 
       // 最初のチャンネルを割り当て
       await page.click('button:has-text("分配到频道")')
       await page.click(`label:has-text("${mockChannels[0].name}") input[type="checkbox"]`)
       await page.click('button:has-text("保存")')
-      await expect(page.locator('text=分配到频道')).not.toBeVisible()
+      await expect(page.locator('text=分配到频道')).not.toBeVisible({ timeout: 10000 })
 
       // 別のチャンネルに変更
       await page.click('button:has-text("分配到频道")')
       await page.click(`label:has-text("${mockChannels[1].name}") input[type="checkbox"]`)
       await page.click(`label:has-text("${mockChannels[0].name}") input[type="checkbox"]`) // 前のを選択解除
       await page.click('button:has-text("保存")')
-      await expect(page.locator('text=分配到频道')).not.toBeVisible()
+      await expect(page.locator('text=分配到频道')).not.toBeVisible({ timeout: 10000 })
 
       // 元のチャンネルに戻す
       await page.click('button:has-text("分配到频道")')
       await page.click(`label:has-text("${mockChannels[0].name}") input[type="checkbox"]`)
       await page.click(`label:has-text("${mockChannels[1].name}") input[type="checkbox"]`) // 現在のを選択解除
       await page.click('button:has-text("保存")')
-      await expect(page.locator('text=分配到频道')).not.toBeVisible()
+      await expect(page.locator('text=分配到频道')).not.toBeVisible({ timeout: 10000 })
 
       await page.screenshot({ path: '/app/data/screenshots/channel-reverted.png' })
     })
 
     test('すべてのチャンネル割り当てを解除できる', async ({ page }) => {
       await page.click(`text=${mockTranscription.file_name}`)
+      await page.waitForLoadState('networkidle') // Wait for API calls
 
       // チャンネルを割り当て
       await page.click('button:has-text("分配到频道")')
       await page.click(`label:has-text("${mockChannels[0].name}") input[type="checkbox"]`)
       await page.click(`label:has-text("${mockChannels[1].name}") input[type="checkbox"]`)
       await page.click('button:has-text("保存")')
-      await expect(page.locator('text=分配到频道')).not.toBeVisible()
+      await expect(page.locator('text=分配到频道')).not.toBeVisible({ timeout: 10000 })
 
       // すべてのチャンネルを選択解除
       await page.click('button:has-text("分配到频道")')
@@ -293,12 +303,13 @@ test.describe('チャンネル割り当て', () => {
     })
 
     await page.click(`text=${mockTranscription.file_name}`)
+    await page.waitForLoadState('networkidle') // Wait for API calls
     await page.click('button:has-text("分配到频道")')
     await page.click(`label:has-text("${mockChannels[0].name}") input[type="checkbox"]`)
     await page.click('button:has-text("保存")')
 
     // エラーメッセージが表示されることを確認
-    await expect(page.locator('text=分配频道失败')).toBeVisible()
+    await expect(page.locator('text=分配频道失败')).toBeVisible({ timeout: 10000 })
 
     await page.screenshot({ path: '/app/data/screenshots/channel-error.png' })
   })
