@@ -1,57 +1,37 @@
 /**
  * 文字起こしフローE2Eテスト
  *
- * Note: Uses production data helper with server-side auth bypass.
+ * Note: Uses seeded test data with server-side auth bypass.
  * No API mocking - tests real backend behavior.
  *
- * **Known Issue**: Tests currently fail due to auth bypass not working through SSH tunnel.
- * The production server's localhost auth bypass requires requests from 127.0.0.1,
- * but SSH tunneling makes requests appear to come from an external source.
- * This infrastructure issue affects all list page tests and needs resolution
- * in the test setup/SSH configuration, not in individual test files.
+ * **Known Issue**: Tests may timeout due to server bug where transcriptions
+ * get stuck in "processing" status. The runner may not be properly processing
+ * jobs in the test environment.
  */
 
 import { test, expect } from '@playwright/test'
-import { setupProductionTranscription, cleanupProductionTranscription } from '../helpers/production-data'
+import { setupTestTranscription } from '../helpers/test-data'
 
 test.describe('文字起こしフロー', () => {
   let transcriptionId: string | undefined
 
   test.beforeEach(async ({ page }) => {
-    // Setup production test data (singleton pattern - only fetches once)
-    transcriptionId = await setupProductionTranscription(page)
+    // Setup test transcription by uploading test audio
+    // Note: This uses the X-E2E-Test-Mode header for auth bypass
+    transcriptionId = await setupTestTranscription(page)
 
     // Validate transcriptionId is initialized
     if (!transcriptionId) {
-      throw new Error('transcriptionId not initialized - run first test to setup production data')
+      throw new Error('transcriptionId not initialized - setupTestTranscription failed')
     }
 
-    // E2Eテストモードフラグを設定
-    await page.goto('/login')
-    await page.evaluate(() => {
-      // Safety check: this only works when accessing via localhost
-      if (window.location.hostname === 'localhost' ||
-          window.location.hostname === '127.0.0.1') {
-        localStorage.setItem('e2e-test-mode', 'true')
-      } else {
-        console.warn('[E2E] Cannot enable test mode on non-localhost hostname')
-      }
-    })
-    await page.reload()
-
-    // Note: Server-side auth bypass handles authentication automatically
+    // Note: Server-side auth bypass handles authentication automatically via X-E2E-Test-Mode header
     // Tests will navigate to /transcriptions as needed
   })
 
-  test.afterAll(async () => {
-    // Cleanup (no-op for existing transcriptions)
-    await cleanupProductionTranscription()
-  })
-
-  // NOTE: Upload tests still use mocks because:
-  // 1. They test the upload flow itself (creating new transcriptions)
-  // 2. Using production data would create many test transcriptions
-  // 3. Upload flow is tested separately in upload.spec.ts with production data
+  // NOTE: Upload tests still use mocks because they test the upload UI flow itself,
+  // not the backend processing. The actual upload functionality is tested by
+  // setupTestTranscription() which uses the real API.
   test('音声ファイルをアップロードして文字起こしできる', async ({ page }) => {
     // アップロードAPIのモック
     await page.route('**/api/audio/upload', async route => {
@@ -144,7 +124,7 @@ test.describe('文字起こしフロー', () => {
   })
 
   test('文字起こしリストが表示される', async ({ page }) => {
-    // Navigate to transcriptions page (auth bypass is active)
+    // Navigate to transcriptions page (auth bypass via X-E2E-Test-Mode)
     await page.goto('/transcriptions', { waitUntil: 'domcontentloaded' })
 
     // Wait for data to load
@@ -159,7 +139,7 @@ test.describe('文字起こしフロー', () => {
   })
 
   test('文字起こし詳細を表示できる', async ({ page }) => {
-    // ナビゲート to detail page using production transcription ID
+    // Navigate to detail page using test transcription ID
     await page.goto(`/transcriptions/${transcriptionId}`, { waitUntil: 'domcontentloaded' })
 
     // Wait for data to load
@@ -183,7 +163,7 @@ test.describe('文字起こしフロー', () => {
       await dialog.dismiss() // キャンセル
     })
 
-    // Navigate to detail page for production transcription
+    // Navigate to detail page for test transcription
     await page.goto(`/transcriptions/${transcriptionId}`)
 
     // Check for delete button (may not exist depending on user permissions)
