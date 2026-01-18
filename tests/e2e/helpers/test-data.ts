@@ -20,15 +20,9 @@ export async function setupTestTranscription(
 
   // Read the test audio file
   const audioPath = path.join(__dirname, '../fixtures/test-audio.mp3');
-  console.log(`[Test Data] Reading audio file from: ${audioPath}`);
   const audioBuffer = fs.readFileSync(audioPath);
-  console.log(`[Test Data] Audio file size: ${audioBuffer.length} bytes`);
 
   // Upload the file
-  const formData = new FormData();
-  formData.append('file', new Blob([audioBuffer], { type: 'audio/mpeg' }), 'test-audio.mp3');
-  console.log('[Test Data] FormData created, sending upload request...');
-
   const uploadResponse = await page.request.post('/api/audio/upload', {
     headers: {
       'X-E2E-Test-Mode': 'true',
@@ -43,11 +37,7 @@ export async function setupTestTranscription(
     },
   });
 
-  console.log(`[Test Data] Upload response status: ${uploadResponse.status()}`);
-
   if (!uploadResponse.ok()) {
-    const errorBody = await uploadResponse.text();
-    console.log(`[Test Data] Upload failed. Response body: ${errorBody}`);
     throw new Error(`Upload failed: ${uploadResponse.status()} ${uploadResponse.statusText()}`);
   }
 
