@@ -15,13 +15,18 @@ test.describe('Shared Audio Player', () => {
     // Navigate to shared transcription page
     await page.goto(`${BASE_URL}/shared/${SHARE_TOKEN}`)
 
-    // Track console errors for tests
+    // Initialize console errors array in browser context
     await page.evaluate(() => {
       ;(window as any).consoleErrors = []
     })
-    page.on('console', msg => {
+
+    // Track console errors for tests - store in browser context
+    page.on('console', async msg => {
       if (msg.type() === 'error') {
-        ;(window as any).consoleErrors.push(msg.text())
+        // Push to window.consoleErrors in browser context
+        await page.evaluate((errorText) => {
+          (window as any).consoleErrors.push(errorText)
+        }, msg.text())
       }
     })
   })
@@ -196,6 +201,11 @@ test.describe('Shared Audio Player', () => {
   test('should handle multiple rapid segment clicks without errors', async ({ page }) => {
     // Wait for segments to load
     await page.waitForSelector('[data-segment-index]')
+
+    // Initialize console errors array for this test
+    await page.evaluate(() => {
+      ;(window as any).consoleErrors = []
+    })
 
     // Rapidly click multiple segments
     for (let i = 0; i < 5; i++) {
