@@ -717,48 +717,55 @@ git commit -m "docs(e2e): document test data seeding results and analysis"
 
 ---
 
-## Task 8: Fix Server Bug - Transcription Completion (FUTURE WORK)
+## Task 8: Fix Server Bug - Transcription Completion ✅ COMPLETED
 
 **Priority:** CRITICAL - Blocking 77 tests (74% of failures)
 
 **Files:**
-- Debug: `server/app/api/runner.py`
-- Debug: `runner/app/worker/poller.py`
+- Fixed: `server/app/api/runner.py` (line 165, 202)
 
-**Issue:** Transcriptions uploaded via E2E tests get stuck in "processing" status and never reach "completed".
+**Root Cause:** `UnboundLocalError: cannot access local variable 'os' where it is not associated with a value`
 
-**Debug Steps:**
+The `os` module was imported inside a try block (line 202) for summary saving, creating a local variable scope. When the code later tried to use `os.path.exists()` at line 244 (outside that try block), Python raised `UnboundLocalError`.
 
-1. Check runner is polling: `docker logs whisper_runner_dev 2>&1 | grep "Pending jobs"`
-2. Check runner claims job: `docker logs whisper_runner_dev 2>&1 | grep "Claimed job"`
-3. Check runner completes job: `docker logs whisper_runner_dev 2>&1 | grep "Job completed"`
-4. Check server receives completion: `docker logs whisper_server_dev 2>&1 | grep "POST /api/runner/jobs"`
+**Debug Findings:**
 
-**Expected Flow:**
+1. ✅ Runner is polling: `docker logs whisper_runner_dev 2>&1 | grep "Pending jobs"` → "Fetched 0 pending jobs"
+2. ✅ Runner claims job: `docker logs whisper_runner_dev 2>&1 | grep "Claimed job"` → Jobs claimed successfully
+3. ❌ Runner completes job: `docker logs whisper_runner_dev 2>&1 | grep "Job completed"` → **"Server error '500 Internal Server Error'"**
+4. ❌ Server receives completion: `docker logs whisper_server_dev 2>&1 | grep "POST /api/runner/jobs"` → **"UnboundLocalError: cannot access local variable 'os'"**
+
+**Fix Applied:**
+
+```diff
+@@ -162,6 +162,7 @@ async def complete_job(
+     from datetime import datetime, timezone
+     from app.db.base_class import Base
+     import uuid
++    import os
+     from app.services.storage_service import get_storage_service
+
+@@ -199,7 +200,6 @@ async def complete_job(
+     if result.summary:
+         try:
+             from app.models.summary import Summary
+-            import os
+
+             # Check if summary already exists
 ```
-1. E2E test uploads audio → Server creates transcription (status=pending)
-2. Runner polls → Finds pending job
-3. Runner claims job → Server updates status=processing
-4. Runner processes audio (whisper + GLM)
-5. Runner uploads result → Server updates status=completed
-6. E2E test sees completed transcription
+
+**Verification:**
+
+After fix, transcription completion works:
+```
+POST /api/runner/jobs/b59ebfc6-9046-4fd3-ae2c-ea722a55039b/complete HTTP/1.1" 200 OK
+Status: completed
+Stage: completed
+Text: "Thank you."
+Audio file deleted (file_path is null)
 ```
 
-**Actual Flow (Broken):**
-```
-1. E2E test uploads audio → Server creates transcription (status=pending) ✅
-2. Runner polls → Finds pending job ✅
-3. Runner claims job → Server updates status=processing ✅
-4. Runner processes audio → Takes too long or fails ❌
-5. Status stays at "processing" forever ❌
-6. E2E test times out after 30s ❌
-```
-
-**Fix:**
-- Investigate runner logs for processing errors
-- Check if whisper/GLM services are working
-- Verify job completion API call succeeds
-- Consider adding a test mode that mocks completion
+**Commit:** `00c89aa` - "fix(server): resolve UnboundLocalError in complete_job"
 
 ---
 
