@@ -247,6 +247,7 @@ export function Chat({ transcriptionId, disabled = false }: ChatProps) {
         />
         <button
           type="submit"
+          data-testid="chat-send-button"
           disabled={!input.trim() || isLoading || disabled}
           aria-label={isLoading ? "发送中..." : "发送"}
           className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"

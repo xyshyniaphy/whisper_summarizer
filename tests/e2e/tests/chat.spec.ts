@@ -9,7 +9,7 @@ import { test, expect } from '@playwright/test'
 import { setupTestTranscription } from '../helpers/test-data'
 
 // Constant for message input selector (standardized across all tests)
-const MESSAGE_INPUT_SELECTOR = 'textarea[placeholder*="入消息"]'
+const MESSAGE_INPUT_SELECTOR = '[data-testid="chat-input"]'
 
 test.describe('Chat Interface', () => {
   test.beforeEach(async ({ page }) => {
@@ -84,7 +84,7 @@ test.describe('Chat Interface', () => {
     await input.fill('この転写について説明してください')
 
     // 送信ボタンをクリック
-    await page.click('button:has-text("发送")')
+    await page.click('[data-testid="chat-send-button"]')
 
     // メッセージが送信されたことを確認（ローディング表示）
     await expect(page.locator('[data-testid="message-loading"]')).toBeVisible()
@@ -96,7 +96,7 @@ test.describe('Chat Interface', () => {
     // メッセージを入力して送信
     const input = page.locator(MESSAGE_INPUT_SELECTOR)
     await input.fill('テストメッセージ')
-    await page.click('button:has-text("发送")')
+    await page.click('[data-testid="chat-send-button"]')
 
     // 送信したメッセージが表示されることを確認
     await expect(page.locator('text=テストメッセージ')).toBeVisible()
@@ -108,7 +108,7 @@ test.describe('Chat Interface', () => {
     // メッセージを送信
     const input = page.locator(MESSAGE_INPUT_SELECTOR)
     await input.fill('この転写の要点は何ですか？')
-    await page.click('button:has-text("发送")')
+    await page.click('[data-testid="chat-send-button"]')
 
     // AIの返信が表示されることを確認
     await expect(page.locator('[data-testid="ai-message"]')).toBeVisible()
@@ -120,7 +120,7 @@ test.describe('Chat Interface', () => {
     // メッセージを送信
     const input = page.locator(MESSAGE_INPUT_SELECTOR)
     await input.fill('最初のメッセージ')
-    await page.click('button:has-text("发送")')
+    await page.click('[data-testid="chat-send-button"]')
 
     // ページをリロード
     await page.reload()
@@ -135,7 +135,7 @@ test.describe('Chat Interface', () => {
     // メッセージを送信
     const input = page.locator(MESSAGE_INPUT_SELECTOR)
     await input.fill('クリアされるメッセージ')
-    await page.click('button:has-text("发送")')
+    await page.click('[data-testid="chat-send-button"]')
     await expect(page.locator('text=クリアされるメッセージ')).toBeVisible()
 
     // クリアボタンをクリック
@@ -168,7 +168,7 @@ test.describe('Chat Interface', () => {
     // メッセージを送信
     const input = page.locator(MESSAGE_INPUT_SELECTOR)
     await input.fill('ストリーミングテスト')
-    await page.click('button:has-text("发送")')
+    await page.click('[data-testid="chat-send-button"]')
 
     // ストリーミングでテキストが順次表示されることを確認
     await expect(page.locator('text=これは')).toBeVisible()
@@ -183,7 +183,7 @@ test.describe('Chat Interface', () => {
     await page.goto(`/transcriptions/${globalThis.chatTranscriptionId}`)
     const input1 = page.locator(MESSAGE_INPUT_SELECTOR)
     await input1.fill('最初のメッセージ')
-    await page.click('button:has-text("发送")')
+    await page.click('[data-testid="chat-send-button"]')
 
     // メッセージが表示されることを確認
     await expect(page.locator('text=最初のメッセージ')).toBeVisible()
@@ -209,7 +209,7 @@ test.describe('Chat Interface', () => {
     // メッセージを送信（正常ケース）
     const input = page.locator(MESSAGE_INPUT_SELECTOR)
     await input.fill('エラーテスト')
-    await page.click('button:has-text("发送")')
+    await page.click('[data-testid="chat-send-button"]')
 
     // 成功時の動作を確認（エラーが発生しないことを確認）
     await expect(page.locator('[data-testid="message-loading"]')).toBeVisible()
@@ -223,7 +223,7 @@ test.describe('Chat Interface', () => {
     await input.fill('テストメッセージ')
 
     // 送信ボタンをクリック
-    const sendButton = page.locator('button:has-text("发送")')
+    const sendButton = page.locator('[data-testid="chat-send-button"]')
     await sendButton.click()
 
     // 送信ボタンが無効になることを確認
@@ -236,7 +236,7 @@ test.describe('Chat Interface', () => {
     // メッセージを送信
     const input = page.locator(MESSAGE_INPUT_SELECTOR)
     await input.fill('ローディングテスト')
-    await page.click('button:has-text("发送")')
+    await page.click('[data-testid="chat-send-button"]')
 
     // ローディングスピナーが表示されることを確認
     await expect(page.locator('[data-testid="chat-loading"]')).toBeVisible()
@@ -246,7 +246,7 @@ test.describe('Chat Interface', () => {
     await page.goto(`/transcriptions/${globalThis.chatTranscriptionId}`)
 
     const input = page.locator(MESSAGE_INPUT_SELECTOR)
-    const sendButton = page.locator('button:has-text("发送")')
+    const sendButton = page.locator('[data-testid="chat-send-button"]')
 
     // Initially should be disabled or empty
     await expect(input).toBeVisible()
@@ -260,7 +260,7 @@ test.describe('Chat Interface', () => {
     await page.goto(`/transcriptions/${globalThis.chatTranscriptionId}`)
 
     const input = page.locator(MESSAGE_INPUT_SELECTOR)
-    const sendButton = page.locator('button:has-text("发送")')
+    const sendButton = page.locator('[data-testid="chat-send-button"]')
 
     await input.fill('テストメッセージ')
 
@@ -281,7 +281,7 @@ test.describe('Chat Interface', () => {
     await page.goto(`/transcriptions/${globalThis.chatTranscriptionId}`)
 
     const input = page.locator(MESSAGE_INPUT_SELECTOR)
-    const sendButton = page.locator('button:has-text("发送")')
+    const sendButton = page.locator('[data-testid="chat-send-button"]')
 
     await input.fill('遅いレスポンステスト')
 
