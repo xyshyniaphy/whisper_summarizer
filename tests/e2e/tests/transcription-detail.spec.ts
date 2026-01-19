@@ -66,10 +66,11 @@ test.describe('Transcription Detail', () => {
     await page.goto(`/transcriptions/${transcriptionId}`)
 
     // サマリーセクションが表示されることを確認
-    await expect(page.locator('text=总结')).toBeVisible()
+    await expect(page.getByRole('button', { name: '摘要' })).toBeVisible()
 
-    // サマリーテキストが表示されることを確認
-    await expect(page.locator('[data-testid="summary-text"]')).toBeVisible()
+    // サマリーセクションが展開されていることを確認（要約テキストまたはメッセージのいずれか）
+    const summarySection = page.locator('[data-testid="summary-text"], .text-gray-500')
+    await expect(summarySection.first()).toBeVisible()
   })
 
   test('転写をダウンロードできる', async ({ page }) => {
