@@ -100,7 +100,7 @@ test.describe('Transcription Detail', () => {
     await page.goto(`/transcriptions/${transcriptionId}`)
 
     // チャンネル割り当てボタンをクリック
-    await page.click('button:has-text("分配频道")')
+    await page.click('button:has-text("管理频道")')
 
     // モーダルが表示されることを確認
     await expect(page.locator('text=分配到频道')).toBeVisible()
