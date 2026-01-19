@@ -103,7 +103,7 @@ test.describe('Transcription Detail', () => {
     await page.click('button:has-text("分配频道")')
 
     // モーダルが表示されることを確認
-    await expect(page.locator('text=分配频道')).toBeVisible()
+    await expect(page.locator('text=分配到频道')).toBeVisible()
   })
 
   test('言語情報が表示される', async ({ page }) => {
