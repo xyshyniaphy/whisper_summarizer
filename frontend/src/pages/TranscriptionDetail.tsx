@@ -425,7 +425,7 @@ export function TranscriptionDetail() {
                     </pre>
                 </CollapsibleSection>
 
-                {/* AI Summary - Collapsible with Markdown */}
+                {/* 摘要 - Collapsible with Markdown */}
                 <CollapsibleSection
                     title="摘要"
                     defaultOpen={true}

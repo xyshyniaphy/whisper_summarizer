@@ -323,7 +323,7 @@ export function SharedTranscription() {
                 {/* AI Summary - Reusing CollapsibleSection with Markdown */}
                 {data.summary && (
                     <CollapsibleSection
-                        title="AI摘要"
+                        title="摘要"
                         defaultOpen={true}
                         headerContent={
                             <div className="flex gap-2 flex-wrap">
