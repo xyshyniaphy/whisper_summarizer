@@ -239,6 +239,14 @@ async def complete_job(
     job.completed_at = datetime.now(timezone.utc)
     job.processing_time_seconds = result.processing_time_seconds
 
+    # Save audio duration if provided
+    if result.duration_seconds is not None:
+        job.duration_seconds = result.duration_seconds
+
+    # Save language if provided (may be detected by Whisper)
+    if result.language:
+        job.language = result.language
+
     # Delete audio file to save disk space
     audio_deleted = False
     if job.file_path and os.path.exists(job.file_path):

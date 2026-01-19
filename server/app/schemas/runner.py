@@ -35,6 +35,8 @@ class JobCompleteRequest(BaseModel):
     summary: Optional[str] = None
     notebooklm_guideline: Optional[str] = None
     processing_time_seconds: int
+    duration_seconds: Optional[int] = None  # Audio duration in seconds
+    language: Optional[str] = None  # Detected or specified language
 
 
 class JobCompleteResponse(BaseModel):

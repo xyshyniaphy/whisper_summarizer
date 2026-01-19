@@ -46,7 +46,10 @@ export async function setupProductionTranscription(page: Page): Promise<string> 
   // Use an existing completed transcription instead of uploading new one
   // (Production server doesn't have a runner running, so new uploads won't be processed)
   // Server-side localhost auth bypass will handle authentication (requests come via SSH tunnel)
-  const response = await page.request.get('/api/transcriptions?stage=completed&page=1&page_size=1')
+  // Add X-E2E-Test-Mode header for Docker E2E testing
+  const response = await page.request.get('/api/transcriptions?stage=completed&page=1&page_size=1', {
+    headers: { 'X-E2E-Test-Mode': 'true' }
+  })
 
   if (response.status() !== 200) {
     throw new Error(`Failed to fetch transcriptions: ${response.status()}`)
@@ -127,7 +130,10 @@ async function pollForCompletion(page: Page, token: string, transcriptionId: str
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     const response = await page.request.get(`/api/transcriptions/${transcriptionId}`, {
-      headers: { 'Authorization': `Bearer ${token}` }
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'X-E2E-Test-Mode': 'true'  // Add E2E test mode header for Docker testing
+      }
     })
 
     if (response.status() === 200) {

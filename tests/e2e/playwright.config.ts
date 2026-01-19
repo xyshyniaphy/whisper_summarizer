@@ -21,18 +21,19 @@ export default defineConfig({
 
   // レポーター
   reporter: [
-    ['html', { outputFolder: '/app/data/playwright-report', open: 'never' }],
+    ['html', { outputFolder: 'playwright-report', open: 'never' }],
     ['list'],
   ],
 
   // 成果物（スクリーンショット、ビデオ、トレース）の出力先
   // 失敗時のスクリーンショット等はここに出力される
-  outputDir: '/app/data/screenshots/failures',
+  outputDir: 'test-results',
 
   // 共通設定
   use: {
-    // ベースURL (Docker Compose内のサービス名またはホストのアドレス)
-    baseURL: process.env.FRONTEND_URL || 'http://frontend-test:3000',
+    // ベースURL (nginx reverse proxy - must match storageState origin)
+    // Tests access frontend through nginx in the Docker network
+    baseURL: process.env.BASE_URL || 'http://whisper_nginx_dev',
 
     // Optional SOCKS5 proxy (legacy, not used for production anymore)
     // Production now uses SSH local port forwarding instead
@@ -57,10 +58,12 @@ export default defineConfig({
     video: 'retain-on-failure',
 
     // E2Eテストモードを有効化（localStorageに設定）
+    // Important: origin must match baseURL exactly for localStorage to be set correctly
     storageState: {
+      cookies: [],  // Required by Playwright even if empty
       origins: [
         {
-          origin: process.env.FRONTEND_URL || 'http://frontend-test:3000',
+          origin: process.env.BASE_URL || 'http://whisper_nginx_dev',
           localStorage: [
             { name: 'e2e-test-mode', value: 'true' },
           ],

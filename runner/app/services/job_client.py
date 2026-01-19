@@ -173,6 +173,16 @@ class JobClient:
                 payload["segments"] = result.segments
                 logger.info(f"Sending {len(result.segments)} segments for job {job_id}")
 
+            # Add duration_seconds if available
+            if result.duration_seconds is not None:
+                payload["duration_seconds"] = result.duration_seconds
+                logger.info(f"Sending duration_seconds={result.duration_seconds} for job {job_id}")
+
+            # Add language if available
+            if result.language:
+                payload["language"] = result.language
+                logger.info(f"Sending language={result.language} for job {job_id}")
+
             response = self.client.post(
                 f"/jobs/{job_id}/complete",
                 json=payload

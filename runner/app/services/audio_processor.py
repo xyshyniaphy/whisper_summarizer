@@ -114,12 +114,18 @@ class AudioProcessor:
         processing_time = int(time.time() - start_time)
         logger.info(f"Processing complete in {processing_time}s")
 
+        # Get audio duration
+        duration_seconds = int(self._get_audio_duration(audio_path))
+        logger.info(f"Audio duration: {duration_seconds}s")
+
         return JobResult(
             text=formatted_text,
             segments=segments,  # Include Whisper segments for individual timestamps
             summary=summary,
             notebooklm_guideline=notebooklm_guideline,
-            processing_time_seconds=processing_time
+            processing_time_seconds=processing_time,
+            duration_seconds=duration_seconds,
+            language=language
         )
 
     def process_with_timestamps(
