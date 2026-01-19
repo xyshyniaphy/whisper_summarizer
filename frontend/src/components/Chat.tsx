@@ -238,6 +238,7 @@ export function Chat({ transcriptionId, disabled = false }: ChatProps) {
           type="text"
           id="chat-input"
           name="chat-input"
+          data-testid="chat-input"
           value={input}
           onChange={(e) => setInput(e.target.value)}
           placeholder="输入问题..."
