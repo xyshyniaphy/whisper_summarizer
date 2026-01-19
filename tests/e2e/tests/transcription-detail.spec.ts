@@ -163,7 +163,7 @@ test.describe('Transcription Detail', () => {
     await page.goto(`/transcriptions/${transcriptionId}`)
 
     // エラーメッセージが表示されることを確認
-    await expect(page.locator('text=見つかりません')).toBeVisible()
+    await expect(page.locator('text=未找到')).toBeVisible()
   })
 })
 
