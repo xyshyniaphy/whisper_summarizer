@@ -427,7 +427,7 @@ export function TranscriptionDetail() {
 
                 {/* AI Summary - Collapsible with Markdown */}
                 <CollapsibleSection
-                    title="AI摘要"
+                    title="摘要"
                     defaultOpen={true}
                     headerContent={
                         summary && transcription.stage === 'completed' && (
