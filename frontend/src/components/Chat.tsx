@@ -146,7 +146,7 @@ export function Chat({ transcriptionId, disabled = false }: ChatProps) {
 
   if (isInitialLoading) {
     return (
-      <div className="flex items-center justify-center py-8">
+      <div data-testid="chat-loading" className="flex items-center justify-center py-8">
         <Loader2 className="w-6 h-6 text-blue-500 dark:text-blue-400 animate-spin" />
       </div>
     )
@@ -169,6 +169,7 @@ export function Chat({ transcriptionId, disabled = false }: ChatProps) {
               }`}
             >
               <div
+                data-testid={message.role === 'assistant' ? 'ai-message' : undefined}
                 className={`max-w-[80%] rounded-lg px-4 py-2 ${
                   message.role === 'user'
                     ? 'bg-blue-500 text-white'
@@ -189,7 +190,7 @@ export function Chat({ transcriptionId, disabled = false }: ChatProps) {
         {isThinking && (
           <div className="flex justify-start">
             <div className="max-w-[80%] w-full">
-              <div className="border border-purple-200 dark:border-purple-800 rounded-lg overflow-hidden bg-purple-50 dark:bg-purple-900/20">
+              <div data-testid="message-loading" className="border border-purple-200 dark:border-purple-800 rounded-lg overflow-hidden bg-purple-50 dark:bg-purple-900/20">
                 {/* Thinking Header */}
                 <button
                   onClick={() => setThinkingCollapsed(!thinkingCollapsed)}
