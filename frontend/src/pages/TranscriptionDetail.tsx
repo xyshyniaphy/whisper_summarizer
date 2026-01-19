@@ -12,6 +12,7 @@ import { Chat } from '../components/Chat'
 import { Modal } from '../components/ui/Modal'
 import { ChannelAssignModal, ChannelBadge } from '../components/channel'
 import { cn } from '../utils/cn'
+import { formatDuration, formatDate, getLanguageLabel } from '../utils/formatters'
 
 // Stage display mapping
 const STAGE_LABELS: Record<string, string> = {
@@ -337,6 +338,26 @@ export function TranscriptionDetail() {
                         {shareLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : '分享'}
                     </button>
                 </div>
+            </div>
+
+            {/* Metadata Info Section */}
+            <div className="flex flex-wrap gap-4 text-sm text-gray-600 dark:text-gray-400 mb-4">
+                {transcription.duration_seconds && (
+                    <div className="flex items-center gap-1" data-testid="duration">
+                        <span className="font-medium">时长:</span>
+                        <span>{formatDuration(transcription.duration_seconds)}</span>
+                    </div>
+                )}
+                <div className="flex items-center gap-1" data-testid="created-at">
+                    <span className="font-medium">创建于:</span>
+                    <span>{formatDate(transcription.created_at)}</span>
+                </div>
+                {transcription.language && (
+                    <div className="flex items-center gap-1" data-testid="language-badge">
+                        <span className="font-medium">语言:</span>
+                        <span>{getLanguageLabel(transcription.language)}</span>
+                    </div>
+                )}
             </div>
 
             {/* Share Link Modal */}
