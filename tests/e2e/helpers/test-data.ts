@@ -110,3 +110,72 @@ export async function getOrCreateSharedTranscription(page: Page): Promise<string
 export function resetSharedTranscription(): void {
   sharedTranscriptionId = null;
 }
+
+/**
+ * Setup a test transcription with a share link for shared audio player tests.
+ * This creates a transcription, generates a share link, and returns the share token.
+ *
+ * @param page - Playwright page object
+ * @returns The share token for accessing the shared transcription
+ */
+export async function setupTranscriptionWithShare(
+  page: Page,
+  options: { timeout?: number } = {}
+): Promise<string> {
+  const { timeout = 180000 } = options;
+
+  console.log('[Test Data] Setting up transcription with share link for audio player tests...');
+
+  // First create a completed transcription
+  const transcriptionId = await setupTestTranscription(page, { timeout });
+
+  // Get baseURL from page context
+  const baseURL = process.env.BASE_URL || 'http://whisper_nginx_dev';
+
+  // Create a share link for the transcription
+  const shareResponse = await page.request.post(`${baseURL}/api/transcriptions/${transcriptionId}/share`, {
+    headers: { 'X-E2E-Test-Mode': 'true' }
+  });
+
+  if (!shareResponse.ok()) {
+    throw new Error(`Failed to create share link: ${shareResponse.status()} ${shareResponse.statusText()}`);
+  }
+
+  const shareData = await shareResponse.json();
+  const shareToken = shareData.share_token;
+
+  console.log(`[Test Data] Share link created with token: ${shareToken}`);
+
+  return shareToken;
+}
+
+/**
+ * Shared transcription with share link for tests.
+ * This avoids uploading multiple times for similar tests.
+ */
+let sharedShareToken: string | null = null;
+
+/**
+ * Get or create a shared test transcription with share link.
+ * Multiple tests can use this to avoid re-uploading for each test.
+ *
+ * @param page - Playwright page object
+ * @returns The shared share token
+ */
+export async function getOrCreateSharedTranscriptionWithShare(page: Page): Promise<string> {
+  if (sharedShareToken) {
+    console.log(`[Test Data] Reusing shared share token: ${sharedShareToken}`);
+    return sharedShareToken;
+  }
+
+  sharedShareToken = await setupTranscriptionWithShare(page);
+  return sharedShareToken;
+}
+
+/**
+ * Clean up the shared share token.
+ * Call this in test.afterAll() if needed.
+ */
+export function resetSharedShareToken(): void {
+  sharedShareToken = null;
+}
