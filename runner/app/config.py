@@ -43,7 +43,7 @@ class Settings(BaseSettings):
 
     # GLM API
     glm_api_key: str = ""
-    glm_model: str = "GLM-4.5-Air"
+    glm_model: str = "GLM-4.7-Flash"
     glm_base_url: str = "https://api.z.ai/api/paas/v4/"
     review_language: str = "zh"
 

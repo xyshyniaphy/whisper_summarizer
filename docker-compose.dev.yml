@@ -61,7 +61,7 @@ services:
 
       # GLM API (for AI chat feature)
       GLM_API_KEY: ${GLM_API_KEY}
-      GLM_MODEL: ${GLM_MODEL:-GLM-4.5-Air}
+      GLM_MODEL: ${GLM_MODEL:-GLM-4.7-Flash}
       GLM_BASE_URL: ${GLM_BASE_URL:-https://api.z.ai/api/paas/v4/}
       REVIEW_LANGUAGE: ${REVIEW_LANGUAGE:-zh}
 
@@ -117,7 +117,7 @@ services:
 
       # GLM API
       GLM_API_KEY: ${GLM_API_KEY}
-      GLM_MODEL: ${GLM_MODEL:-GLM-4.5-Air}
+      GLM_MODEL: ${GLM_MODEL:-GLM-4.7-Flash}
       GLM_BASE_URL: ${GLM_BASE_URL:-https://api.z.ai/api/paas/v4/}
       REVIEW_LANGUAGE: ${REVIEW_LANGUAGE:-zh}
 

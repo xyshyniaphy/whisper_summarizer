@@ -1,7 +1,7 @@
 """
 GLM API Client
 
-使用 GLM-4.5-Air API (OpenAI-compatible) 生成文字起こしテキストの要約
+使用 GLM-4.7-Flash API (OpenAI-compatible) 生成文字起こしテキストの要約
 """
 
 import os
@@ -13,13 +13,13 @@ logger = logging.getLogger(__name__)
 
 
 class GLMClient:
-    """GLM-4.5-Air APIクライアント (OpenAI-compatible)"""
+    """GLM-4.7-Flash APIクライアント (OpenAI-compatible)"""
 
     def __init__(
         self,
         api_key: Optional[str] = None,
         base_url: Optional[str] = None,
-        model: str = "GLM-4.5-Air",
+        model: str = "GLM-4.7-Flash",
         review_language: str = "zh"
     ):
         """
@@ -592,7 +592,7 @@ def get_glm_client() -> GLMClient:
     if glm_client is None:
         api_key = os.getenv("GLM_API_KEY")
         base_url = os.getenv("GLM_BASE_URL", "https://api.z.ai/api/paas/v4/")
-        model = os.getenv("GLM_MODEL", "GLM-4.5-Air")
+        model = os.getenv("GLM_MODEL", "GLM-4.7-Flash")
         review_language = os.getenv("REVIEW_LANGUAGE", "zh")
         glm_client = GLMClient(
             api_key=api_key,
