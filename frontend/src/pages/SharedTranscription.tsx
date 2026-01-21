@@ -402,6 +402,7 @@ export function SharedTranscription() {
                     audioUrl={audioUrl}
                     segments={segments}
                     onSeek={handleSeek}
+                    onTimeUpdate={setCurrentTime}
                     currentTime={currentTime}
                 />
             )}

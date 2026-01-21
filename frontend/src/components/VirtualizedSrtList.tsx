@@ -46,6 +46,7 @@ interface SrtItemProps {
 function SrtItem({ segment, index, isCurrent, onSeek }: SrtItemProps) {
   return (
     <div
+      data-testid={`segment-${index}`}
       data-segment-index={index}
       data-current={isCurrent}
       tabIndex={0}

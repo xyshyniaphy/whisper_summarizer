@@ -24,10 +24,11 @@ interface AudioPlayerProps {
   audioUrl: string
   segments: Segment[]
   onSeek: (time: number) => void
+  onTimeUpdate?: (time: number) => void  // Called during playback to sync parent state
   currentTime?: number  // External control for seek (from SrtList clicks)
 }
 
-export function AudioPlayer({ audioUrl, segments, onSeek, currentTime: externalCurrentTime }: AudioPlayerProps) {
+export function AudioPlayer({ audioUrl, segments, onSeek, onTimeUpdate, currentTime: externalCurrentTime }: AudioPlayerProps) {
   const audioRef = useRef<HTMLAudioElement>(null)
   const [isPlaying, setIsPlaying] = useState(false)
   const [internalCurrentTime, setInternalCurrentTime] = useState(0)
@@ -91,6 +92,11 @@ export function AudioPlayer({ audioUrl, segments, onSeek, currentTime: externalC
     const handleTimeUpdate = () => {
       const time = audio.currentTime
       setInternalCurrentTime(time)
+
+      // Notify parent of time update for segment highlighting
+      if (onTimeUpdate) {
+        onTimeUpdate(time)
+      }
 
       // Find current segment
       const index = segments.findIndex(

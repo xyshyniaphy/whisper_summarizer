@@ -15,6 +15,7 @@ import logging
 
 from app.db.session import get_db
 from app.models.transcription import Transcription, TranscriptionStatus
+from app.models.share_link import ShareLink
 from app.schemas.runner import (
     JobResponse, JobListResponse,
     JobCompleteRequest, JobStartRequest,
@@ -247,16 +248,27 @@ async def complete_job(
     if result.language:
         job.language = result.language
 
-    # Delete audio file to save disk space
+    # Delete audio file to save disk space, unless there are active share links
     audio_deleted = False
     if job.file_path and os.path.exists(job.file_path):
-        try:
-            os.remove(job.file_path)
-            job.file_path = None
-            audio_deleted = True
-            logger.info(f"Deleted audio file for job {job_id}")
-        except Exception as e:
-            logger.error(f"Failed to delete audio file for job {job_id}: {e}")
+        # Check for active (non-expired) share links before deleting audio
+        active_share_links = db.query(ShareLink).filter(
+            ShareLink.transcription_id == job.id
+        ).filter(
+            # Share link is active if: no expiration OR expiration is in the future
+            (ShareLink.expires_at == None) | (ShareLink.expires_at > datetime.now(timezone.utc))
+        ).first()
+
+        if active_share_links:
+            logger.info(f"Preserving audio file for job {job_id} (has active share links)")
+        else:
+            try:
+                os.remove(job.file_path)
+                job.file_path = None
+                audio_deleted = True
+                logger.info(f"Deleted audio file for job {job_id}")
+            except Exception as e:
+                logger.error(f"Failed to delete audio file for job {job_id}: {e}")
 
     db.commit()
     logger.info(f"Job {job_id} completed in {result.processing_time_seconds}s")

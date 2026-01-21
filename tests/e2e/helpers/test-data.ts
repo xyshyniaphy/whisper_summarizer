@@ -113,7 +113,12 @@ export function resetSharedTranscription(): void {
 
 /**
  * Setup a test transcription with a share link for shared audio player tests.
- * This creates a transcription, generates a share link, and returns the share token.
+ * This creates a transcription, generates a share link IMMEDIATELY (before completion),
+ * then waits for transcription to finish. This ensures the share link exists when
+ * the runner calls the /complete endpoint, preventing audio deletion.
+ *
+ * IMPORTANT: Share link must be created BEFORE transcription completes, otherwise
+ * the /complete endpoint will delete the audio file to save disk space.
  *
  * @param page - Playwright page object
  * @returns The share token for accessing the shared transcription
@@ -126,13 +131,38 @@ export async function setupTranscriptionWithShare(
 
   console.log('[Test Data] Setting up transcription with share link for audio player tests...');
 
-  // First create a completed transcription
-  const transcriptionId = await setupTestTranscription(page, { timeout });
+  // Read the test audio file
+  const audioPath = path.join(__dirname, '../fixtures/test-audio.mp3');
+  const audioBuffer = fs.readFileSync(audioPath);
 
-  // Get baseURL from page context
+  // Get baseURL from page context (matches playwright.config.ts baseURL)
   const baseURL = process.env.BASE_URL || 'http://whisper_nginx_dev';
 
-  // Create a share link for the transcription
+  // Upload the file
+  const uploadResponse = await page.request.post(`${baseURL}/api/audio/upload`, {
+    headers: {
+      'X-E2E-Test-Mode': 'true',
+    },
+    multipart: {
+      file: {
+        name: 'test-audio.mp3',
+        mimeType: 'audio/mpeg',
+        buffer: audioBuffer,
+      },
+    },
+  });
+
+  if (!uploadResponse.ok()) {
+    throw new Error(`Upload failed: ${uploadResponse.status()} ${uploadResponse.statusText()}`);
+  }
+
+  const uploadData = await uploadResponse.json();
+  const transcriptionId = uploadData.id;
+
+  console.log(`[Test Data] Upload complete, transcription ID: ${transcriptionId}`);
+
+  // CRITICAL: Create share link IMMEDIATELY after upload, BEFORE waiting for completion.
+  // This ensures the share link exists when the runner calls /complete, preventing audio deletion.
   const shareResponse = await page.request.post(`${baseURL}/api/transcriptions/${transcriptionId}/share`, {
     headers: { 'X-E2E-Test-Mode': 'true' }
   });
@@ -144,9 +174,37 @@ export async function setupTranscriptionWithShare(
   const shareData = await shareResponse.json();
   const shareToken = shareData.share_token;
 
-  console.log(`[Test Data] Share link created with token: ${shareToken}`);
+  console.log(`[Test Data] Share link created with token: ${shareToken} (BEFORE completion)`);
 
-  return shareToken;
+  // Now poll for completion
+  const startTime = Date.now();
+  const pollInterval = 5000; // Check every 5 seconds
+
+  while (Date.now() - startTime < timeout) {
+    const checkResponse = await page.request.get(`${baseURL}/api/transcriptions/${transcriptionId}`, {
+      headers: { 'X-E2E-Test-Mode': 'true' }
+    });
+
+    if (!checkResponse.ok()) {
+      throw new Error(`Failed to check transcription status: ${checkResponse.status()}`);
+    }
+
+    const transcription = await checkResponse.json();
+
+    if (transcription.status === 'completed') {
+      console.log(`[Test Data] Transcription completed! Audio file preserved due to share link.`);
+      return shareToken;
+    }
+
+    if (transcription.status === 'failed') {
+      throw new Error(`Transcription failed: ${transcription.error_message || 'Unknown error'}`);
+    }
+
+    console.log(`[Test Data] Status: ${transcription.status}, waiting...`);
+    await page.waitForTimeout(pollInterval);
+  }
+
+  throw new Error(`Transcription did not complete within ${timeout}ms`);
 }
 
 /**

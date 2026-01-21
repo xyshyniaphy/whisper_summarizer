@@ -282,23 +282,24 @@ class TranscribeService:
 
         return result_segments, info
 
-    def _segments_to_dict(self, segments: List) -> List[Dict[str, str]]:
+    def _segments_to_dict(self, segments: List) -> List[Dict[str, Any]]:
         """
-        Convert faster-whisper segments to our SRT-like format.
+        Convert faster-whisper segments to our format.
 
         Args:
             segments: List of faster-whisper Segment objects
 
         Returns:
-            List of segment dicts: [{"start": "00:00:00,000", "end": "00:00:05,000", "text": "..."}]
+            List of segment dicts: [{"start": 0.0, "end": 5.0, "text": "..."}]
+
+        Note: Returns numeric timestamps (seconds) for audio player navigation.
+        Use _segments_to_srt_format() for SRT file generation.
         """
         result = []
         for segment in segments:
-            start_time = self._seconds_to_srt_time(segment.start)
-            end_time = self._seconds_to_srt_time(segment.end)
             result.append({
-                "start": start_time,
-                "end": end_time,
+                "start": segment.start,
+                "end": segment.end,
                 "text": segment.text.strip()
             })
         return result
