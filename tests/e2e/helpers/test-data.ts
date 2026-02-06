@@ -217,10 +217,19 @@ let sharedShareToken: string | null = null;
  * Get or create a shared test transcription with share link.
  * Multiple tests can use this to avoid re-uploading for each test.
  *
+ * For production testing without a runner, set TEST_SHARE_TOKEN environment
+ * variable to use an existing share token instead of creating a new transcription.
+ *
  * @param page - Playwright page object
  * @returns The shared share token
  */
 export async function getOrCreateSharedTranscriptionWithShare(page: Page): Promise<string> {
+  // Check for pre-existing share token (for production testing without runner)
+  if (process.env.TEST_SHARE_TOKEN) {
+    console.log(`[Test Data] Using pre-existing share token from TEST_SHARE_TOKEN: ${process.env.TEST_SHARE_TOKEN}`);
+    return process.env.TEST_SHARE_TOKEN;
+  }
+
   if (sharedShareToken) {
     console.log(`[Test Data] Reusing shared share token: ${sharedShareToken}`);
     return sharedShareToken;
